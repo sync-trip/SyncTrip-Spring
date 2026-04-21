@@ -3,11 +3,44 @@
   <component name="CopilotDiffPersistence">
     <option name="pendingDiffs">
       <map>
-        <entry key="$PROJECT_DIR$/.gitignore">
+        <entry key="$PROJECT_DIR$/.github/workflows/ci.yml">
           <value>
             <PendingDiffInfo>
-              <option name="filePath" value="$PROJECT_DIR$/.gitignore" />
-              <option name="updatedContent" value="# Environment secrets&#10;/.env&#10;" />
+              <option name="filePath" value="$PROJECT_DIR$/.github/workflows/ci.yml" />
+              <option name="updatedContent" value="name: CI - Spring Boot Test&#10;&#10;on:&#10;  pull_request:&#10;  push:&#10;    branches:&#10;      - main&#10;      - develop&#10;&#10;jobs:&#10;  test:&#10;    runs-on: [self-hosted, windows]&#10;    defaults:&#10;      run:&#10;        working-directory: synctrip&#10;&#10;    steps:&#10;      - name: Checkout source&#10;        uses: actions/checkout@v4&#10;&#10;      - name: Set up JDK 17&#10;        uses: actions/setup-java@v4&#10;        with:&#10;          distribution: temurin&#10;          java-version: '17'&#10;          cache: gradle&#10;&#10;      - name: Run unit tests&#10;        shell: powershell&#10;        run: .\gradlew.bat clean test --no-daemon&#10;&#10;" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+        <entry key="$PROJECT_DIR$/.github/workflows/deploy.yml">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/.github/workflows/deploy.yml" />
+              <option name="updatedContent" value="name: Deploy - School Runner&#10;&#10;on:&#10;  # Manual deploy button in GitHub Actions UI&#10;  workflow_dispatch:&#10;  # Auto deploy only after CI workflow succeeds on main&#10;  workflow_run:&#10;    workflows: [&quot;CI - Spring Boot Test&quot;]&#10;    types: [completed]&#10;    branches: [main]&#10;&#10;jobs:&#10;  deploy:&#10;    name: Deploy on self-hosted runner&#10;    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'&#10;    runs-on: [self-hosted, windows]&#10;    env:&#10;      IMAGE_NAME: synctrip-backend&#10;      CONTAINER_NAME: synctrip-backend&#10;      IMAGE_TAG: ${{ github.sha }}&#10;&#10;    steps:&#10;      - name: Checkout source&#10;        uses: actions/checkout@v4&#10;&#10;      - name: Check Docker is available&#10;        shell: powershell&#10;        run: |&#10;          docker --version&#10;          docker info&#10;&#10;      - name: Build Docker image&#10;        shell: powershell&#10;        run: |&#10;          docker build -t &quot;$env:IMAGE_NAME:$env:IMAGE_TAG&quot; -t &quot;$env:IMAGE_NAME:latest&quot; ./synctrip&#10;&#10;      - name: Stop old container if exists&#10;        shell: powershell&#10;        run: |&#10;          $existing = docker ps -a --format &quot;{{.Names}}&quot;&#10;          if ($existing -match &quot;^$env:CONTAINER_NAME$&quot;) {&#10;            docker stop $env:CONTAINER_NAME&#10;            docker rm $env:CONTAINER_NAME&#10;          }&#10;&#10;      - name: Run new container&#10;        shell: powershell&#10;        run: |&#10;          docker run -d --name $env:CONTAINER_NAME --restart unless-stopped -p 8080:8080 &quot;$env:IMAGE_NAME:latest&quot;&#10;&#10;      - name: Verify container and port&#10;        shell: powershell&#10;        run: |&#10;          Start-Sleep -Seconds 8&#10;          $running = docker ps --filter &quot;name=$env:CONTAINER_NAME&quot; --filter &quot;status=running&quot; --format &quot;{{.Names}}&quot;&#10;          if (-not ($running -match &quot;^$env:CONTAINER_NAME$&quot;)) {&#10;            throw &quot;Container is not running after deploy.&quot;&#10;          }&#10;&#10;          $portCheck = Test-NetConnection -ComputerName 127.0.0.1 -Port 8080&#10;          if (-not $portCheck.TcpTestSucceeded) {&#10;            throw &quot;Container is running, but port 8080 is not accepting connections.&quot;&#10;          }&#10;&#10;          Write-Host &quot;Deploy check passed: container is running and port 8080 is open.&quot;&#10;&#10;" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+        <entry key="$PROJECT_DIR$/synctrip/.dockerignore">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/synctrip/.dockerignore" />
+              <option name="updatedContent" value=".git&#10;.gradle&#10;build&#10;out&#10;*.iml&#10;HELP.md&#10;src/test&#10;" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+        <entry key="$PROJECT_DIR$/synctrip/Dockerfile">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/synctrip/Dockerfile" />
+              <option name="updatedContent" value="FROM eclipse-temurin:17-jdk AS build&#10;WORKDIR /app&#10;&#10;# Copy Gradle wrapper and build metadata first for better layer caching&#10;COPY gradlew gradlew.bat settings.gradle build.gradle ./&#10;COPY gradle ./gradle&#10;RUN chmod +x ./gradlew&#10;&#10;# Copy source code and build the boot jar&#10;COPY src ./src&#10;RUN ./gradlew clean bootJar --no-daemon&#10;&#10;FROM eclipse-temurin:17-jre&#10;WORKDIR /app&#10;&#10;COPY --from=build /app/build/libs/*.jar app.jar&#10;EXPOSE 8080&#10;ENTRYPOINT [&quot;java&quot;, &quot;-jar&quot;, &quot;/app/app.jar&quot;]&#10;" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+        <entry key="$PROJECT_DIR$/synctrip/src/test/java/com/sync/SynctripApplicationTests.java">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/synctrip/src/test/java/com/sync/SynctripApplicationTests.java" />
+              <option name="originalContent" value="package com.sync;&#10;&#10;import org.junit.jupiter.api.Test;&#10;import org.springframework.boot.test.context.SpringBootTest;&#10;&#10;@SpringBootTest&#10;class SynctripApplicationTests {&#10;&#10;    @Test&#10;    void contextLoads() {&#10;    }&#10;&#10;}&#10;" />
+              <option name="updatedContent" value="package com.sync;&#10;&#10;import org.junit.jupiter.api.Test;&#10;import org.springframework.boot.test.context.SpringBootTest;&#10;&#10;@SpringBootTest(properties = &quot;spring.ai.openai.api-key=test-key-for-ci&quot;)&#10;class SynctripApplicationTests {&#10;&#10;    @Test&#10;    void contextLoads() {&#10;    }&#10;&#10;}&#10;" />
             </PendingDiffInfo>
           </value>
         </entry>

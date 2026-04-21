@@ -1,0 +1,32 @@
+name: CI - Spring Boot Test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - develop
+
+jobs:
+  test:
+    runs-on: [self-hosted, windows]
+    defaults:
+      run:
+        working-directory: synctrip
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Run unit tests
+        shell: powershell
+        run: .\gradlew.bat clean test --no-daemon
+
+
