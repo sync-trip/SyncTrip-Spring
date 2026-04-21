@@ -1,3 +1,17 @@
 spring:
   application:
     name: synctrip
+  profiles:
+    group:
+      local: "local, common"
+      prod: "prod, common"
+
+---
+spring:
+  config:
+    activate:
+      on-profile: common
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null

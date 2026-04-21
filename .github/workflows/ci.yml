@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - main
-      - develop
+      - dev
 
 jobs:
   test:
@@ -28,5 +28,6 @@ jobs:
       - name: Run unit tests
         shell: powershell
         run: .\gradlew.bat clean test --no-daemon
+
 
 
