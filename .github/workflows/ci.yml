@@ -12,7 +12,7 @@ on:
 
 jobs:
   test:
-    runs-on: [self-hosted, windows]
+    runs-on: [self-hosted, Windows]
     defaults:
       run:
         working-directory: synctrip
