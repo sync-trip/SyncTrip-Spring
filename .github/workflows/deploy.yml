@@ -1,9 +1,9 @@
 name: Deploy - School Runner
 
 on:
-  # Manual deploy button in GitHub Actions UI
+  # GitHub Actions 화면에서 수동 배포 버튼 실행
   workflow_dispatch:
-  # Auto deploy only after CI workflow succeeds on main
+  # main 브랜치 CI가 성공 완료되면 자동 배포 트리거
   workflow_run:
     workflows: ["CI - Spring Boot Test"]
     types: [completed]
@@ -12,37 +12,46 @@ on:
 jobs:
   deploy:
     name: Deploy on self-hosted runner
+    # 수동 배포는 main에서만 허용, 자동 배포는 main CI 성공 시만 허용
     if: >
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.head_branch == 'main')
+    # 실제 배포가 수행될 러너(학교 컴)
     runs-on: [self-hosted, windows]
+    # 동시에 여러 배포가 겹치지 않게 제어
     concurrency:
       group: production-deploy
       cancel-in-progress: true
     env:
+      # Docker 이미지/컨테이너 이름 기본값
       IMAGE_NAME: synctrip-backend
       CONTAINER_NAME: synctrip-backend
+      # 배포 버전 추적용 이미지 태그 (자동 배포는 CI 통과 커밋 SHA)
       IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
     steps:
+      # 배포할 소스 코드 체크아웃 (자동 배포는 CI 통과한 정확한 커밋)
       - name: Checkout source
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
+      # Docker 엔진이 정상인지 사전 확인
       - name: Check Docker is available
         shell: powershell
         run: |
           docker --version
           docker info
 
+      # 현재 소스코드로 애플리케이션 이미지 빌드
       - name: Build Docker image
         shell: powershell
         run: |
           docker build -t "$env:IMAGE_NAME:$env:IMAGE_TAG" -t "$env:IMAGE_NAME:latest" ./synctrip
 
+      # 같은 이름의 기존 컨테이너가 있으면 중지/삭제
       - name: Stop old container if exists
         shell: powershell
         run: |
@@ -52,11 +61,13 @@ jobs:
             docker rm $env:CONTAINER_NAME
           }
 
+      # 새 이미지로 컨테이너 실행 (8080 포트 오픈)
       - name: Run new container
         shell: powershell
         run: |
           docker run -d --name $env:CONTAINER_NAME --restart unless-stopped -p 8080:8080 "$env:IMAGE_NAME:latest"
 
+      # 컨테이너 실행 여부 + 8080 포트 응답 여부 확인
       - name: Verify container and port
         shell: powershell
         run: |
