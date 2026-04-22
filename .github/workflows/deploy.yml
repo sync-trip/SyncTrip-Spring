@@ -25,11 +25,13 @@ jobs:
       group: production-deploy
       cancel-in-progress: true
     env:
-      # Docker 이미지/컨테이너 이름 기본값
-      IMAGE_NAME: synctrip-backend
-      CONTAINER_NAME: synctrip-backend
-      # 배포 버전 추적용 이미지 태그 (자동 배포는 CI 통과 커밋 SHA)
+      # 앱 이미지 태그(자동 배포는 CI 통과 커밋 SHA)
       IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      # DB 접속 정보(없으면 compose.yml 기본값 사용)
+      MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+      MYSQL_DATABASE: synctripdb
+      MYSQL_USER: synctrip
+      MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
 
     steps:
       # 배포할 소스 코드 체크아웃 (자동 배포는 CI 통과한 정확한 커밋)
@@ -43,68 +45,42 @@ jobs:
         shell: powershell
         run: |
           docker --version
+          docker compose version
           docker info
 
-      # 현재 소스코드로 애플리케이션 이미지 빌드
-      - name: Build Docker image
+      # compose 파일을 실제 값으로 렌더링해서 문법/변수 오류 확인
+      - name: Validate Docker Compose file
         shell: powershell
         run: |
-          docker build -t "${env:IMAGE_NAME}:${env:IMAGE_TAG}" -t "${env:IMAGE_NAME}:latest" ./synctrip
+          docker compose -f ./synctrip/compose.yml config | Out-Null
 
-      # 같은 이름의 기존 컨테이너가 있으면 중지/삭제
-      - name: Stop old container if exists
+      # app + mysql을 함께 배포(필요 시 app 이미지를 새로 빌드)
+      - name: Deploy with Docker Compose
         shell: powershell
         run: |
-          $existing = docker ps -a --format "{{.Names}}"
-          if ($existing -match "^$env:CONTAINER_NAME$") {
-            docker stop $env:CONTAINER_NAME
-            docker rm $env:CONTAINER_NAME
+          docker compose -f ./synctrip/compose.yml up -d --build
+
+      # app/mysql 컨테이너 상태와 앱 포트 응답 확인
+      - name: Verify services and port
+        shell: powershell
+        run: |
+          Start-Sleep -Seconds 12
+
+          $appRunning = docker ps --filter "name=synctrip-backend" --filter "status=running" --format "{{.Names}}"
+          if (-not ($appRunning -match "^synctrip-backend$")) {
+            throw "Backend container is not running after deploy."
           }
 
-      # 8080 포트를 점유 중인 다른 컨테이너가 있으면 정리
-      - name: Free host port 8080 from other containers
-        shell: powershell
-        run: |
-          $portContainers = docker ps --filter "publish=8080" --format "{{.Names}}"
-          foreach ($name in $portContainers) {
-            if ($name -ne $env:CONTAINER_NAME) {
-              Write-Host "Stopping container using 8080: $name"
-              docker stop $name
-              docker rm $name
-            }
-          }
-
-      # Docker 외 프로세스가 8080을 점유 중이면 실패 처리(원인 명확화)
-      - name: Ensure port 8080 is free
-        shell: powershell
-        run: |
-          $listeners = Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue
-          if ($listeners) {
-            $pids = ($listeners | Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique) -join ", "
-            throw "Host port 8080 is already in use by process PID(s): $pids"
-          }
-
-      # 새 이미지로 컨테이너 실행 (8080 포트 오픈)
-      - name: Run new container
-        shell: powershell
-        run: |
-          docker run -d --name $env:CONTAINER_NAME --restart unless-stopped -p 8080:8080 "${env:IMAGE_NAME}:latest"
-
-      # 컨테이너 실행 여부 + 8080 포트 응답 여부 확인
-      - name: Verify container and port
-        shell: powershell
-        run: |
-          Start-Sleep -Seconds 8
-          $running = docker ps --filter "name=$env:CONTAINER_NAME" --filter "status=running" --format "{{.Names}}"
-          if (-not ($running -match "^$env:CONTAINER_NAME$")) {
-            throw "Container is not running after deploy."
+          $mysqlRunning = docker ps --filter "name=synctrip-mysql" --filter "status=running" --format "{{.Names}}"
+          if (-not ($mysqlRunning -match "^synctrip-mysql$")) {
+            throw "MySQL container is not running after deploy."
           }
 
           $portCheck = Test-NetConnection -ComputerName 127.0.0.1 -Port 8080
           if (-not $portCheck.TcpTestSucceeded) {
-            throw "Container is running, but port 8080 is not accepting connections."
+            throw "Backend is running, but port 8080 is not accepting connections."
           }
 
-          Write-Host "Deploy check passed: container is running and port 8080 is open."
+          Write-Host "Deploy check passed: backend/mysql are running and port 8080 is open."
 
 

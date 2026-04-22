@@ -1,0 +1,71 @@
+# Compose 파일 버전 선언은 최신 Docker Compose V2에서는 생략 가능
+
+services:
+  # MySQL 데이터베이스 컨테이너
+  mysql:
+    # 사용할 MySQL 이미지와 버전
+    image: mysql:8.0
+    # 컨테이너 이름(명시적으로 고정)
+    container_name: synctrip-mysql
+    # 서버 재부팅/프로세스 종료 후 자동 재시작
+    restart: unless-stopped
+    environment:
+      # 루트 계정 비밀번호(환경변수 없으면 기본값 사용)
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      # 최초 생성할 데이터베이스 이름
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      # 애플리케이션 전용 DB 계정
+      MYSQL_USER: ${MYSQL_USER}
+      # 애플리케이션 전용 DB 계정 비밀번호
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    # 문자셋/콜레이션을 UTF-8 계열로 고정
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      # 호스트 3306 -> 컨테이너 3306
+      - "3306:3306"
+    volumes:
+      # DB 데이터를 볼륨에 저장해서 컨테이너 재생성 시에도 유지
+      - synctrip-mysql-data:/var/lib/mysql
+    healthcheck:
+      # MySQL이 실제로 연결 가능한 상태인지 체크
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # Spring Boot 백엔드 컨테이너
+  app:
+    build:
+      # compose.yml 기준 현재 폴더(synctrip)를 빌드 컨텍스트로 사용
+      context: .
+      # 위 컨텍스트 안의 Dockerfile 사용
+      dockerfile: Dockerfile
+    # 빌드 결과 이미지 이름(배포 시 IMAGE_TAG 주입 가능)
+    image: synctrip-backend:${IMAGE_TAG:-latest}
+    # 컨테이너 이름(명시적으로 고정)
+    container_name: synctrip-backend
+    # 서버 재부팅/프로세스 종료 후 자동 재시작
+    restart: unless-stopped
+    depends_on:
+      # MySQL이 healthy 상태가 된 뒤 app 시작
+      mysql:
+        condition: service_healthy
+    environment:
+      # 운영 프로파일 활성화
+      SPRING_PROFILES_ACTIVE: prod
+      # 앱 컨테이너에서 DB 주소는 localhost가 아니라 서비스명(mysql)
+      DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+      # DB 사용자/비밀번호 주입
+      DB_USERNAME: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      # 호스트 8080 -> 컨테이너 8080
+      - "8080:8080"
+
+volumes:
+  # MySQL 영구 저장 볼륨 이름
+  synctrip-mysql-data:
+
