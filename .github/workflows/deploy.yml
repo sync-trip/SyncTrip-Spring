@@ -12,16 +12,25 @@ on:
 jobs:
   deploy:
     name: Deploy on self-hosted runner
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
     runs-on: [self-hosted, windows]
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: true
     env:
       IMAGE_NAME: synctrip-backend
       CONTAINER_NAME: synctrip-backend
-      IMAGE_TAG: ${{ github.sha }}
+      IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Check Docker is available
         shell: powershell
