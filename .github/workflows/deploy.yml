@@ -49,7 +49,7 @@ jobs:
       - name: Build Docker image
         shell: powershell
         run: |
-          docker build -t "$env:IMAGE_NAME:$env:IMAGE_TAG" -t "$env:IMAGE_NAME:latest" ./synctrip
+          docker build -t "${env:IMAGE_NAME}:${env:IMAGE_TAG}" -t "${env:IMAGE_NAME}:latest" ./synctrip
 
       # 같은 이름의 기존 컨테이너가 있으면 중지/삭제
       - name: Stop old container if exists
@@ -65,7 +65,7 @@ jobs:
       - name: Run new container
         shell: powershell
         run: |
-          docker run -d --name $env:CONTAINER_NAME --restart unless-stopped -p 8080:8080 "$env:IMAGE_NAME:latest"
+          docker run -d --name $env:CONTAINER_NAME --restart unless-stopped -p 8080:8080 "${env:IMAGE_NAME}:latest"
 
       # 컨테이너 실행 여부 + 8080 포트 응답 여부 확인
       - name: Verify container and port
