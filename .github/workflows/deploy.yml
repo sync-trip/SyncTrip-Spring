@@ -19,7 +19,7 @@ jobs:
        github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.head_branch == 'main')
     # 실제 배포가 수행될 러너(학교 컴)
-    runs-on: [self-hosted, windows]
+    runs-on: [self-hosted, Windows]
     # 동시에 여러 배포가 겹치지 않게 제어
     concurrency:
       group: production-deploy
