@@ -61,6 +61,29 @@ jobs:
             docker rm $env:CONTAINER_NAME
           }
 
+      # 8080 포트를 점유 중인 다른 컨테이너가 있으면 정리
+      - name: Free host port 8080 from other containers
+        shell: powershell
+        run: |
+          $portContainers = docker ps --filter "publish=8080" --format "{{.Names}}"
+          foreach ($name in $portContainers) {
+            if ($name -ne $env:CONTAINER_NAME) {
+              Write-Host "Stopping container using 8080: $name"
+              docker stop $name
+              docker rm $name
+            }
+          }
+
+      # Docker 외 프로세스가 8080을 점유 중이면 실패 처리(원인 명확화)
+      - name: Ensure port 8080 is free
+        shell: powershell
+        run: |
+          $listeners = Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue
+          if ($listeners) {
+            $pids = ($listeners | Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique) -join ", "
+            throw "Host port 8080 is already in use by process PID(s): $pids"
+          }
+
       # 새 이미지로 컨테이너 실행 (8080 포트 오픈)
       - name: Run new container
         shell: powershell
