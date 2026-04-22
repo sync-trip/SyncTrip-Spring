@@ -33,6 +33,11 @@ jobs:
         shell: powershell
         run: docker compose -f compose.yml config | Out-Null
 
+      # compose 파일 문법 검사(배포 정의가 깨졌는지 사전 확인)
+      - name: Validate Docker Compose file
+        shell: powershell
+        run: docker compose -f compose.yml config | Out-Null
+
       # Gradle 테스트 실행에 필요한 JDK 17 설치
       - name: Set up JDK 17
         uses: actions/setup-java@v5
