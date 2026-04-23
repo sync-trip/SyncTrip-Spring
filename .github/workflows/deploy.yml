@@ -118,9 +118,9 @@ jobs:
                 $isHealthy = $true
                 break
               }
-              Write-Host "Health check attempt $i/$maxRetry: status='$($health.status)'"
+              Write-Host "Health check attempt ${i}/${maxRetry}: status='$($health.status)'"
             } catch {
-              Write-Host "Health check attempt $i/$maxRetry failed: $($_.Exception.Message)"
+              Write-Host "Health check attempt ${i}/${maxRetry} failed: $($_.Exception.Message)"
             }
             Start-Sleep -Seconds $retryDelaySec
           }
