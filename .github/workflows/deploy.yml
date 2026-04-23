@@ -25,63 +25,85 @@ jobs:
       group: production-deploy
       cancel-in-progress: true
     env:
-      # Docker 이미지/컨테이너 이름 기본값
-      IMAGE_NAME: synctrip-backend
-      CONTAINER_NAME: synctrip-backend
-      # 배포 버전 추적용 이미지 태그 (자동 배포는 CI 통과 커밋 SHA)
+      # 앱 이미지 태그(자동 배포는 CI 통과 커밋 SHA)
       IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      # DB 접속 정보(없으면 compose.yml 기본값 사용)
+      MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+      MYSQL_DATABASE: synctripdb
+      MYSQL_USER: synctrip
+      MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
 
     steps:
       # 배포할 소스 코드 체크아웃 (자동 배포는 CI 통과한 정확한 커밋)
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      # 필수 시크릿/변수가 비어 있으면 초기에 실패시켜 원인 파악을 쉽게 함
+      - name: Validate required secrets
+        shell: powershell
+        run: |
+          $required = @('MYSQL_ROOT_PASSWORD', 'MYSQL_DATABASE', 'MYSQL_USER', 'MYSQL_PASSWORD')
+          foreach ($key in $required) {
+            if ([string]::IsNullOrWhiteSpace((Get-Item -Path "Env:$key" -ErrorAction SilentlyContinue).Value)) {
+              throw "Required secret/env is missing: $key"
+            }
+          }
 
       # Docker 엔진이 정상인지 사전 확인
       - name: Check Docker is available
         shell: powershell
         run: |
           docker --version
+          docker compose version
           docker info
 
-      # 현재 소스코드로 애플리케이션 이미지 빌드
-      - name: Build Docker image
+      # 이전 배포에서 남아 있던 고정 이름 컨테이너가 있으면 먼저 정리
+      - name: Remove old containers if they exist
         shell: powershell
         run: |
-          docker build -t "${env:IMAGE_NAME}:${env:IMAGE_TAG}" -t "${env:IMAGE_NAME}:latest" ./synctrip
-
-      # 같은 이름의 기존 컨테이너가 있으면 중지/삭제
-      - name: Stop old container if exists
-        shell: powershell
-        run: |
-          $existing = docker ps -a --format "{{.Names}}"
-          if ($existing -match "^$env:CONTAINER_NAME$") {
-            docker stop $env:CONTAINER_NAME
-            docker rm $env:CONTAINER_NAME
+          $names = @('synctrip-backend', 'synctrip-mysql')
+          foreach ($name in $names) {
+            $existing = docker ps -a --filter "name=^/$name$" --format "{{.Names}}"
+            if ($existing -match "^$name$") {
+              Write-Host "Removing old container: $name"
+              docker stop $name | Out-Null
+              docker rm $name | Out-Null
+            }
           }
 
-      # 새 이미지로 컨테이너 실행 (8080 포트 오픈)
-      - name: Run new container
+      # compose 파일을 실제 값으로 렌더링해서 문법/변수 오류 확인
+      - name: Validate Docker Compose file
         shell: powershell
         run: |
-          docker run -d --name $env:CONTAINER_NAME --restart unless-stopped -p 8080:8080 "${env:IMAGE_NAME}:latest"
+          docker compose -f ./synctrip/compose.yml config | Out-Null
 
-      # 컨테이너 실행 여부 + 8080 포트 응답 여부 확인
-      - name: Verify container and port
+      # app + mysql을 함께 배포(필요 시 app 이미지를 새로 빌드)
+      - name: Deploy with Docker Compose
         shell: powershell
         run: |
-          Start-Sleep -Seconds 8
-          $running = docker ps --filter "name=$env:CONTAINER_NAME" --filter "status=running" --format "{{.Names}}"
-          if (-not ($running -match "^$env:CONTAINER_NAME$")) {
-            throw "Container is not running after deploy."
+          docker compose -f ./synctrip/compose.yml up -d --build --remove-orphans
+
+      # app/mysql 컨테이너 상태와 앱 포트 응답 확인
+      - name: Verify services and port
+        shell: powershell
+        run: |
+          Start-Sleep -Seconds 12
+
+          $appRunning = docker ps --filter "name=synctrip-backend" --filter "status=running" --format "{{.Names}}"
+          if (-not ($appRunning -match "^synctrip-backend$")) {
+            throw "Backend container is not running after deploy."
+          }
+
+          $mysqlRunning = docker ps --filter "name=synctrip-mysql" --filter "status=running" --format "{{.Names}}"
+          if (-not ($mysqlRunning -match "^synctrip-mysql$")) {
+            throw "MySQL container is not running after deploy."
           }
 
           $portCheck = Test-NetConnection -ComputerName 127.0.0.1 -Port 8080
           if (-not $portCheck.TcpTestSucceeded) {
-            throw "Container is running, but port 8080 is not accepting connections."
+            throw "Backend is running, but port 8080 is not accepting connections."
           }
 
-          Write-Host "Deploy check passed: container is running and port 8080 is open."
-
-
+          Write-Host "Deploy check passed: backend/mysql are running and port 8080 is open."
