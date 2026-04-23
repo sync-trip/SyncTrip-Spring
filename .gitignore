@@ -1,0 +1,16 @@
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Local environment files
+.env
+**/.env
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
