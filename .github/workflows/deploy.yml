@@ -85,8 +85,8 @@ jobs:
         run: |
           docker compose -f ./synctrip/compose.yml up -d --build --remove-orphans
 
-      # app/mysql 컨테이너 상태와 앱 포트 응답 확인
-      - name: Verify services and port
+      # app/mysql 컨테이너 상태 + /actuator/health(UP) 확인
+      - name: Verify services and health endpoint
         shell: powershell
         run: |
           Start-Sleep -Seconds 12
@@ -106,4 +106,27 @@ jobs:
             throw "Backend is running, but port 8080 is not accepting connections."
           }
 
-          Write-Host "Deploy check passed: backend/mysql are running and port 8080 is open."
+          $healthUrl = "http://127.0.0.1:8080/actuator/health"
+          $maxRetry = 10
+          $retryDelaySec = 3
+          $isHealthy = $false
+
+          for ($i = 1; $i -le $maxRetry; $i++) {
+            try {
+              $health = Invoke-RestMethod -Uri $healthUrl -Method Get -TimeoutSec 5
+              if ($health.status -eq 'UP') {
+                $isHealthy = $true
+                break
+              }
+              Write-Host "Health check attempt $i/$maxRetry: status='$($health.status)'"
+            } catch {
+              Write-Host "Health check attempt $i/$maxRetry failed: $($_.Exception.Message)"
+            }
+            Start-Sleep -Seconds $retryDelaySec
+          }
+
+          if (-not $isHealthy) {
+            throw "Health endpoint is not UP after deploy: $healthUrl"
+          }
+
+          Write-Host "Deploy check passed: backend/mysql are running, port 8080 is open, and actuator health is UP."
