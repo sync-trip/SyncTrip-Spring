@@ -40,6 +40,17 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
+      # 필수 시크릿/변수가 비어 있으면 초기에 실패시켜 원인 파악을 쉽게 함
+      - name: Validate required secrets
+        shell: powershell
+        run: |
+          $required = @('MYSQL_ROOT_PASSWORD', 'MYSQL_DATABASE', 'MYSQL_USER', 'MYSQL_PASSWORD')
+          foreach ($key in $required) {
+            if ([string]::IsNullOrWhiteSpace((Get-Item -Path "Env:$key" -ErrorAction SilentlyContinue).Value)) {
+              throw "Required secret/env is missing: $key"
+            }
+          }
+
       # Docker 엔진이 정상인지 사전 확인
       - name: Check Docker is available
         shell: powershell
@@ -47,6 +58,20 @@ jobs:
           docker --version
           docker compose version
           docker info
+
+      # 이전 배포에서 남아 있던 고정 이름 컨테이너가 있으면 먼저 정리
+      - name: Remove old containers if they exist
+        shell: powershell
+        run: |
+          $names = @('synctrip-backend', 'synctrip-mysql')
+          foreach ($name in $names) {
+            $existing = docker ps -a --filter "name=^/$name$" --format "{{.Names}}"
+            if ($existing -match "^$name$") {
+              Write-Host "Removing old container: $name"
+              docker stop $name | Out-Null
+              docker rm $name | Out-Null
+            }
+          }
 
       # compose 파일을 실제 값으로 렌더링해서 문법/변수 오류 확인
       - name: Validate Docker Compose file
@@ -58,7 +83,7 @@ jobs:
       - name: Deploy with Docker Compose
         shell: powershell
         run: |
-          docker compose -f ./synctrip/compose.yml up -d --build
+          docker compose -f ./synctrip/compose.yml up -d --build --remove-orphans
 
       # app/mysql 컨테이너 상태와 앱 포트 응답 확인
       - name: Verify services and port
@@ -82,5 +107,3 @@ jobs:
           }
 
           Write-Host "Deploy check passed: backend/mysql are running and port 8080 is open."
-
-
