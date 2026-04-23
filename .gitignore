@@ -1,9 +1,14 @@
-# IDE
-.idea/
-.vscode/
-*.iml
+# IntelliJ IDEA (개인 로컬 상태만 무시)
+.idea/workspace.xml
+.idea/copilotDiffState.xml
+.idea/shelf/
+.idea/httpRequests/
+.idea/dataSources/
+.idea/**/usage.statistics.xml
+.idea/**/dictionaries/
+.idea/libraries/
 
-# Local environment files
+# Local environment files (비밀값)
 .env
 **/.env
 
@@ -13,4 +18,3 @@ Thumbs.db
 
 # Logs
 *.log
-
