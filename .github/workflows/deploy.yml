@@ -36,7 +36,7 @@ jobs:
     steps:
       # 배포할 소스 코드 체크아웃 (자동 배포는 CI 통과한 정확한 커밋)
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
