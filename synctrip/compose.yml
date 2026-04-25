@@ -5,8 +5,8 @@ services:
   mysql:
     # 사용할 MySQL 이미지와 버전
     image: mysql:8.0
-    # 컨테이너 이름(명시적으로 고정)
-    container_name: synctrip-mysql
+    # 컨테이너 이름(브랜치별 분리를 위해 환경변수로 주입 가능)
+    container_name: ${MYSQL_CONTAINER_NAME:-synctrip-mysql}
     # 서버 재부팅/프로세스 종료 후 자동 재시작
     restart: unless-stopped
     environment:
@@ -23,8 +23,8 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
     ports:
-      # 호스트 3306 -> 컨테이너 3306
-      - "3306:3306"
+      # 호스트 포트는 환경변수로 분리(main/dev 동시 구동 대비)
+      - "${MYSQL_HOST_PORT:-3306}:3306"
     volumes:
       # DB 데이터를 볼륨에 저장해서 컨테이너 재생성 시에도 유지
       - synctrip-mysql-data:/var/lib/mysql
@@ -45,8 +45,8 @@ services:
       dockerfile: Dockerfile
     # 빌드 결과 이미지 이름(배포 시 IMAGE_TAG 주입 가능)
     image: synctrip-backend:${IMAGE_TAG:-latest}
-    # 컨테이너 이름(명시적으로 고정)
-    container_name: synctrip-backend
+    # 컨테이너 이름(브랜치별 분리를 위해 환경변수로 주입 가능)
+    container_name: ${APP_CONTAINER_NAME:-synctrip-backend}
     # 서버 재부팅/프로세스 종료 후 자동 재시작
     restart: unless-stopped
     depends_on:
@@ -62,8 +62,8 @@ services:
       DB_USERNAME: ${MYSQL_USER}
       DB_PASSWORD: ${MYSQL_PASSWORD}
     ports:
-      # 호스트 8080 -> 컨테이너 8080
-      - "8080:8080"
+      # 호스트 포트는 환경변수로 분리(main/dev 동시 구동 대비)
+      - "${APP_HOST_PORT:-8080}:8080"
 
 volumes:
   # MySQL 영구 저장 볼륨 이름
