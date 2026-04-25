@@ -7,22 +7,23 @@ on:
   workflow_run:
     workflows: ["CI - Spring Boot Test"]
     types: [completed]
-    branches: [main]
+    branches: [main, dev]
 
 jobs:
   deploy:
     name: Deploy on self-hosted runner
-    # 수동 배포는 main에서만 허용, 자동 배포는 main CI 성공 시만 허용
+    # 수동/자동 배포 모두 main, dev 브랜치만 허용
     if: >
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' &&
+       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')) ||
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.head_branch == 'main')
+       (github.event.workflow_run.head_branch == 'main' || github.event.workflow_run.head_branch == 'dev'))
     # 실제 배포가 수행될 러너(학교 컴)
     runs-on: [self-hosted, Windows]
     # 동시에 여러 배포가 겹치지 않게 제어
     concurrency:
-      group: production-deploy
+      group: deploy-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}
       cancel-in-progress: true
     env:
       # 앱 이미지 태그(자동 배포는 CI 통과 커밋 SHA)
@@ -51,6 +52,37 @@ jobs:
             }
           }
 
+      # 배포 대상 브랜치(main/dev)에 따라 컨테이너 이름/포트를 분리
+      - name: Set deployment target variables
+        shell: powershell
+        run: |
+          $targetBranch = if ('${{ github.event_name }}' -eq 'workflow_run') { '${{ github.event.workflow_run.head_branch }}' } else { '${{ github.ref_name }}' }
+
+          if ($targetBranch -notin @('main', 'dev')) {
+            throw "Unsupported branch for deploy: $targetBranch"
+          }
+
+          if ($targetBranch -eq 'main') {
+            $appContainer = 'synctrip-backend'
+            $mysqlContainer = 'synctrip-mysql'
+            $appHostPort = '8080'
+            $mysqlHostPort = '3306'
+            $composeProject = 'synctrip-main'
+          } else {
+            $appContainer = 'synctrip-backend-dev'
+            $mysqlContainer = 'synctrip-mysql-dev'
+            $appHostPort = '8081'
+            $mysqlHostPort = '3307'
+            $composeProject = 'synctrip-dev'
+          }
+
+          "TARGET_BRANCH=$targetBranch" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "APP_CONTAINER_NAME=$appContainer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MYSQL_CONTAINER_NAME=$mysqlContainer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "APP_HOST_PORT=$appHostPort" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MYSQL_HOST_PORT=$mysqlHostPort" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "COMPOSE_PROJECT=$composeProject" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       # Docker 엔진이 정상인지 사전 확인
       - name: Check Docker is available
         shell: powershell
@@ -63,7 +95,7 @@ jobs:
       - name: Remove old containers if they exist
         shell: powershell
         run: |
-          $names = @('synctrip-backend', 'synctrip-mysql')
+          $names = @($env:APP_CONTAINER_NAME, $env:MYSQL_CONTAINER_NAME)
           foreach ($name in $names) {
             $existing = docker ps -a --filter "name=^/$name$" --format "{{.Names}}"
             if ($existing -match "^$name$") {
@@ -77,13 +109,13 @@ jobs:
       - name: Validate Docker Compose file
         shell: powershell
         run: |
-          docker compose -f ./synctrip/compose.yml config | Out-Null
+          docker compose -p $env:COMPOSE_PROJECT -f ./synctrip/compose.yml config | Out-Null
 
       # app + mysql을 함께 배포(필요 시 app 이미지를 새로 빌드)
       - name: Deploy with Docker Compose
         shell: powershell
         run: |
-          docker compose -f ./synctrip/compose.yml up -d --build --remove-orphans
+          docker compose -p $env:COMPOSE_PROJECT -f ./synctrip/compose.yml up -d --build --remove-orphans
 
       # app/mysql 컨테이너 상태 + /actuator/health(UP) 확인
       - name: Verify services and health endpoint
@@ -91,22 +123,22 @@ jobs:
         run: |
           Start-Sleep -Seconds 12
 
-          $appRunning = docker ps --filter "name=synctrip-backend" --filter "status=running" --format "{{.Names}}"
-          if (-not ($appRunning -match "^synctrip-backend$")) {
+          $appRunning = docker ps --filter "name=$env:APP_CONTAINER_NAME" --filter "status=running" --format "{{.Names}}"
+          if (-not ($appRunning -match "^$env:APP_CONTAINER_NAME$")) {
             throw "Backend container is not running after deploy."
           }
 
-          $mysqlRunning = docker ps --filter "name=synctrip-mysql" --filter "status=running" --format "{{.Names}}"
-          if (-not ($mysqlRunning -match "^synctrip-mysql$")) {
+          $mysqlRunning = docker ps --filter "name=$env:MYSQL_CONTAINER_NAME" --filter "status=running" --format "{{.Names}}"
+          if (-not ($mysqlRunning -match "^$env:MYSQL_CONTAINER_NAME$")) {
             throw "MySQL container is not running after deploy."
           }
 
-          $portCheck = Test-NetConnection -ComputerName 127.0.0.1 -Port 8080
+          $portCheck = Test-NetConnection -ComputerName 127.0.0.1 -Port $env:APP_HOST_PORT
           if (-not $portCheck.TcpTestSucceeded) {
-            throw "Backend is running, but port 8080 is not accepting connections."
+            throw "Backend is running, but port $env:APP_HOST_PORT is not accepting connections."
           }
 
-          $healthUrl = "http://127.0.0.1:8080/actuator/health"
+          $healthUrl = "http://127.0.0.1:$env:APP_HOST_PORT/actuator/health"
           $maxRetry = 10
           $retryDelaySec = 3
           $isHealthy = $false
@@ -129,4 +161,4 @@ jobs:
             throw "Health endpoint is not UP after deploy: $healthUrl"
           }
 
-          Write-Host "Deploy check passed: backend/mysql are running, port 8080 is open, and actuator health is UP."
+          Write-Host "Deploy check passed for '$env:TARGET_BRANCH': backend/mysql are running, port $env:APP_HOST_PORT is open, and actuator health is UP."
