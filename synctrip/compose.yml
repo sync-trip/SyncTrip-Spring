@@ -28,6 +28,8 @@ services:
     volumes:
       # DB 데이터를 볼륨에 저장해서 컨테이너 재생성 시에도 유지
       - synctrip-mysql-data:/var/lib/mysql
+      # 호스트의 초기 SQL 파일들을 MySQL 시작 시 자동 실행
+      - ./mysql/initdb.d:/docker-entrypoint-initdb.d
     healthcheck:
       # MySQL이 실제로 연결 가능한 상태인지 체크
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
