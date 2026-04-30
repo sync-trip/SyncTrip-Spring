@@ -63,6 +63,19 @@ services:
       # DB 사용자/비밀번호 주입
       DB_USERNAME: ${MYSQL_USER}
       DB_PASSWORD: ${MYSQL_PASSWORD}
+      # 카카오 OAuth 설정 주입
+      KAKAO_CLIENT_ID: ${KAKAO_CLIENT_ID}
+      KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET}
+      KAKAO_REDIRECT_URI: ${KAKAO_REDIRECT_URI}
+      KAKAO_AUTHORIZATION_URI: ${KAKAO_AUTHORIZATION_URI:-https://kauth.kakao.com/oauth/authorize}
+      KAKAO_TOKEN_URI: ${KAKAO_TOKEN_URI:-https://kauth.kakao.com/oauth/token}
+      KAKAO_USER_INFO_URI: ${KAKAO_USER_INFO_URI:-https://kapi.kakao.com/v2/user/me}
+      KAKAO_SCOPE: ${KAKAO_SCOPE:-account_email,profile_nickname,profile_image}
+      # 내부 JWT 발급 설정 주입
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER:-synctrip}
+      JWT_ACCESS_TOKEN_TTL_SECONDS: ${JWT_ACCESS_TOKEN_TTL_SECONDS:-900}
+      JWT_REFRESH_TOKEN_TTL_SECONDS: ${JWT_REFRESH_TOKEN_TTL_SECONDS:-1209600}
     ports:
       # 호스트 포트는 환경변수로 분리(main/dev 동시 구동 대비)
       - "${APP_HOST_PORT:-8080}:8080"
