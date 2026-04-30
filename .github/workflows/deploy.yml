@@ -30,9 +30,19 @@ jobs:
       IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       # DB 접속 정보(없으면 compose.yml 기본값 사용)
       MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
-      MYSQL_DATABASE: synctripdb
-      MYSQL_USER: synctrip
+      MYSQL_DATABASE: ${{ secrets.MYSQL_DATABASE }}
+      MYSQL_USER: ${{ secrets.MYSQL_USER }}
       MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+      # 카카오/JWT 공통 시크릿
+      KAKAO_CLIENT_ID: ${{ secrets.KAKAO_CLIENT_ID }}
+      KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      JWT_ISSUER: ${{ secrets.JWT_ISSUER }}
+      JWT_ACCESS_TOKEN_TTL_SECONDS: ${{ secrets.JWT_ACCESS_TOKEN_TTL_SECONDS }}
+      JWT_REFRESH_TOKEN_TTL_SECONDS: ${{ secrets.JWT_REFRESH_TOKEN_TTL_SECONDS }}
+      # 브랜치별 Redirect URI(최종 선택은 아래 단계에서 수행)
+      KAKAO_REDIRECT_URI_MAIN: ${{ secrets.KAKAO_REDIRECT_URI_MAIN }}
+      KAKAO_REDIRECT_URI_DEV: ${{ secrets.KAKAO_REDIRECT_URI_DEV }}
 
     steps:
       # 배포할 소스 코드 체크아웃 (자동 배포는 CI 통과한 정확한 커밋)
@@ -45,7 +55,11 @@ jobs:
       - name: Validate required secrets
         shell: powershell
         run: |
-          $required = @('MYSQL_ROOT_PASSWORD', 'MYSQL_DATABASE', 'MYSQL_USER', 'MYSQL_PASSWORD')
+          $required = @(
+            'MYSQL_ROOT_PASSWORD', 'MYSQL_DATABASE', 'MYSQL_USER', 'MYSQL_PASSWORD',
+            'KAKAO_CLIENT_ID', 'KAKAO_CLIENT_SECRET', 'JWT_SECRET',
+            'KAKAO_REDIRECT_URI_MAIN', 'KAKAO_REDIRECT_URI_DEV'
+          )
           foreach ($key in $required) {
             if ([string]::IsNullOrWhiteSpace((Get-Item -Path "Env:$key" -ErrorAction SilentlyContinue).Value)) {
               throw "Required secret/env is missing: $key"
@@ -68,12 +82,18 @@ jobs:
             $appHostPort = '8080'
             $mysqlHostPort = '3306'
             $composeProject = 'synctrip-main'
+            $kakaoRedirectUri = $env:KAKAO_REDIRECT_URI_MAIN
           } else {
             $appContainer = 'synctrip-backend-dev'
             $mysqlContainer = 'synctrip-mysql-dev'
             $appHostPort = '8081'
             $mysqlHostPort = '3307'
             $composeProject = 'synctrip-dev'
+            $kakaoRedirectUri = $env:KAKAO_REDIRECT_URI_DEV
+          }
+
+          if ([string]::IsNullOrWhiteSpace($kakaoRedirectUri)) {
+            throw "KAKAO_REDIRECT_URI is empty for branch: $targetBranch"
           }
 
           "TARGET_BRANCH=$targetBranch" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
@@ -82,6 +102,8 @@ jobs:
           "APP_HOST_PORT=$appHostPort" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "MYSQL_HOST_PORT=$mysqlHostPort" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "COMPOSE_PROJECT=$composeProject" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          # main/dev 배포에 맞는 Redirect URI를 최종 확정해서 컨테이너로 주입
+          "KAKAO_REDIRECT_URI=$kakaoRedirectUri" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       # Docker 엔진이 정상인지 사전 확인
       - name: Check Docker is available
@@ -121,10 +143,16 @@ jobs:
       - name: Verify services and health endpoint
         shell: powershell
         run: |
-          Start-Sleep -Seconds 12
+          Write-Host "컨테이너들이 완전히 켜질 때까지 40초 대기합니다..."
+          Start-Sleep -Seconds 40
 
           $appRunning = docker ps --filter "name=$env:APP_CONTAINER_NAME" --filter "status=running" --format "{{.Names}}"
           if (-not ($appRunning -match "^$env:APP_CONTAINER_NAME$")) {
+            Write-Host "백엔드 컨테이너가 실행 중이 아닙니다! (에러 로그 확인)"
+            Write-Host "==================== [ 백엔드 로그 ] ===================="
+            docker logs $env:APP_CONTAINER_NAME
+            Write-Host "==================== [ MySQL 로그 ] ===================="
+            docker logs $env:MYSQL_CONTAINER_NAME
             throw "Backend container is not running after deploy."
           }
 
@@ -158,7 +186,9 @@ jobs:
           }
 
           if (-not $isHealthy) {
+            Write-Host "헬스 체크 실패! 서버 로그를 확인합니다."
+            docker logs $env:APP_CONTAINER_NAME
             throw "Health endpoint is not UP after deploy: $healthUrl"
           }
 
-          Write-Host "Deploy check passed for '$env:TARGET_BRANCH': backend/mysql are running, port $env:APP_HOST_PORT is open, and actuator health is UP."
+          Write-Host "✅ 배포가 성공적으로 완료되었습니다! '$env:TARGET_BRANCH': backend/mysql are running, port $env:APP_HOST_PORT is open, and actuator health is UP."
