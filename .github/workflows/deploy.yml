@@ -143,10 +143,16 @@ jobs:
       - name: Verify services and health endpoint
         shell: powershell
         run: |
-          Start-Sleep -Seconds 12
+          Write-Host "컨테이너들이 완전히 켜질 때까지 40초 대기합니다..."
+          Start-Sleep -Seconds 40
 
           $appRunning = docker ps --filter "name=$env:APP_CONTAINER_NAME" --filter "status=running" --format "{{.Names}}"
           if (-not ($appRunning -match "^$env:APP_CONTAINER_NAME$")) {
+            Write-Host "백엔드 컨테이너가 실행 중이 아닙니다! (에러 로그 확인)"
+            Write-Host "==================== [ 백엔드 로그 ] ===================="
+            docker logs $env:APP_CONTAINER_NAME
+            Write-Host "==================== [ MySQL 로그 ] ===================="
+            docker logs $env:MYSQL_CONTAINER_NAME
             throw "Backend container is not running after deploy."
           }
 
@@ -180,7 +186,9 @@ jobs:
           }
 
           if (-not $isHealthy) {
+            Write-Host "헬스 체크 실패! 서버 로그를 확인합니다."
+            docker logs $env:APP_CONTAINER_NAME
             throw "Health endpoint is not UP after deploy: $healthUrl"
           }
 
-          Write-Host "Deploy check passed for '$env:TARGET_BRANCH': backend/mysql are running, port $env:APP_HOST_PORT is open, and actuator health is UP."
+          Write-Host "✅ 배포가 성공적으로 완료되었습니다! '$env:TARGET_BRANCH': backend/mysql are running, port $env:APP_HOST_PORT is open, and actuator health is UP."
