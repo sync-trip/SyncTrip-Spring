@@ -60,7 +60,7 @@ jobs:
         run: |
           $postmanApiKey = "${{ secrets.POSTMAN_API_KEY }}"
           $collectionId = "${{ secrets.POSTMAN_COLLECTION_ID }}"
-          $filePath = "synctrip/build/openapi.json"
+          $filePath = "build/openapi.json"
           
           if (-not (Test-Path $filePath)) {
             Write-Error "OpenAPI JSON file not found at $filePath"
