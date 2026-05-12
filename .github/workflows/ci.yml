@@ -47,7 +47,7 @@ jobs:
 
       # OpenAPI JSON 파일 생성 (Swagger 명세 추출)
       - name: Generate OpenAPI JSON
-        shell: pwsh
+        shell: powershell
         run: .\gradlew.bat generateOpenApiDocs --no-daemon --info
         env:
           SPRING_PROFILES_ACTIVE: test
