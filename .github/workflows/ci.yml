@@ -51,6 +51,7 @@ jobs:
         run: .\gradlew.bat generateOpenApiDocs --no-daemon
         env:
           SPRING_PROFILES_ACTIVE: test
+          SERVER_PORT: 8081
 
       # Postman API를 사용하여 컬렉션 업데이트
       - name: Update Postman Collection

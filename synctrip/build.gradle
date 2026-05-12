@@ -45,6 +45,12 @@ tasks.named('test') {
     useJUnitPlatform()
 }
 
+openApi {
+    apiDocsUrl.set("http://localhost:8081/v3/api-docs")
+    outputFileName.set("openapi.json")
+    outputDir.set(file("$projectDir/build"))
+}
+
 jar {
     enabled = false
 }
