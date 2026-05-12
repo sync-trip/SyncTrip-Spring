@@ -45,8 +45,10 @@ services:
       context: .
       # 위 컨텍스트 안의 Dockerfile 사용
       dockerfile: Dockerfile
-    # 빌드 결과 이미지 이름(배포 시 IMAGE_TAG 주입 가능)
-    image: synctrip-backend:${IMAGE_TAG:-latest}
+    # 빌드 결과 이미지 이름
+    # - 브랜치별로 구분하려면 APP_IMAGE_NAME을 다르게 주입
+    # - 예: main -> synctrip-backend-main, dev -> synctrip-backend-dev
+    image: ${APP_IMAGE_NAME:-synctrip-backend}:${IMAGE_TAG:-latest}
     # 컨테이너 이름(브랜치별 분리를 위해 환경변수로 주입 가능)
     container_name: ${APP_CONTAINER_NAME:-synctrip-backend}
     # 서버 재부팅/프로세스 종료 후 자동 재시작
