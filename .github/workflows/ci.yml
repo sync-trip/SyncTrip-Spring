@@ -53,41 +53,59 @@ jobs:
           SPRING_PROFILES_ACTIVE: test
           SERVER_PORT: 8081
 
-      # Postman API를 사용하여 컬렉션 업데이트
+      # 1. OpenAPI 형식을 Postman 형식으로 번역하기 위해 Node.js 환경 세팅
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # 2. 포스트맨 'Collection(테스트 폴더)' 업데이트 스크립트
       - name: Update Postman Collection
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
         shell: powershell
         run: |
-          $postmanApiKey = "${{ secrets.POSTMAN_API_KEY }}"
-          $collectionId = "${{ secrets.POSTMAN_COLLECTION_ID }}"
-          $filePath = "build/openapi.json"
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          # 파일 경로 설정 (working-directory가 synctrip이므로 build/ 부터 시작)
+          $openApiFile = "build/openapi.json"
+          $postmanFile = "build/postman_collection.json"
           
-          if (-not (Test-Path $filePath)) {
-            Write-Error "OpenAPI JSON file not found at $filePath"
+          if (-not (Test-Path $openApiFile)) {
+            Write-Error "OpenAPI 파일을 찾을 수 없습니다: $openApiFile"
             exit 1
           }
 
-          $openApiJson = Get-Content -Raw -Path $filePath
+          Write-Host "OpenAPI 문서를 Postman 규격으로 번역합니다..."
+          # npx를 사용하면 윈도우 환경에서도 경로 꼬임 없이 안전하게 번역기를 실행할 수 있습니다.
+          npx openapi-to-postmanv2 -s $openApiFile -o $postmanFile
           
-          # Postman API 호출 (OpenAPI 명세로 컬렉션 업데이트는 
-          # 일반적으로 API 정의 업데이트를 통해 이루어지거나, 
-          # 변환 도구를 거쳐 컬렉션 직접 업데이트가 필요할 수 있음.
-          # 여기서는 가장 간단한 'Import' 방식을 예시로 하거나 
-          # 기존 컬렉션을 덮어쓰는 로직을 작성)
+          if (-not (Test-Path $postmanFile)) {
+            Write-Error "번역된 Postman 파일이 생성되지 않았습니다."
+            exit 1
+          }
+
+          # 번역된 파일 읽기 및 Postman 서버가 원하는 형태(JSON)로 감싸기
+          $collectionContent = Get-Content -Raw -Path $postmanFile
+          $body = "{`"collection`": $collectionContent}"
+          
+          # ★ 주의: 여기서는 API_ID가 아니라 이전에 찾으신 COLLECTION_ID를 씁니다!
+          $postmanApiKey = "${{ secrets.POSTMAN_API_KEY }}"
+          $collectionId = "${{ secrets.POSTMAN_COLLECTION_ID }}"
           
           $headers = @{
             "X-Api-Key" = $postmanApiKey
             "Content-Type" = "application/json"
           }
           
-          # 주의: Postman API의 컬렉션 업데이트(PUT)는 Postman Format을 기대하므로,
-          # OpenAPI -> Postman 변환 과정이 필요할 수 있습니다.
-          # 여기서는 개념 증명을 위해 API 명세 업데이트 엔드포인트를 제안하거나
-          # 사용자가 직접 설정한 스크립트를 실행하는 구조로 잡습니다.
+          Write-Host "포스트맨 서버의 Collection($collectionId)으로 전송 시작..."
           
-          Write-Host "Updating Postman Collection: $collectionId"
-          # 실제 구현 시에는 포스트맨의 'Schema Update' API 등을 활용하는 것이 정확합니다.
-          # Invoke-RestMethod -Uri "https://api.getpostman.com/apis/{{apiId}}/versions/{{versionId}}/schemas/{{schemaId}}" ...
-          
-          # 우선은 '성공' 메시지만 띄우고, 실제 API 키와 ID가 준비되면 curl 명령어로 교체 가능함을 안내합니다.
-          Write-Host "Postman update triggered for branch: ${{ github.ref_name }}"
+          try {
+            $response = Invoke-RestMethod -Uri "https://api.getpostman.com/collections/$collectionId" -Method Put -Headers $headers -Body $body
+            Write-Host "성공! Postman 앱의 SyncTrip 컬렉션을 확인해보세요."
+          } catch {
+            Write-Error "업데이트 실패: $($_.Exception.Message)"
+            if ($_.Exception.Response) {
+              $details = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+              Write-Host "상세 에러 이유: $($details.ReadToEnd())"
+            }
+            exit 1
+          }
