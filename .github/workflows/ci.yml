@@ -42,7 +42,7 @@ jobs:
 
       # 단위 테스트 실행 (실패하면 CI 실패로 처리)
       - name: Run unit tests
-        shell: pwsh
+        shell: powershell
         run: .\gradlew.bat clean test --no-daemon
 
       # OpenAPI JSON 파일 생성 (Swagger 명세 추출)
