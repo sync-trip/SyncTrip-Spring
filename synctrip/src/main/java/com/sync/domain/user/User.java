@@ -108,5 +108,10 @@ public class User {
         this.profileImageUrl = profileImageUrl;
         this.email = email;
     }
+
+    // 회원탈퇴: Soft Delete (물리 삭제 대신 논리 삭제)
+    public void withdraw() {
+        this.isDeleted = true;
+    }
 }
 

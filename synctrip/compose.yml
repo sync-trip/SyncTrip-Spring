@@ -65,12 +65,12 @@ services:
       DB_PASSWORD: ${MYSQL_PASSWORD}
       # 카카오 OAuth 설정 주입
       KAKAO_CLIENT_ID: ${KAKAO_CLIENT_ID}
-      KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
+      KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET}
       KAKAO_REDIRECT_URI: ${KAKAO_REDIRECT_URI}
       KAKAO_AUTHORIZATION_URI: ${KAKAO_AUTHORIZATION_URI:-https://kauth.kakao.com/oauth/authorize}
       KAKAO_TOKEN_URI: ${KAKAO_TOKEN_URI:-https://kauth.kakao.com/oauth/token}
       KAKAO_USER_INFO_URI: ${KAKAO_USER_INFO_URI:-https://kapi.kakao.com/v2/user/me}
-      KAKAO_SCOPE: ${KAKAO_SCOPE:-profile_nickname,profile_image}
+      KAKAO_SCOPE: ${KAKAO_SCOPE:-account_email,profile_nickname,profile_image}
       # 내부 JWT 발급 설정 주입
       JWT_SECRET: ${JWT_SECRET}
       JWT_ISSUER: ${JWT_ISSUER:-synctrip}
