@@ -21,9 +21,6 @@ jobs:
        (github.event.workflow_run.head_branch == 'main' || github.event.workflow_run.head_branch == 'dev'))
     # 실제 배포가 수행될 러너(학교 컴)
     runs-on: [self-hosted, Windows]
-    # workflow_run 트리거에서 secrets 접근을 위해 권한 설정
-    permissions:
-      contents: read
     # 동시에 여러 배포가 겹치지 않게 제어
     concurrency:
       group: deploy-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}
@@ -31,6 +28,21 @@ jobs:
     env:
       # 앱 이미지 태그(자동 배포는 CI 통과 커밋 SHA)
       IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      # DB 접속 정보(없으면 compose.yml 기본값 사용)
+      MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+      MYSQL_DATABASE: ${{ secrets.MYSQL_DATABASE }}
+      MYSQL_USER: ${{ secrets.MYSQL_USER }}
+      MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+      # 카카오/JWT 공통 시크릿
+      KAKAO_CLIENT_ID: ${{ secrets.KAKAO_CLIENT_ID }}
+      KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      JWT_ISSUER: ${{ secrets.JWT_ISSUER }}
+      JWT_ACCESS_TOKEN_TTL_SECONDS: ${{ secrets.JWT_ACCESS_TOKEN_TTL_SECONDS }}
+      JWT_REFRESH_TOKEN_TTL_SECONDS: ${{ secrets.JWT_REFRESH_TOKEN_TTL_SECONDS }}
+      # 브랜치별 Redirect URI(최종 선택은 아래 단계에서 수행)
+      KAKAO_REDIRECT_URI_MAIN: ${{ secrets.KAKAO_REDIRECT_URI_MAIN }}
+      KAKAO_REDIRECT_URI_DEV: ${{ secrets.KAKAO_REDIRECT_URI_DEV }}
 
     steps:
       # 배포할 소스 코드 체크아웃 (자동 배포는 CI 통과한 정확한 커밋)
@@ -39,30 +51,28 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
+      # 필수 시크릿/변수가 비어 있으면 초기에 실패시켜 원인 파악을 쉽게 함
+      - name: Validate required secrets
+        shell: powershell
+        run: |
+          $required = @(
+            'MYSQL_ROOT_PASSWORD', 'MYSQL_DATABASE', 'MYSQL_USER', 'MYSQL_PASSWORD',
+            'KAKAO_CLIENT_ID', 'KAKAO_CLIENT_SECRET', 'JWT_SECRET',
+            'KAKAO_REDIRECT_URI_MAIN', 'KAKAO_REDIRECT_URI_DEV'
+          )
+          foreach ($key in $required) {
+            if ([string]::IsNullOrWhiteSpace((Get-Item -Path "Env:$key" -ErrorAction SilentlyContinue).Value)) {
+              throw "Required secret/env is missing: $key"
+            }
+          }
       # 배포 대상 브랜치(main/dev)에 따라 컨테이너 이름/포트를 분리
       - name: Set deployment target variables
         shell: powershell
-        env:
-          # 여기서 secrets 직접 참조
-          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
-          MYSQL_DATABASE: ${{ secrets.MYSQL_DATABASE }}
-          MYSQL_USER: ${{ secrets.MYSQL_USER }}
-          MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
-          KAKAO_CLIENT_ID: ${{ secrets.KAKAO_CLIENT_ID }}
-          KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          JWT_ISSUER: ${{ secrets.JWT_ISSUER }}
-          JWT_ACCESS_TOKEN_TTL_SECONDS: ${{ secrets.JWT_ACCESS_TOKEN_TTL_SECONDS }}
-          JWT_REFRESH_TOKEN_TTL_SECONDS: ${{ secrets.JWT_REFRESH_TOKEN_TTL_SECONDS }}
-          KAKAO_REDIRECT_URI_MAIN: ${{ secrets.KAKAO_REDIRECT_URI_MAIN }}
-          KAKAO_REDIRECT_URI_DEV: ${{ secrets.KAKAO_REDIRECT_URI_DEV }}
         run: |
           $targetBranch = if ('${{ github.event_name }}' -eq 'workflow_run') { '${{ github.event.workflow_run.head_branch }}' } else { '${{ github.ref_name }}' }
-
           if ($targetBranch -notin @('main', 'dev')) {
             throw "Unsupported branch for deploy: $targetBranch"
           }
-
           if ($targetBranch -eq 'main') {
             $appContainer = 'synctrip-backend'
             $mysqlContainer = 'synctrip-mysql'
@@ -78,11 +88,9 @@ jobs:
             $composeProject = 'synctrip-dev'
             $kakaoRedirectUri = $env:KAKAO_REDIRECT_URI_DEV
           }
-
           if ([string]::IsNullOrWhiteSpace($kakaoRedirectUri)) {
             throw "KAKAO_REDIRECT_URI is empty for branch: $targetBranch"
           }
-
           "TARGET_BRANCH=$targetBranch" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "APP_CONTAINER_NAME=$appContainer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "MYSQL_CONTAINER_NAME=$mysqlContainer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
@@ -91,18 +99,6 @@ jobs:
           "COMPOSE_PROJECT=$composeProject" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           # main/dev 배포에 맞는 Redirect URI를 최종 확정해서 컨테이너로 주입
           "KAKAO_REDIRECT_URI=$kakaoRedirectUri" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          # 모든 secrets을 GITHUB_ENV에 저장해서 다음 단계에서도 접근 가능
-          "MYSQL_ROOT_PASSWORD=$env:MYSQL_ROOT_PASSWORD" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "MYSQL_DATABASE=$env:MYSQL_DATABASE" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "MYSQL_USER=$env:MYSQL_USER" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "MYSQL_PASSWORD=$env:MYSQL_PASSWORD" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "KAKAO_CLIENT_ID=$env:KAKAO_CLIENT_ID" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "KAKAO_CLIENT_SECRET=$env:KAKAO_CLIENT_SECRET" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "JWT_SECRET=$env:JWT_SECRET" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "JWT_ISSUER=$env:JWT_ISSUER" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "JWT_ACCESS_TOKEN_TTL_SECONDS=$env:JWT_ACCESS_TOKEN_TTL_SECONDS" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "JWT_REFRESH_TOKEN_TTL_SECONDS=$env:JWT_REFRESH_TOKEN_TTL_SECONDS" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
       # Docker 엔진이 정상인지 사전 확인
       - name: Check Docker is available
         shell: powershell
@@ -110,7 +106,6 @@ jobs:
           docker --version
           docker compose version
           docker info
-
       # 이전 배포에서 남아 있던 고정 이름 컨테이너가 있으면 먼저 정리
       - name: Remove old containers if they exist
         shell: powershell
@@ -124,55 +119,22 @@ jobs:
               docker rm $name | Out-Null
             }
           }
-
       # compose 파일을 실제 값으로 렌더링해서 문법/변수 오류 확인
       - name: Validate Docker Compose file
         shell: powershell
         run: |
           docker compose -p $env:COMPOSE_PROJECT -f ./synctrip/compose.yml config | Out-Null
-
-      # GitHub Actions 환경변수를 .env 파일로 저장 (docker compose가 읽을 수 있도록)
-      - name: Create .env file for Docker Compose
-        shell: powershell
-        run: |
-          $envContent = @"
-          IMAGE_TAG=$env:IMAGE_TAG
-          MYSQL_ROOT_PASSWORD=$env:MYSQL_ROOT_PASSWORD
-          MYSQL_DATABASE=$env:MYSQL_DATABASE
-          MYSQL_USER=$env:MYSQL_USER
-          MYSQL_PASSWORD=$env:MYSQL_PASSWORD
-          KAKAO_CLIENT_ID=$env:KAKAO_CLIENT_ID
-          KAKAO_CLIENT_SECRET=$env:KAKAO_CLIENT_SECRET
-          KAKAO_REDIRECT_URI=$env:KAKAO_REDIRECT_URI
-          JWT_SECRET=$env:JWT_SECRET
-          JWT_ISSUER=$env:JWT_ISSUER
-          JWT_ACCESS_TOKEN_TTL_SECONDS=$env:JWT_ACCESS_TOKEN_TTL_SECONDS
-          JWT_REFRESH_TOKEN_TTL_SECONDS=$env:JWT_REFRESH_TOKEN_TTL_SECONDS
-          CORS_ALLOWED_ORIGINS=http://localhost:$env:APP_HOST_PORT,https://test.sync-trip.app,https://api.sync-trip.app
-          APP_CONTAINER_NAME=$env:APP_CONTAINER_NAME
-          MYSQL_CONTAINER_NAME=$env:MYSQL_CONTAINER_NAME
-          APP_HOST_PORT=$env:APP_HOST_PORT
-          MYSQL_HOST_PORT=$env:MYSQL_HOST_PORT
-          "@
-          
-          Set-Content -Path "./synctrip/.env" -Value $envContent -Encoding UTF8
-          Write-Host ".env file created for docker compose"
-          Write-Host "KAKAO_CLIENT_ID length: $(if ($env:KAKAO_CLIENT_ID) { $env:KAKAO_CLIENT_ID.Length } else { '0 (MISSING!)' })"
-          Write-Host "JWT_SECRET length: $(if ($env:JWT_SECRET) { $env:JWT_SECRET.Length } else { '0 (MISSING!)' })"
-
       # app + mysql을 함께 배포(필요 시 app 이미지를 새로 빌드)
       - name: Deploy with Docker Compose
         shell: powershell
         run: |
           docker compose -p $env:COMPOSE_PROJECT -f ./synctrip/compose.yml up -d --build --remove-orphans
-
       # app/mysql 컨테이너 상태 + /actuator/health(UP) 확인
       - name: Verify services and health endpoint
         shell: powershell
         run: |
           Write-Host "컨테이너들이 완전히 켜질 때까지 40초 대기합니다..."
           Start-Sleep -Seconds 40
-
           $appRunning = docker ps --filter "name=$env:APP_CONTAINER_NAME" --filter "status=running" --format "{{.Names}}"
           if (-not ($appRunning -match "^$env:APP_CONTAINER_NAME$")) {
             Write-Host "백엔드 컨테이너가 실행 중이 아닙니다! (에러 로그 확인)"
@@ -182,22 +144,18 @@ jobs:
             docker logs $env:MYSQL_CONTAINER_NAME
             throw "Backend container is not running after deploy."
           }
-
           $mysqlRunning = docker ps --filter "name=$env:MYSQL_CONTAINER_NAME" --filter "status=running" --format "{{.Names}}"
           if (-not ($mysqlRunning -match "^$env:MYSQL_CONTAINER_NAME$")) {
             throw "MySQL container is not running after deploy."
           }
-
           $portCheck = Test-NetConnection -ComputerName 127.0.0.1 -Port $env:APP_HOST_PORT
           if (-not $portCheck.TcpTestSucceeded) {
             throw "Backend is running, but port $env:APP_HOST_PORT is not accepting connections."
           }
-
           $healthUrl = "http://127.0.0.1:$env:APP_HOST_PORT/actuator/health"
           $maxRetry = 10
           $retryDelaySec = 3
           $isHealthy = $false
-
           for ($i = 1; $i -le $maxRetry; $i++) {
             try {
               $health = Invoke-RestMethod -Uri $healthUrl -Method Get -TimeoutSec 5
@@ -211,11 +169,9 @@ jobs:
             }
             Start-Sleep -Seconds $retryDelaySec
           }
-
           if (-not $isHealthy) {
             Write-Host "헬스 체크 실패! 서버 로그를 확인합니다."
             docker logs $env:APP_CONTAINER_NAME
             throw "Health endpoint is not UP after deploy: $healthUrl"
           }
-
           Write-Host "✅ 배포가 성공적으로 완료되었습니다! '$env:TARGET_BRANCH': backend/mysql are running, port $env:APP_HOST_PORT is open, and actuator health is UP."
