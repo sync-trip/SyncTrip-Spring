@@ -49,6 +49,9 @@ openApi {
     apiDocsUrl.set("http://localhost:8081/v3/api-docs")
     outputFileName.set("openapi.json")
     outputDir.set(file("$projectDir/build"))
+
+    customBootRun {
+        args.set(["--spring.profiles.active=test", "--server.port=8081"])
 }
 
 jar {
