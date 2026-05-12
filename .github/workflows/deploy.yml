@@ -89,11 +89,6 @@ jobs:
             $appHostPort = '8081'
             $mysqlHostPort = '3307'
             $composeProject = 'synctrip-dev'
-            $kakaoRedirectUri = $env:KAKAO_REDIRECT_URI_DEV
-          }
-
-          if ([string]::IsNullOrWhiteSpace($kakaoRedirectUri)) {
-            throw "KAKAO_REDIRECT_URI is empty for branch: $targetBranch"
           }
 
           "TARGET_BRANCH=$targetBranch" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
