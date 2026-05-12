@@ -48,7 +48,7 @@ jobs:
       # OpenAPI JSON 파일 생성 (Swagger 명세 추출)
       - name: Generate OpenAPI JSON
         shell: powershell
-        run: .\gradlew.bat generateOpenApiDocs --no-daemon
+        run: .\gradlew.bat generateOpenApiDocs --no-daemon --info
         env:
           SPRING_PROFILES_ACTIVE: test
           SERVER_PORT: 8081
@@ -87,7 +87,7 @@ jobs:
           $collectionContent = Get-Content -Raw -Path $postmanFile
           $body = "{`"collection`": $collectionContent}"
           
-          # ★ 주의: 여기서는 API_ID가 아니라 이전에 찾으신 COLLECTION_ID를 씁니다!
+          #API
           $postmanApiKey = "${{ secrets.POSTMAN_API_KEY }}"
           $collectionId = "${{ secrets.POSTMAN_COLLECTION_ID }}"
           
