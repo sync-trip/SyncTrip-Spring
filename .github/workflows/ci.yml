@@ -62,7 +62,7 @@ jobs:
       # 2. 포스트맨 'Collection(테스트 폴더)' 업데이트 스크립트
       - name: Update Postman Collection
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
-        shell: pwsh
+        shell: powershell
         run: |
           # 파일 경로 설정 (working-directory가 synctrip이므로 build/ 부터 시작)
           $openApiFile = "build/openapi.json"
