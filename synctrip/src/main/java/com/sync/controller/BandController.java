@@ -1,0 +1,55 @@
+package com.sync.controller;
+
+import com.sync.common.annotation.LoginUser;
+import com.sync.dto.band.BandCreateRequest;
+import com.sync.dto.band.BandJoinRequest;
+import com.sync.dto.band.BandMemberResponse;
+import com.sync.dto.band.BandResponse;
+import com.sync.service.BandService;
+import java.util.List;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/bands")
+public class BandController {
+
+    private final BandService bandService;
+
+    public BandController(BandService bandService) {
+        this.bandService = bandService;
+    }
+
+    @PostMapping
+    // JWT 인증된 사용자가 새로운 밴드(여행)를 생성
+    // @LoginUser: JWT의 subject(userId)를 자동으로 주입
+    public ResponseEntity<BandResponse> createBand(
+            @LoginUser Long userId,
+            @RequestBody BandCreateRequest request
+    ) {
+        return ResponseEntity.ok(bandService.createBand(userId, request));
+    }
+
+    @PostMapping("/join")
+    // JWT 인증된 사용자가 초대 코드로 기존 밴드에 참여
+    public ResponseEntity<Void> joinBand(
+            @LoginUser Long userId,
+            @RequestBody BandJoinRequest request
+    ) {
+        bandService.joinBand(userId, request.inviteCode());
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/{bandId}/members")
+    // 밴드의 멤버 목록 조회 (모든 인증 사용자 접근 가능)
+    public ResponseEntity<List<BandMemberResponse>> getBandMembers(@PathVariable Long bandId) {
+        return ResponseEntity.ok(bandService.getBandMembers(bandId));
+    }
+}
+
+
