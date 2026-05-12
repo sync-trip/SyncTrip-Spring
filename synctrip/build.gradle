@@ -54,7 +54,8 @@ openApi {
         args.set([
                 "--spring.profiles.active=test",
                 "--server.port=8081",
-                "--spring.devtools.restart.enabled=false"
+                "--spring.devtools.restart.enabled=false",
+                "--spring.docker.compose.enabled=false"
         ])
     }
 }
