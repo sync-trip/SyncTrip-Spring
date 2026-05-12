@@ -25,6 +25,7 @@
 --   v3 (이전):       ENUM 전환 1차, 파생 컬럼 제거, group_exchange_rates 분리
 -- ════════════════════════════════════════
 
+use synctripdb;
 
 -- 1. users
 CREATE TABLE `users` (
