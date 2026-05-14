@@ -3,10 +3,10 @@ package com.sync.service;
 import com.sync.domain.band.Band;
 import com.sync.domain.band.BandMember;
 import com.sync.domain.band.BandRole;
-import com.sync.domain.band.BandStatus;
-import com.sync.domain.band.TravelStyle;
 import com.sync.domain.user.User;
+import com.sync.config.BandInviteProperties;
 import com.sync.dto.band.BandCreateRequest;
+import com.sync.dto.band.BandInviteCodeResponse;
 import com.sync.dto.band.BandMemberResponse;
 import com.sync.dto.band.BandResponse;
 import com.sync.repository.BandMemberRepository;
@@ -14,6 +14,8 @@ import com.sync.repository.BandRepository;
 import com.sync.repository.UserRepository;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,13 +28,16 @@ public class BandService {
     private final BandRepository bandRepository;
     private final BandMemberRepository bandMemberRepository;
     private final UserRepository userRepository;
+    private final BandInviteProperties bandInviteProperties;
 
     public BandService(BandRepository bandRepository, 
                        BandMemberRepository bandMemberRepository, 
-                       UserRepository userRepository) {
+                       UserRepository userRepository,
+                       BandInviteProperties bandInviteProperties) {
         this.bandRepository = bandRepository;
         this.bandMemberRepository = bandMemberRepository;
         this.userRepository = userRepository;
+        this.bandInviteProperties = bandInviteProperties;
     }
 
     public BandResponse createBand(Long userId, BandCreateRequest request) {
@@ -87,6 +92,49 @@ public class BandService {
 
         BandMember member = BandMember.create(user, band, BandRole.MEMBER);
         bandMemberRepository.save(member);
+    }
+
+    public BandInviteCodeResponse getOrRefreshInviteCode(Long userId, Long bandId) {
+        // 1) 요청한 사용자가 존재하는지 먼저 확인한다.
+        User user = userRepository.findByIdAndIsDeletedFalse(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
+
+        // 2) 밴드를 찾아서 방장만 초대코드를 조회/갱신할 수 있도록 제한한다.
+        Band band = bandRepository.findById(bandId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "밴드를 찾을 수 없습니다."));
+
+        if (!band.getOwner().getId().equals(user.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "밴드 초대코드는 방장만 재발급할 수 있습니다.");
+        }
+
+        // 3) 초대코드가 만료되었을 때만 새 코드와 새 만료 시간을 발급한다.
+        if (band.isInviteCodeExpired(java.time.LocalDateTime.now())) {
+            band.reissueInviteCode();
+        }
+
+        // 4) Android 앱에서 공유하기 좋도록 웹 링크와 딥링크를 모두 만든다.
+        String inviteShareLink = buildInviteShareLink(band.getInviteCode());
+        String inviteDeepLink = buildDeepLink(band.getInviteCode());
+
+        bandRepository.save(band);
+
+        return new BandInviteCodeResponse(
+                band.getId(),
+                band.getInviteCode(),
+                band.getInviteCodeExpiredAt(),
+                inviteShareLink,
+                inviteDeepLink
+        );
+    }
+
+    private String buildInviteShareLink(String inviteCode) {
+        // 공유 링크에 초대코드를 안전하게 붙이기 위해 URL 인코딩을 적용한다.
+        return bandInviteProperties.shareBaseUrl() + URLEncoder.encode(inviteCode, StandardCharsets.UTF_8);
+    }
+
+    private String buildDeepLink(String inviteCode) {
+        // 딥링크는 앱 설치 시 바로 앱으로 들어오도록 커스텀 스킴을 사용한다.
+        return bandInviteProperties.deepLinkBaseUrl() + URLEncoder.encode(inviteCode, StandardCharsets.UTF_8);
     }
 
     @Transactional(readOnly = true)

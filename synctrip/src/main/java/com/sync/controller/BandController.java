@@ -3,6 +3,7 @@ package com.sync.controller;
 import com.sync.common.annotation.LoginUser;
 import com.sync.dto.band.BandCreateRequest;
 import com.sync.dto.band.BandJoinRequest;
+import com.sync.dto.band.BandInviteCodeResponse;
 import com.sync.dto.band.BandMemberResponse;
 import com.sync.dto.band.BandResponse;
 import com.sync.service.BandService;
@@ -43,6 +44,24 @@ public class BandController {
     ) {
         bandService.joinBand(userId, request.inviteCode());
         return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/{bandId}/invite-code")
+    // 방장이 초대하기 버튼을 누르면, 만료 시 자동 갱신 후 유효한 초대코드를 반환
+    public ResponseEntity<BandInviteCodeResponse> getOrRefreshInviteCode(
+            @LoginUser Long userId,
+            @PathVariable Long bandId
+    ) {
+        return ResponseEntity.ok(bandService.getOrRefreshInviteCode(userId, bandId));
+    }
+
+    @PostMapping("/{bandId}/invite-code/reissue")
+    // 호환용: 명시적 재발급 경로도 유지
+    public ResponseEntity<BandInviteCodeResponse> reissueInviteCode(
+            @LoginUser Long userId,
+            @PathVariable Long bandId
+    ) {
+        return ResponseEntity.ok(bandService.getOrRefreshInviteCode(userId, bandId));
     }
 
     @GetMapping("/{bandId}/members")

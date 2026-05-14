@@ -28,6 +28,9 @@ jobs:
     env:
       # 앱 이미지 태그(자동 배포는 CI 통과 커밋 SHA)
       IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      # ===== SECRETS (GitHub Secrets에 저장해야 함) =====
+
       # DB 접속 정보(없으면 compose.yml 기본값 사용)
       MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
       MYSQL_DATABASE: ${{ secrets.MYSQL_DATABASE }}
@@ -37,12 +40,21 @@ jobs:
       KAKAO_CLIENT_ID: ${{ secrets.KAKAO_CLIENT_ID }}
       KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
-      JWT_ISSUER: ${{ secrets.JWT_ISSUER }}
-      JWT_ACCESS_TOKEN_TTL_SECONDS: ${{ secrets.JWT_ACCESS_TOKEN_TTL_SECONDS }}
-      JWT_REFRESH_TOKEN_TTL_SECONDS: ${{ secrets.JWT_REFRESH_TOKEN_TTL_SECONDS }}
+
+      # ===== VARIABLES (GitHub Variables에 저장해야 함) =====
+
+      # JWT 설정값 (공개 설정)
+      JWT_ISSUER: ${{ vars.JWT_ISSUER }}
+      JWT_ACCESS_TOKEN_TTL_SECONDS: ${{ vars.JWT_ACCESS_TOKEN_TTL_SECONDS }}
+      JWT_REFRESH_TOKEN_TTL_SECONDS: ${{ vars.JWT_REFRESH_TOKEN_TTL_SECONDS }}
       # 브랜치별 Redirect URI(최종 선택은 아래 단계에서 수행)
-      KAKAO_REDIRECT_URI_MAIN: ${{ secrets.KAKAO_REDIRECT_URI_MAIN }}
-      KAKAO_REDIRECT_URI_DEV: ${{ secrets.KAKAO_REDIRECT_URI_DEV }}
+      KAKAO_REDIRECT_URI_MAIN: ${{ vars.KAKAO_REDIRECT_URI_MAIN }}
+      KAKAO_REDIRECT_URI_DEV: ${{ vars.KAKAO_REDIRECT_URI_DEV }}
+      # 브랜치별 초대 링크 도메인(값은 GitHub Variables 또는 Secrets에 저장)
+      APP_INVITE_SHARE_BASE_URL_MAIN: ${{ vars.APP_INVITE_SHARE_BASE_URL_MAIN }}
+      APP_INVITE_SHARE_BASE_URL_DEV: ${{ vars.APP_INVITE_SHARE_BASE_URL_DEV }}
+      APP_INVITE_DEEP_LINK_BASE_URL_MAIN: ${{ vars.APP_INVITE_DEEP_LINK_BASE_URL_MAIN }}
+      APP_INVITE_DEEP_LINK_BASE_URL_DEV: ${{ vars.APP_INVITE_DEEP_LINK_BASE_URL_DEV }}
 
     steps:
       # 배포할 소스 코드 체크아웃 (자동 배포는 CI 통과한 정확한 커밋)
@@ -52,13 +64,16 @@ jobs:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       # 필수 시크릿/변수가 비어 있으면 초기에 실패시켜 원인 파악을 쉽게 함
-      - name: Validate required secrets
+      - name: Validate required secrets and vars
         shell: pwsh
         run: |
           $required = @(
             'MYSQL_ROOT_PASSWORD', 'MYSQL_DATABASE', 'MYSQL_USER', 'MYSQL_PASSWORD',
-            'KAKAO_CLIENT_ID', 'KAKAO_CLIENT_SECRET', 'JWT_SECRET',
-            'KAKAO_REDIRECT_URI_MAIN', 'KAKAO_REDIRECT_URI_DEV'
+            'KAKAO_CLIENT_ID', 'KAKAO_CLIENT_SECRET', 'JWT_SECRET', 'JWT_ISSUER',
+            'JWT_ACCESS_TOKEN_TTL_SECONDS', 'JWT_REFRESH_TOKEN_TTL_SECONDS',
+            'KAKAO_REDIRECT_URI_MAIN', 'KAKAO_REDIRECT_URI_DEV',
+            'APP_INVITE_SHARE_BASE_URL_MAIN', 'APP_INVITE_SHARE_BASE_URL_DEV',
+            'APP_INVITE_DEEP_LINK_BASE_URL_MAIN', 'APP_INVITE_DEEP_LINK_BASE_URL_DEV'
           )
           foreach ($key in $required) {
             if ([string]::IsNullOrWhiteSpace((Get-Item -Path "Env:$key" -ErrorAction SilentlyContinue).Value)) {
@@ -73,43 +88,56 @@ jobs:
           if ($targetBranch -notin @('main', 'dev')) {
             throw "Unsupported branch for deploy: $targetBranch"
           }
-            if ($targetBranch -eq 'main') {
-              $appContainer = 'synctrip-backend'
-              $appImage = 'synctrip-main'
-              $mysqlContainer = 'synctrip-mysql'
-              $appHostPort = '8080'
-              $mysqlHostPort = '3306'
-              $composeProject = 'synctrip-main'
-              $kakaoRedirectUri = $env:KAKAO_REDIRECT_URI_MAIN
-              $springProfile = 'prod'
-              $appSecurityEnabled = 'true'
-            } else {
-              $appContainer = 'synctrip-backend-dev'
-              $appImage = 'synctrip-dev'
-              $mysqlContainer = 'synctrip-mysql-dev'
-              $appHostPort = '8081'
-              $mysqlHostPort = '3307'
-              $composeProject = 'synctrip-dev'
-              $kakaoRedirectUri = $env:KAKAO_REDIRECT_URI_DEV
-              $springProfile = 'dev'
-              $appSecurityEnabled = 'false'
-            }
+          if ($targetBranch -eq 'main') {
+            $appContainer = 'synctrip-backend'
+            $appImage = 'synctrip-main'
+            $mysqlContainer = 'synctrip-mysql'
+            $appHostPort = '8080'
+            $mysqlHostPort = '3306'
+            $composeProject = 'synctrip-main'
+            $kakaoRedirectUri = $env:KAKAO_REDIRECT_URI_MAIN
+            $inviteShareBaseUrl = $env:APP_INVITE_SHARE_BASE_URL_MAIN
+            $inviteDeepLinkBaseUrl = $env:APP_INVITE_DEEP_LINK_BASE_URL_MAIN
+            $springProfile = 'prod'
+            $appSecurityEnabled = 'true'
+          } else {
+            $appContainer = 'synctrip-backend-dev'
+            $appImage = 'synctrip-dev'
+            $mysqlContainer = 'synctrip-mysql-dev'
+            $appHostPort = '8081'
+            $mysqlHostPort = '3307'
+            $composeProject = 'synctrip-dev'
+            $kakaoRedirectUri = $env:KAKAO_REDIRECT_URI_DEV
+            $inviteShareBaseUrl = $env:APP_INVITE_SHARE_BASE_URL_DEV
+            $inviteDeepLinkBaseUrl = $env:APP_INVITE_DEEP_LINK_BASE_URL_DEV
+            $springProfile = 'dev'
+            $appSecurityEnabled = 'false'
+          }
           if ([string]::IsNullOrWhiteSpace($kakaoRedirectUri)) {
             throw "KAKAO_REDIRECT_URI is empty for branch: $targetBranch"
           }
-           "TARGET_BRANCH=$targetBranch" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-           "APP_CONTAINER_NAME=$appContainer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-           "APP_IMAGE_NAME=$appImage" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-           "MYSQL_CONTAINER_NAME=$mysqlContainer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-           "APP_HOST_PORT=$appHostPort" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-           "MYSQL_HOST_PORT=$mysqlHostPort" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-           "COMPOSE_PROJECT=$composeProject" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-            # main/dev 배포에 맞는 Redirect URI를 최종 확정해서 컨테이너로 주입
-            "KAKAO_REDIRECT_URI=$kakaoRedirectUri" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-            # main은 prod 프로파일, dev는 dev 프로파일 활성화
-            "SPRING_PROFILES_ACTIVE=$springProfile" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-            # main은 보안 ON, dev는 보안 OFF
-            "APP_SECURITY_ENABLED=$appSecurityEnabled" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          if ([string]::IsNullOrWhiteSpace($inviteShareBaseUrl)) {
+            throw "APP_INVITE_SHARE_BASE_URL is empty for branch: $targetBranch"
+          }
+          if ([string]::IsNullOrWhiteSpace($inviteDeepLinkBaseUrl)) {
+            throw "APP_INVITE_DEEP_LINK_BASE_URL is empty for branch: $targetBranch"
+          }
+          "TARGET_BRANCH=$targetBranch" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "APP_CONTAINER_NAME=$appContainer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "APP_IMAGE_NAME=$appImage" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MYSQL_CONTAINER_NAME=$mysqlContainer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "APP_HOST_PORT=$appHostPort" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MYSQL_HOST_PORT=$mysqlHostPort" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "COMPOSE_PROJECT=$composeProject" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          # main/dev 배포에 맞는 Redirect URI를 최종 확정해서 컨테이너로 주입
+          "KAKAO_REDIRECT_URI=$kakaoRedirectUri" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          # main/dev 배포에 맞는 초대 링크 도메인을 컨테이너로 주입
+          "APP_INVITE_SHARE_BASE_URL=$inviteShareBaseUrl" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "APP_INVITE_DEEP_LINK_BASE_URL=$inviteDeepLinkBaseUrl" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          # main은 prod 프로파일, dev는 dev 프로파일 활성화
+          "SPRING_PROFILES_ACTIVE=$springProfile" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          # main은 보안 ON, dev는 보안 OFF
+          "APP_SECURITY_ENABLED=$appSecurityEnabled" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       # Docker 엔진이 정상인지 사전 확인
       - name: Check Docker is available
         shell: pwsh

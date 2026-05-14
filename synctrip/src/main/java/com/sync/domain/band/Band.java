@@ -21,6 +21,8 @@ import org.hibernate.annotations.UpdateTimestamp;
 @Entity
 @Table(name = "groups")
 public class Band {
+    // 초대코드는 72시간동안만 유효
+    private static final long INVITE_CODE_TTL_HOURS = 72;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -136,7 +138,7 @@ public class Band {
                 startDate,
                 endDate,
                 generateInviteCode(),
-                LocalDateTime.now().plusHours(72),
+                LocalDateTime.now().plusHours(INVITE_CODE_TTL_HOURS),
                 8,
                 TravelStyle.PACKED,
                 null,
@@ -160,7 +162,7 @@ public class Band {
                 startDate,
                 endDate,
                 generateInviteCode(),
-                LocalDateTime.now().plusHours(72),
+                LocalDateTime.now().plusHours(INVITE_CODE_TTL_HOURS),
                 8,
                 TravelStyle.PACKED,
                 null,
@@ -173,6 +175,15 @@ public class Band {
 
     public static String generateInviteCode() {
         return UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+    }
+
+    public void reissueInviteCode() {
+        this.inviteCode = generateInviteCode();
+        this.inviteCodeExpiredAt = LocalDateTime.now().plusHours(INVITE_CODE_TTL_HOURS);
+    }
+
+    public boolean isInviteCodeExpired(LocalDateTime now) {
+        return inviteCodeExpiredAt == null || inviteCodeExpiredAt.isBefore(now);
     }
 
     public Long getId() {
