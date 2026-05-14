@@ -135,11 +135,19 @@ jobs:
         shell: pwsh
         run: |
           docker compose -p $env:COMPOSE_PROJECT -f ./synctrip/compose.yml config | Out-Null
+      # Docker 리소스 상태 미리 확인
+      - name: Check Docker Resources
+        shell: pwsh
+        run: |
+          docker info
+          docker stats --no-stream
       # app + mysql을 함께 배포(필요 시 app 이미지를 새로 빌드)
       - name: Deploy with Docker Compose
         shell: pwsh
+        timeout-minutes: 10  # 10분 지나도 안 끝나면 강제 종료
         run: |
-          docker compose -p $env:COMPOSE_PROJECT -f ./synctrip/compose.yml up -d --build --remove-orphans
+          # --verbose를 붙여 어떤 단계에서 멈추는지 상세 확인
+          docker compose --verbose -p $env:COMPOSE_PROJECT -f ./synctrip/compose.yml up -d --build --remove-orphans
       # app/mysql 컨테이너 상태 + /actuator/health(UP) 확인
       - name: Verify services and health endpoint
         shell: pwsh
@@ -186,3 +194,12 @@ jobs:
             throw "Health endpoint is not UP after deploy: $healthUrl"
           }
           Write-Host "✅ 배포가 성공적으로 완료되었습니다! '$env:TARGET_BRANCH': backend/mysql are running, port $env:APP_HOST_PORT is open, and actuator health is UP."
+
+      # 실패 시에도 로그를 볼 수 있도록 진단 로그 출력
+      - name: Show logs on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          docker ps -a
+          docker logs $env:MYSQL_CONTAINER_NAME
+          docker logs $env:APP_CONTAINER_NAME
