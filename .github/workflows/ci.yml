@@ -30,7 +30,7 @@ jobs:
 
       # compose 파일 문법 검사(배포 정의가 깨졌는지 사전 확인)
       - name: Validate Docker Compose file
-        shell: powershell
+        shell: pwsh
         run: docker compose -f compose.yml config | Out-Null
 
       # Gradle 테스트 실행에 필요한 JDK 17 설치
@@ -42,12 +42,12 @@ jobs:
 
       # 단위 테스트 실행 (실패하면 CI 실패로 처리)
       - name: Run unit tests
-        shell: powershell
+        shell: pwsh
         run: .\gradlew.bat clean test --no-daemon
 
       # OpenAPI JSON 파일 생성 (Swagger 명세 추출)
       - name: Generate OpenAPI JSON
-        shell: powershell
+        shell: pwsh
         run: .\gradlew.bat generateOpenApiDocs --no-daemon --info
         env:
           SPRING_PROFILES_ACTIVE: test
@@ -62,7 +62,7 @@ jobs:
       # 2. 포스트맨 'Collection(테스트 폴더)' 업데이트 스크립트
       - name: Update Postman Collection
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
-        shell: powershell
+        shell: pwsh
         run: |
           # 파일 경로 설정 (working-directory가 synctrip이므로 build/ 부터 시작)
           $openApiFile = "build/openapi.json"
