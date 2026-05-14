@@ -10,9 +10,9 @@ spring:
 
 jwt:
   issuer: synctrip-test
-  secret: test-secret-key-at-least-32-characters-long-12345
-  access-token-ttl-seconds: 900
-  refresh-token-ttl-seconds: 86400
+  secret: ${JWT_SECRET:test-secret-key-at-least-32-characters-long-12345999}
+  access-token-ttl-seconds: ${JWT_ACCESS_TOKEN_TTL_SECONDS:3600}
+  refresh-token-ttl-seconds: ${JWT_REFRESH_TOKEN_TTL_SECONDS:86400}
 
 kakao:
   authorization-uri: https://kauth.kakao.com/oauth/authorize
@@ -20,7 +20,7 @@ kakao:
   user-info-uri: https://kapi.kakao.com/v2/user/me
   client-id: test-client-id
   client-secret: test-client-secret
-  redirect-uri: http://localhost:8080/api/auth/kakao/callback
+  redirect-uri: https://test.sync-trip.app/api/auth/kakao/callback
   scope: account_email,profile_nickname,profile_image
 
 app:

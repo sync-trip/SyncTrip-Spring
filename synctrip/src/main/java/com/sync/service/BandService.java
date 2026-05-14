@@ -3,6 +3,7 @@ package com.sync.service;
 import com.sync.domain.band.Band;
 import com.sync.domain.band.BandMember;
 import com.sync.domain.band.BandRole;
+import com.sync.domain.band.BandStatus;
 import com.sync.domain.user.User;
 import com.sync.config.BandInviteProperties;
 import com.sync.dto.band.BandCreateRequest;
@@ -91,6 +92,10 @@ public class BandService {
         }
 
         BandMember member = BandMember.create(user, band, BandRole.MEMBER);
+        // PLANNING 이후에 들어온 멤버는 장바구니/투표 권한을 제한할 수 있도록 표시한다.
+        if (band.getStatus() != BandStatus.PLANNING) {
+            member.markJoinedAfterVoting();
+        }
         bandMemberRepository.save(member);
     }
 
