@@ -73,35 +73,43 @@ jobs:
           if ($targetBranch -notin @('main', 'dev')) {
             throw "Unsupported branch for deploy: $targetBranch"
           }
-          if ($targetBranch -eq 'main') {
-            $appContainer = 'synctrip-backend'
-            $appImage = 'synctrip-main'
-            $mysqlContainer = 'synctrip-mysql'
-            $appHostPort = '8080'
-            $mysqlHostPort = '3306'
-            $composeProject = 'synctrip-main'
-            $kakaoRedirectUri = $env:KAKAO_REDIRECT_URI_MAIN
-          } else {
-            $appContainer = 'synctrip-backend-dev'
-            $appImage = 'synctrip-dev'
-            $mysqlContainer = 'synctrip-mysql-dev'
-            $appHostPort = '8081'
-            $mysqlHostPort = '3307'
-            $composeProject = 'synctrip-dev'
-            $kakaoRedirectUri = $env:KAKAO_REDIRECT_URI_DEV
-          }
+            if ($targetBranch -eq 'main') {
+              $appContainer = 'synctrip-backend'
+              $appImage = 'synctrip-main'
+              $mysqlContainer = 'synctrip-mysql'
+              $appHostPort = '8080'
+              $mysqlHostPort = '3306'
+              $composeProject = 'synctrip-main'
+              $kakaoRedirectUri = $env:KAKAO_REDIRECT_URI_MAIN
+              $springProfile = 'prod'
+              $appSecurityEnabled = 'true'
+            } else {
+              $appContainer = 'synctrip-backend-dev'
+              $appImage = 'synctrip-dev'
+              $mysqlContainer = 'synctrip-mysql-dev'
+              $appHostPort = '8081'
+              $mysqlHostPort = '3307'
+              $composeProject = 'synctrip-dev'
+              $kakaoRedirectUri = $env:KAKAO_REDIRECT_URI_DEV
+              $springProfile = 'dev'
+              $appSecurityEnabled = 'false'
+            }
           if ([string]::IsNullOrWhiteSpace($kakaoRedirectUri)) {
             throw "KAKAO_REDIRECT_URI is empty for branch: $targetBranch"
           }
-          "TARGET_BRANCH=$targetBranch" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "APP_CONTAINER_NAME=$appContainer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "APP_IMAGE_NAME=$appImage" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "MYSQL_CONTAINER_NAME=$mysqlContainer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "APP_HOST_PORT=$appHostPort" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "MYSQL_HOST_PORT=$mysqlHostPort" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "COMPOSE_PROJECT=$composeProject" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          # main/dev 배포에 맞는 Redirect URI를 최종 확정해서 컨테이너로 주입
-          "KAKAO_REDIRECT_URI=$kakaoRedirectUri" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+           "TARGET_BRANCH=$targetBranch" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+           "APP_CONTAINER_NAME=$appContainer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+           "APP_IMAGE_NAME=$appImage" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+           "MYSQL_CONTAINER_NAME=$mysqlContainer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+           "APP_HOST_PORT=$appHostPort" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+           "MYSQL_HOST_PORT=$mysqlHostPort" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+           "COMPOSE_PROJECT=$composeProject" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            # main/dev 배포에 맞는 Redirect URI를 최종 확정해서 컨테이너로 주입
+            "KAKAO_REDIRECT_URI=$kakaoRedirectUri" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            # main은 prod 프로파일, dev는 dev 프로파일 활성화
+            "SPRING_PROFILES_ACTIVE=$springProfile" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            # main은 보안 ON, dev는 보안 OFF
+            "APP_SECURITY_ENABLED=$appSecurityEnabled" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       # Docker 엔진이 정상인지 사전 확인
       - name: Check Docker is available
         shell: pwsh

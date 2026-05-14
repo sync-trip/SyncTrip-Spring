@@ -14,7 +14,19 @@ spring:
       ddl-auto: validate
     show-sql: false
 
-  logging:
-    level:
-      root: info
-      com.sync: info
+# 보안 설정: 환경별로 다르게 적용됨
+app:
+  security:
+    enabled: ${APP_SECURITY_ENABLED:true}  # 기본: 개발 모드 (비활성화)
+    public-paths:
+      - /api/auth/**
+      - /debug/**
+      - /swagger-ui/**
+      - /v3/api-docs/**
+      - /actuator/**
+
+logging:
+  level:
+    root: info
+    com.sync: info
+

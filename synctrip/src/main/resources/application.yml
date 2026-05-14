@@ -5,6 +5,7 @@ spring:
     active: dev  # 기본 프로필: dev (개발)
     group:
       local: "local, common"
+      dev: "dev, common"
       prod: "prod, common"
 
 jwt:
@@ -12,17 +13,6 @@ jwt:
   secret: ${JWT_SECRET}
   access-token-ttl-seconds: ${JWT_ACCESS_TOKEN_TTL_SECONDS:900}
   refresh-token-ttl-seconds: ${JWT_REFRESH_TOKEN_TTL_SECONDS:1209600}
-
-# 보안 설정: 환경별로 다르게 적용됨
-app:
-  security:
-    enabled: ${APP_SECURITY_ENABLED:false}  # 기본: 개발 모드 (비활성화)
-    public-paths:
-      - /api/auth/**
-      - /debug/**
-      - /swagger-ui/**
-      - /v3/api-docs/**
-      - /actuator/**
 
 ---
 spring:
