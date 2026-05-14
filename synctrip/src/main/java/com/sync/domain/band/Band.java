@@ -19,7 +19,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 @Entity
-@Table(name = "groups")
+@Table(name = "user_groups")
 public class Band {
     // 초대코드는 72시간동안만 유효
     private static final long INVITE_CODE_TTL_HOURS = 72;
