@@ -31,6 +31,11 @@ kakao:
   redirect-uri: ${KAKAO_REDIRECT_URI}
   scope: ${KAKAO_SCOPE:account_email,profile_nickname,profile_image}
 
+google:
+  maps:
+    api-key: ${GOOGLE_MAPS_API_KEY:}
+    places-base-url: ${GOOGLE_PLACES_BASE_URL:https://places.googleapis.com}
+
 management:
   endpoints:
     web:
