@@ -147,7 +147,7 @@ jobs:
         timeout-minutes: 10  # 10분 지나도 안 끝나면 강제 종료
         run: |
           # --verbose를 붙여 어떤 단계에서 멈추는지 상세 확인
-          docker compose --verbase -p $env:COMPOSE_PROJECT -f ./synctrip/compose.yml up -d --build --remove-orphans
+          docker compose --verbose -p $env:COMPOSE_PROJECT -f ./synctrip/compose.yml up -d --build --remove-orphans
       # app/mysql 컨테이너 상태 + /actuator/health(UP) 확인
       - name: Verify services and health endpoint
         shell: pwsh
