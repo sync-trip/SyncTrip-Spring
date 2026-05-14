@@ -30,7 +30,7 @@ jobs:
 
       # compose 파일 문법 검사(배포 정의가 깨졌는지 사전 확인)
       - name: Validate Docker Compose file
-        shell: powershell
+        shell: pwsh
         run: docker compose -f compose.yml config | Out-Null
 
       # Gradle 테스트 실행에 필요한 JDK 17 설치
@@ -42,5 +42,69 @@ jobs:
 
       # 단위 테스트 실행 (실패하면 CI 실패로 처리)
       - name: Run unit tests
-        shell: powershell
+        shell: pwsh
         run: .\gradlew.bat clean test --no-daemon
+
+      # OpenAPI JSON 파일 생성 (Swagger 명세 추출)
+      - name: Generate OpenAPI JSON
+        shell: pwsh
+        run: .\gradlew.bat generateOpenApiDocs --no-daemon --info
+        env:
+          SPRING_PROFILES_ACTIVE: test
+          SERVER_PORT: 8081
+
+      # 1. OpenAPI 형식을 Postman 형식으로 번역하기 위해 Node.js 환경 세팅
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      # 2. 포스트맨 'Collection(테스트 폴더)' 업데이트 스크립트
+      - name: Update Postman Collection
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        shell: pwsh
+        run: |
+          # 파일 경로 설정 (working-directory가 synctrip이므로 build/ 부터 시작)
+          $openApiFile = "build/openapi.json"
+          $postmanFile = "build/postman_collection.json"
+          
+          if (-not (Test-Path $openApiFile)) {
+            Write-Error "OpenAPI 파일을 찾을 수 없습니다: $openApiFile"
+            exit 1
+          }
+
+          Write-Host "OpenAPI 문서를 Postman 규격으로 번역합니다..."
+          # npx를 사용하면 윈도우 환경에서도 경로 꼬임 없이 안전하게 번역기를 실행할 수 있습니다.
+          npx openapi-to-postmanv2 -s $openApiFile -o $postmanFile
+          
+          if (-not (Test-Path $postmanFile)) {
+            Write-Error "번역된 Postman 파일이 생성되지 않았습니다."
+            exit 1
+          }
+
+          # 번역된 파일 읽기 및 Postman 서버가 원하는 형태(JSON)로 감싸기
+          $collectionContent = Get-Content -Raw -Path $postmanFile
+          $body = "{`"collection`": $collectionContent}"
+          
+          #API
+          $postmanApiKey = "${{ secrets.POSTMAN_API_KEY }}"
+          $collectionId = "${{ secrets.POSTMAN_COLLECTION_ID }}"
+          
+          $headers = @{
+            "X-Api-Key" = $postmanApiKey
+            "Content-Type" = "application/json"
+          }
+          
+          Write-Host "포스트맨 서버의 Collection($collectionId)으로 전송 시작..."
+          
+          try {
+            $response = Invoke-RestMethod -Uri "https://api.getpostman.com/collections/$collectionId" -Method Put -Headers $headers -Body $body
+            Write-Host "성공! Postman 앱의 SyncTrip 컬렉션을 확인해보세요."
+          } catch {
+            Write-Error "업데이트 실패: $($_.Exception.Message)"
+            if ($_.Exception.Response) {
+              $details = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+              Write-Host "상세 에러 이유: $($details.ReadToEnd())"
+            }
+            exit 1
+          }

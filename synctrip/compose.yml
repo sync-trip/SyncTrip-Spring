@@ -45,8 +45,10 @@ services:
       context: .
       # 위 컨텍스트 안의 Dockerfile 사용
       dockerfile: Dockerfile
-    # 빌드 결과 이미지 이름(배포 시 IMAGE_TAG 주입 가능)
-    image: synctrip-backend:${IMAGE_TAG:-latest}
+    # 빌드 결과 이미지 이름
+    # - 브랜치별로 구분하려면 APP_IMAGE_NAME을 다르게 주입
+    # - 예: main -> synctrip-backend-main, dev -> synctrip-backend-dev
+    image: ${APP_IMAGE_NAME:-synctrip-backend}:${IMAGE_TAG:-latest}
     # 컨테이너 이름(브랜치별 분리를 위해 환경변수로 주입 가능)
     container_name: ${APP_CONTAINER_NAME:-synctrip-backend}
     # 서버 재부팅/프로세스 종료 후 자동 재시작
@@ -56,8 +58,8 @@ services:
       mysql:
         condition: service_healthy
     environment:
-      # 운영 프로파일 활성화
-      SPRING_PROFILES_ACTIVE: prod
+      # 운영 프로파일 활성화 (배포 환경에 따라 dev 또는 prod)
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       # 앱 컨테이너에서 DB 주소는 localhost가 아니라 서비스명(mysql)
       DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
       # DB 사용자/비밀번호 주입
@@ -71,6 +73,8 @@ services:
       KAKAO_TOKEN_URI: ${KAKAO_TOKEN_URI:-https://kauth.kakao.com/oauth/token}
       KAKAO_USER_INFO_URI: ${KAKAO_USER_INFO_URI:-https://kapi.kakao.com/v2/user/me}
       KAKAO_SCOPE: ${KAKAO_SCOPE:-account_email,profile_nickname,profile_image}
+      # 보안 활성화 여부 (브랜치별로 다르게 설정됨: main=true, dev=false)
+      APP_SECURITY_ENABLED: ${APP_SECURITY_ENABLED:-false}
       # 내부 JWT 발급 설정 주입
       JWT_SECRET: ${JWT_SECRET}
       JWT_ISSUER: ${JWT_ISSUER:-synctrip}

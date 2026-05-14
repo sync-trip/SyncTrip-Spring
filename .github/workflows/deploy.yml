@@ -53,7 +53,7 @@ jobs:
 
       # 필수 시크릿/변수가 비어 있으면 초기에 실패시켜 원인 파악을 쉽게 함
       - name: Validate required secrets
-        shell: powershell
+        shell: pwsh
         run: |
           $required = @(
             'MYSQL_ROOT_PASSWORD', 'MYSQL_DATABASE', 'MYSQL_USER', 'MYSQL_PASSWORD',
@@ -67,48 +67,59 @@ jobs:
           }
       # 배포 대상 브랜치(main/dev)에 따라 컨테이너 이름/포트를 분리
       - name: Set deployment target variables
-        shell: powershell
+        shell: pwsh
         run: |
           $targetBranch = if ('${{ github.event_name }}' -eq 'workflow_run') { '${{ github.event.workflow_run.head_branch }}' } else { '${{ github.ref_name }}' }
           if ($targetBranch -notin @('main', 'dev')) {
             throw "Unsupported branch for deploy: $targetBranch"
           }
-          if ($targetBranch -eq 'main') {
-            $appContainer = 'synctrip-backend'
-            $mysqlContainer = 'synctrip-mysql'
-            $appHostPort = '8080'
-            $mysqlHostPort = '3306'
-            $composeProject = 'synctrip-main'
-            $kakaoRedirectUri = $env:KAKAO_REDIRECT_URI_MAIN
-          } else {
-            $appContainer = 'synctrip-backend-dev'
-            $mysqlContainer = 'synctrip-mysql-dev'
-            $appHostPort = '8081'
-            $mysqlHostPort = '3307'
-            $composeProject = 'synctrip-dev'
-            $kakaoRedirectUri = $env:KAKAO_REDIRECT_URI_DEV
-          }
+            if ($targetBranch -eq 'main') {
+              $appContainer = 'synctrip-backend'
+              $appImage = 'synctrip-main'
+              $mysqlContainer = 'synctrip-mysql'
+              $appHostPort = '8080'
+              $mysqlHostPort = '3306'
+              $composeProject = 'synctrip-main'
+              $kakaoRedirectUri = $env:KAKAO_REDIRECT_URI_MAIN
+              $springProfile = 'prod'
+              $appSecurityEnabled = 'true'
+            } else {
+              $appContainer = 'synctrip-backend-dev'
+              $appImage = 'synctrip-dev'
+              $mysqlContainer = 'synctrip-mysql-dev'
+              $appHostPort = '8081'
+              $mysqlHostPort = '3307'
+              $composeProject = 'synctrip-dev'
+              $kakaoRedirectUri = $env:KAKAO_REDIRECT_URI_DEV
+              $springProfile = 'dev'
+              $appSecurityEnabled = 'false'
+            }
           if ([string]::IsNullOrWhiteSpace($kakaoRedirectUri)) {
             throw "KAKAO_REDIRECT_URI is empty for branch: $targetBranch"
           }
-          "TARGET_BRANCH=$targetBranch" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "APP_CONTAINER_NAME=$appContainer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "MYSQL_CONTAINER_NAME=$mysqlContainer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "APP_HOST_PORT=$appHostPort" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "MYSQL_HOST_PORT=$mysqlHostPort" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "COMPOSE_PROJECT=$composeProject" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          # main/dev 배포에 맞는 Redirect URI를 최종 확정해서 컨테이너로 주입
-          "KAKAO_REDIRECT_URI=$kakaoRedirectUri" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+           "TARGET_BRANCH=$targetBranch" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+           "APP_CONTAINER_NAME=$appContainer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+           "APP_IMAGE_NAME=$appImage" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+           "MYSQL_CONTAINER_NAME=$mysqlContainer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+           "APP_HOST_PORT=$appHostPort" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+           "MYSQL_HOST_PORT=$mysqlHostPort" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+           "COMPOSE_PROJECT=$composeProject" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            # main/dev 배포에 맞는 Redirect URI를 최종 확정해서 컨테이너로 주입
+            "KAKAO_REDIRECT_URI=$kakaoRedirectUri" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            # main은 prod 프로파일, dev는 dev 프로파일 활성화
+            "SPRING_PROFILES_ACTIVE=$springProfile" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            # main은 보안 ON, dev는 보안 OFF
+            "APP_SECURITY_ENABLED=$appSecurityEnabled" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       # Docker 엔진이 정상인지 사전 확인
       - name: Check Docker is available
-        shell: powershell
+        shell: pwsh
         run: |
           docker --version
           docker compose version
           docker info
       # 이전 배포에서 남아 있던 고정 이름 컨테이너가 있으면 먼저 정리
       - name: Remove old containers if they exist
-        shell: powershell
+        shell: pwsh
         run: |
           $names = @($env:APP_CONTAINER_NAME, $env:MYSQL_CONTAINER_NAME)
           foreach ($name in $names) {
@@ -121,17 +132,17 @@ jobs:
           }
       # compose 파일을 실제 값으로 렌더링해서 문법/변수 오류 확인
       - name: Validate Docker Compose file
-        shell: powershell
+        shell: pwsh
         run: |
           docker compose -p $env:COMPOSE_PROJECT -f ./synctrip/compose.yml config | Out-Null
       # app + mysql을 함께 배포(필요 시 app 이미지를 새로 빌드)
       - name: Deploy with Docker Compose
-        shell: powershell
+        shell: pwsh
         run: |
           docker compose -p $env:COMPOSE_PROJECT -f ./synctrip/compose.yml up -d --build --remove-orphans
       # app/mysql 컨테이너 상태 + /actuator/health(UP) 확인
       - name: Verify services and health endpoint
-        shell: powershell
+        shell: pwsh
         run: |
           Write-Host "컨테이너들이 완전히 켜질 때까지 40초 대기합니다..."
           Start-Sleep -Seconds 40

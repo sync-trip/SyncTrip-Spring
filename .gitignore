@@ -18,3 +18,5 @@ Thumbs.db
 
 # Logs
 *.log
+/.postman/resources.yaml
+/synctrip/.postman/resources.yaml

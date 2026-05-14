@@ -24,7 +24,8 @@
 --                    schedules CHECK, destination_lat/lng NOT NULL, 북마크 트리거
 --   v3 (이전):       ENUM 전환 1차, 파생 컬럼 제거, group_exchange_rates 분리
 -- ════════════════════════════════════════
-use
+
+use synctripdb;
 
 -- 1. users
 CREATE TABLE `users` (

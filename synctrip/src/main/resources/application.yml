@@ -5,6 +5,7 @@ spring:
     active: main  # 기본 프로필: dev (개발) main(배포)
     group:
       local: "local, common"
+      dev: "dev, common"
       prod: "prod, common"
 
 jwt:

@@ -1,0 +1,44 @@
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+logging:
+  level:
+    root: INFO
+    com.sync: DEBUG
+    org.springframework.web: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+
+# dev 환경: 보안 기능 OFF (개발 편의성 우선)
+# 보안 설정: 환경별로 다르게 적용됨
+app:
+  security:
+    enabled: ${APP_SECURITY_ENABLED:false}  # 기본: 개발 모드 (비활성화)
+    public-paths:
+      - /api/auth/**
+      - /debug/**
+      - /swagger-ui/**
+      - /v3/api-docs/**
+      - /actuator/**
+# dev 환경: 모든 엔드포인트 노출(actuator, swagger 등)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+
+
