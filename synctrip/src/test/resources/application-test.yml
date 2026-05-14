@@ -20,7 +20,7 @@ kakao:
   user-info-uri: https://kapi.kakao.com/v2/user/me
   client-id: test-client-id
   client-secret: test-client-secret
-  redirect-uri: http://localhost:8080/api/auth/kakao/callback
+  redirect-uri: https://test.sync-trip.app/api/auth/kakao/callback
   scope: account_email,profile_nickname,profile_image
 
 app:
