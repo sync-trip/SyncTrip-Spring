@@ -33,6 +33,11 @@ app:
       - /swagger-ui/**
       - /v3/api-docs/**
       - /actuator/**
+  invite:
+    # dev 환경에서는 테스트 도메인으로 공유 링크를 생성한다.
+    share-base-url: ${APP_INVITE_SHARE_BASE_URL:https://test.sync-trip.app/invite?code=}
+    # 딥링크는 앱 스킴을 사용하므로 dev/prod 모두 동일하게 유지한다.
+    deep-link-base-url: ${APP_INVITE_DEEP_LINK_BASE_URL:synctrip://band/join?code=}
 # dev 환경: 모든 엔드포인트 노출(actuator, swagger 등)
 management:
   endpoints:
