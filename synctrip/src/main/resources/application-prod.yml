@@ -19,7 +19,7 @@ app:
   security:
     enabled: ${APP_SECURITY_ENABLED:true}  # 기본: 개발 모드 (비활성화)
     public-paths:
-      - /api/auth/**
+      - /auth/**
       - /debug/**
       - /swagger-ui/**
       - /v3/api-docs/**
