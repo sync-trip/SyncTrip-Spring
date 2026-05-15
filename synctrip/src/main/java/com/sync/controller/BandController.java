@@ -29,6 +29,14 @@ public class BandController {
         this.bandService = bandService;
     }
 
+    @GetMapping
+    // 현재 사용자가 포함된 모든 밴드 목록 조회
+    public ResponseEntity<List<BandResponse>> getMyBands(
+            @LoginUser Long userId
+    ) {
+        return ResponseEntity.ok(bandService.getMyBands(userId));
+    }
+
     @PostMapping
     // JWT 인증된 사용자가 새로운 밴드(여행)를 생성
     // @LoginUser: JWT의 subject(userId)를 자동으로 주입

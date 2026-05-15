@@ -227,4 +227,21 @@ public class BandService {
                 ))
                 .collect(Collectors.toList());
     }
+
+    @Transactional(readOnly = true)
+    public List<BandResponse> getMyBands(Long userId) {
+        userRepository.findByIdAndIsDeletedFalse(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
+
+        return bandMemberRepository.findByUserId(userId).stream()
+                .map(m -> new BandResponse(
+                        m.getBand().getId(),
+                        m.getBand().getName(),
+                        m.getBand().getDestination(),
+                        m.getBand().getStartDate(),
+                        m.getBand().getEndDate(),
+                        m.getBand().getInviteCode()
+                ))
+                .collect(Collectors.toList());
+    }
 }

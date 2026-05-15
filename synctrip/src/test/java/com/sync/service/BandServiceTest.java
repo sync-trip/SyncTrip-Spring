@@ -8,6 +8,7 @@ import com.sync.domain.user.User;
 import com.sync.config.BandInviteProperties;
 import com.sync.dto.band.BandInviteCodeResponse;
 import com.sync.dto.band.BandReadyResponse;
+import com.sync.dto.band.BandResponse;
 import com.sync.dto.band.BandStatusTransitionResponse;
 import com.sync.repository.BandMemberRepository;
 import com.sync.repository.BandRepository;
@@ -287,6 +288,69 @@ class BandServiceTest {
         assertThat(response.previousStatus()).isEqualTo(BandStatus.PLANNING);
         assertThat(response.currentStatus()).isEqualTo(BandStatus.VOTING);
         assertThat(band.getStatus()).isEqualTo(BandStatus.VOTING);
+    }
+
+    @Test
+    void getMyBands_returnsAllBandsUserIsPartOf() {
+        User user = User.kakaoUser("user@example.com", "사용자", null, "100");
+        setId(user, 1L);
+
+        Band band1 = Band.create(
+                user,
+                "봄여행",
+                "제주도",
+                33.4996,
+                126.5312,
+                "KR",
+                false,
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 5)
+        );
+        setId(band1, 10L);
+
+        Band band2 = Band.create(
+                user,
+                "여름여행",
+                "강릉",
+                37.7510,
+                128.8889,
+                "KR",
+                false,
+                LocalDate.of(2026, 7, 1),
+                LocalDate.of(2026, 7, 7)
+        );
+        setId(band2, 11L);
+
+        BandMember member1 = BandMember.create(user, band1, BandRole.OWNER);
+        setId(member1, 101L);
+
+        BandMember member2 = BandMember.create(user, band2, BandRole.MEMBER);
+        setId(member2, 102L);
+
+        when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
+        when(bandMemberRepository.findByUserId(1L)).thenReturn(java.util.List.of(member1, member2));
+
+        java.util.List<BandResponse> responses = bandService.getMyBands(1L);
+
+        assertThat(responses).hasSize(2);
+        assertThat(responses.get(0).id()).isEqualTo(10L);
+        assertThat(responses.get(0).name()).isEqualTo("봄여행");
+        assertThat(responses.get(0).destination()).isEqualTo("제주도");
+        assertThat(responses.get(1).id()).isEqualTo(11L);
+        assertThat(responses.get(1).name()).isEqualTo("여름여행");
+    }
+
+    @Test
+    void getMyBands_returnsEmptyListWhenUserHasNoBands() {
+        User user = User.kakaoUser("user@example.com", "사용자", null, "100");
+        setId(user, 1L);
+
+        when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
+        when(bandMemberRepository.findByUserId(1L)).thenReturn(java.util.List.of());
+
+        java.util.List<BandResponse> responses = bandService.getMyBands(1L);
+
+        assertThat(responses).isEmpty();
     }
 
     private void setId(Object target, Long id) {

@@ -14,6 +14,20 @@ jwt:
   access-token-ttl-seconds: ${JWT_ACCESS_TOKEN_TTL_SECONDS:3600}
   refresh-token-ttl-seconds: ${JWT_REFRESH_TOKEN_TTL_SECONDS:86400}
 
+# 보안 설정: 테스트 환경에서도 실제 배포와 동일하게 보안(JWT) 활성화
+app:
+  security:
+    enabled: true
+    public-paths:
+      - /auth/**
+      - /debug/**
+      - /swagger-ui/**
+      - /v3/api-docs/**
+      - /actuator/**
+  invite:
+    share-base-url: https://test.sync-trip.app/invite?code=
+    deep-link-base-url: synctrip://band/join?code=
+
 kakao:
   authorization-uri: https://kauth.kakao.com/oauth/authorize
   token-uri: https://kauth.kakao.com/oauth/token
@@ -22,9 +36,4 @@ kakao:
   client-secret: test-client-secret
   redirect-uri: https://test.sync-trip.app/api/auth/kakao/callback
   scope: account_email,profile_nickname,profile_image
-
-app:
-  invite:
-    share-base-url: https://test.sync-trip.app/invite?code=
-    deep-link-base-url: synctrip://band/join?code=
 
