@@ -77,7 +77,7 @@ services:
       APP_INVITE_SHARE_BASE_URL: ${APP_INVITE_SHARE_BASE_URL:-https://test.sync-trip.app/invite?code=}
       APP_INVITE_DEEP_LINK_BASE_URL: ${APP_INVITE_DEEP_LINK_BASE_URL:-synctrip://band/join?code=}
       # 보안 활성화 여부 (브랜치별로 다르게 설정됨: main=true, dev=false)
-      APP_SECURITY_ENABLED: ${APP_SECURITY_ENABLED:-false}
+      APP_SECURITY_ENABLED: ${APP_SECURITY_ENABLED:-true}
       # 내부 JWT 발급 설정 주입
       JWT_SECRET: ${JWT_SECRET}
       JWT_ISSUER: ${JWT_ISSUER:-synctrip}
