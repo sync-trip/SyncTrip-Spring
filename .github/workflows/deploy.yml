@@ -111,7 +111,7 @@ jobs:
             $inviteShareBaseUrl = $env:APP_INVITE_SHARE_BASE_URL_DEV
             $inviteDeepLinkBaseUrl = $env:APP_INVITE_DEEP_LINK_BASE_URL_DEV
             $springProfile = 'dev'
-            $appSecurityEnabled = 'false'
+            $appSecurityEnabled = 'true'
           }
           if ([string]::IsNullOrWhiteSpace($kakaoRedirectUri)) {
             throw "KAKAO_REDIRECT_URI is empty for branch: $targetBranch"
