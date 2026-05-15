@@ -12,4 +12,6 @@ public interface BandMemberRepository extends JpaRepository<BandMember, Long> {
     boolean existsByBandAndUser(Band band, User user);
     Optional<BandMember> findByBandIdAndUserId(Long bandId, Long userId);
     long countByBand(Band band);
+    long countByBandId(Long bandId);
+    long countByBandIdAndIsReadyTrue(Long bandId);
 }

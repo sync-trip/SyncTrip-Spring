@@ -9,7 +9,9 @@ import com.sync.config.BandInviteProperties;
 import com.sync.dto.band.BandCreateRequest;
 import com.sync.dto.band.BandInviteCodeResponse;
 import com.sync.dto.band.BandMemberResponse;
+import com.sync.dto.band.BandReadyResponse;
 import com.sync.dto.band.BandResponse;
+import com.sync.dto.band.BandStatusTransitionResponse;
 import com.sync.repository.BandMemberRepository;
 import com.sync.repository.BandRepository;
 import com.sync.repository.UserRepository;
@@ -99,6 +101,36 @@ public class BandService {
         bandMemberRepository.save(member);
     }
 
+    public BandReadyResponse markReady(Long userId, Long bandId) {
+        return updateReadyState(userId, bandId, true);
+    }
+
+    public BandReadyResponse markNotReady(Long userId, Long bandId) {
+        return updateReadyState(userId, bandId, false);
+    }
+
+    public BandStatusTransitionResponse advanceBandStatus(Long userId, Long bandId) {
+        User user = userRepository.findByIdAndIsDeletedFalse(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
+
+        Band band = bandRepository.findById(bandId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "밴드를 찾을 수 없습니다."));
+
+        if (!band.getOwner().getId().equals(user.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "밴드 상태는 방장만 전이할 수 있습니다.");
+        }
+
+        BandStatus previousStatus = band.getStatus();
+        if (previousStatus.next() == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "더 이상 전이할 수 없는 밴드 상태입니다.");
+        }
+
+        band.advanceStatus();
+        bandRepository.save(band);
+
+        return new BandStatusTransitionResponse(band.getId(), previousStatus, band.getStatus());
+    }
+
     public BandInviteCodeResponse getOrRefreshInviteCode(Long userId, Long bandId) {
         // 1) 요청한 사용자가 존재하는지 먼저 확인한다.
         User user = userRepository.findByIdAndIsDeletedFalse(userId)
@@ -140,6 +172,47 @@ public class BandService {
     private String buildDeepLink(String inviteCode) {
         // 딥링크는 앱 설치 시 바로 앱으로 들어오도록 커스텀 스킴을 사용한다.
         return bandInviteProperties.deepLinkBaseUrl() + URLEncoder.encode(inviteCode, StandardCharsets.UTF_8);
+    }
+
+    private BandReadyResponse updateReadyState(Long userId, Long bandId, boolean ready) {
+        User user = userRepository.findByIdAndIsDeletedFalse(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
+
+        Band band = bandRepository.findById(bandId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "밴드를 찾을 수 없습니다."));
+
+        if (band.getStatus() != BandStatus.PLANNING) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Ready 상태는 여행 준비 중에만 변경할 수 있습니다.");
+        }
+
+        BandMember member = bandMemberRepository.findByBandIdAndUserId(bandId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "밴드 멤버만 Ready 상태를 변경할 수 있습니다."));
+
+        if (member.isJoinedAfterVoting()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "투표 이후 합류한 멤버는 Ready 상태를 변경할 수 없습니다.");
+        }
+
+        member.updateReady(ready);
+        bandMemberRepository.save(member);
+
+        long totalCount = bandMemberRepository.countByBandId(bandId);
+        long readyCount = bandMemberRepository.countByBandIdAndIsReadyTrue(bandId);
+        boolean allReady = totalCount > 0 && totalCount == readyCount;
+
+        if (ready && allReady) {
+            band.advanceStatus();
+            bandRepository.save(band);
+        }
+
+        return new BandReadyResponse(
+                band.getId(),
+                user.getId(),
+                member.isReady(),
+                readyCount,
+                totalCount,
+                allReady,
+                band.getStatus()
+        );
     }
 
     @Transactional(readOnly = true)

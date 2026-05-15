@@ -1,9 +1,14 @@
 package com.sync.service;
 
 import com.sync.domain.band.Band;
+import com.sync.domain.band.BandMember;
+import com.sync.domain.band.BandRole;
+import com.sync.domain.band.BandStatus;
 import com.sync.domain.user.User;
 import com.sync.config.BandInviteProperties;
 import com.sync.dto.band.BandInviteCodeResponse;
+import com.sync.dto.band.BandReadyResponse;
+import com.sync.dto.band.BandStatusTransitionResponse;
 import com.sync.repository.BandMemberRepository;
 import com.sync.repository.BandRepository;
 import com.sync.repository.UserRepository;
@@ -154,6 +159,134 @@ class BandServiceTest {
 
         assertThat(exception).isNotNull();
         assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    void markReady_advancesBandToVotingWhenAllMembersAreReady() {
+        User owner = User.kakaoUser("owner@example.com", "owner", null, "100");
+        setId(owner, 1L);
+
+        User other = User.kakaoUser("other@example.com", "other", null, "200");
+        setId(other, 2L);
+
+        Band band = Band.create(
+                owner,
+                "봄여행",
+                "제주도",
+                33.4996,
+                126.5312,
+                "KR",
+                false,
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 5)
+        );
+        setId(band, 10L);
+
+        BandMember ownerMember = BandMember.create(owner, band, BandRole.OWNER);
+        setId(ownerMember, 101L);
+        BandMember otherMember = BandMember.create(other, band, BandRole.MEMBER);
+        setId(otherMember, 102L);
+
+        when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(owner));
+        when(userRepository.findByIdAndIsDeletedFalse(2L)).thenReturn(Optional.of(other));
+        when(bandRepository.findById(10L)).thenReturn(Optional.of(band));
+        when(bandMemberRepository.findByBandIdAndUserId(10L, 1L)).thenReturn(Optional.of(ownerMember));
+        when(bandMemberRepository.findByBandIdAndUserId(10L, 2L)).thenReturn(Optional.of(otherMember));
+        when(bandMemberRepository.countByBandId(10L)).thenReturn(2L);
+        when(bandMemberRepository.countByBandIdAndIsReadyTrue(10L)).thenAnswer(invocation -> {
+            long count = 0L;
+            if (ownerMember.isReady()) {
+                count++;
+            }
+            if (otherMember.isReady()) {
+                count++;
+            }
+            return count;
+        });
+        when(bandMemberRepository.save(any(BandMember.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(bandRepository.save(any(Band.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        BandReadyResponse firstResponse = bandService.markReady(1L, 10L);
+        BandReadyResponse secondResponse = bandService.markReady(2L, 10L);
+
+        assertThat(firstResponse.isReady()).isTrue();
+        assertThat(firstResponse.readyCount()).isEqualTo(1L);
+        assertThat(firstResponse.allReady()).isFalse();
+        assertThat(firstResponse.bandStatus()).isEqualTo(BandStatus.PLANNING);
+
+        assertThat(secondResponse.isReady()).isTrue();
+        assertThat(secondResponse.readyCount()).isEqualTo(2L);
+        assertThat(secondResponse.allReady()).isTrue();
+        assertThat(secondResponse.bandStatus()).isEqualTo(BandStatus.VOTING);
+        assertThat(band.getStatus()).isEqualTo(BandStatus.VOTING);
+    }
+
+    @Test
+    void markNotReady_clearsReadyStateWithoutAdvancingBand() {
+        User user = User.kakaoUser("user@example.com", "user", null, "100");
+        setId(user, 1L);
+
+        Band band = Band.create(
+                user,
+                "봄여행",
+                "제주도",
+                33.4996,
+                126.5312,
+                "KR",
+                false,
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 5)
+        );
+        setId(band, 10L);
+
+        BandMember member = BandMember.create(user, band, BandRole.OWNER);
+        setId(member, 101L);
+        member.updateReady(true);
+
+        when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
+        when(bandRepository.findById(10L)).thenReturn(Optional.of(band));
+        when(bandMemberRepository.findByBandIdAndUserId(10L, 1L)).thenReturn(Optional.of(member));
+        when(bandMemberRepository.countByBandId(10L)).thenReturn(1L);
+        when(bandMemberRepository.countByBandIdAndIsReadyTrue(10L)).thenAnswer(invocation -> member.isReady() ? 1L : 0L);
+        when(bandMemberRepository.save(any(BandMember.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        BandReadyResponse response = bandService.markNotReady(1L, 10L);
+
+        assertThat(response.isReady()).isFalse();
+        assertThat(response.readyCount()).isEqualTo(0L);
+        assertThat(response.allReady()).isFalse();
+        assertThat(response.bandStatus()).isEqualTo(BandStatus.PLANNING);
+        assertThat(member.isReady()).isFalse();
+    }
+
+    @Test
+    void advanceBandStatus_advancesOnlyOwnerBand() {
+        User owner = User.kakaoUser("owner@example.com", "owner", null, "100");
+        setId(owner, 1L);
+
+        Band band = Band.create(
+                owner,
+                "봄여행",
+                "제주도",
+                33.4996,
+                126.5312,
+                "KR",
+                false,
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 5)
+        );
+        setId(band, 10L);
+
+        when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(owner));
+        when(bandRepository.findById(10L)).thenReturn(Optional.of(band));
+        when(bandRepository.save(any(Band.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        BandStatusTransitionResponse response = bandService.advanceBandStatus(1L, 10L);
+
+        assertThat(response.bandId()).isEqualTo(10L);
+        assertThat(response.previousStatus()).isEqualTo(BandStatus.PLANNING);
+        assertThat(response.currentStatus()).isEqualTo(BandStatus.VOTING);
+        assertThat(band.getStatus()).isEqualTo(BandStatus.VOTING);
     }
 
     private void setId(Object target, Long id) {

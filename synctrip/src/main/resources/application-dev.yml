@@ -26,7 +26,7 @@ logging:
 # 보안 설정: 환경별로 다르게 적용됨
 app:
   security:
-    enabled: ${APP_SECURITY_ENABLED:true}  # 기본: 개발 모드 (비활성화)
+    enabled: ${APP_SECURITY_ENABLED:false}  # 기본: 개발 모드 (비활성화)
     public-paths:
       - /api/auth/**
       - /debug/**

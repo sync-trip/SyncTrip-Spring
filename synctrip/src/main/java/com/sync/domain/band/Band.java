@@ -186,6 +186,18 @@ public class Band {
         return inviteCodeExpiredAt == null || inviteCodeExpiredAt.isBefore(now);
     }
 
+    public void updateStatus(BandStatus status) {
+        this.status = status;
+    }
+
+    public void advanceStatus() {
+        BandStatus nextStatus = this.status.next();
+        if (nextStatus == null) {
+            throw new IllegalStateException("더 이상 전이할 수 없는 밴드 상태입니다.");
+        }
+        this.status = nextStatus;
+    }
+
     public Long getId() {
         return id;
     }

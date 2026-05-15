@@ -5,10 +5,13 @@ import com.sync.dto.band.BandCreateRequest;
 import com.sync.dto.band.BandJoinRequest;
 import com.sync.dto.band.BandInviteCodeResponse;
 import com.sync.dto.band.BandMemberResponse;
+import com.sync.dto.band.BandReadyResponse;
 import com.sync.dto.band.BandResponse;
+import com.sync.dto.band.BandStatusTransitionResponse;
 import com.sync.service.BandService;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -68,6 +71,30 @@ public class BandController {
     // 밴드의 멤버 목록 조회 (모든 인증 사용자 접근 가능)
     public ResponseEntity<List<BandMemberResponse>> getBandMembers(@PathVariable Long bandId) {
         return ResponseEntity.ok(bandService.getBandMembers(bandId));
+    }
+
+    @PostMapping("/{bandId}/ready")
+    public ResponseEntity<BandReadyResponse> markReady(
+            @LoginUser Long userId,
+            @PathVariable Long bandId
+    ) {
+        return ResponseEntity.ok(bandService.markReady(userId, bandId));
+    }
+
+    @DeleteMapping("/{bandId}/ready")
+    public ResponseEntity<BandReadyResponse> markNotReady(
+            @LoginUser Long userId,
+            @PathVariable Long bandId
+    ) {
+        return ResponseEntity.ok(bandService.markNotReady(userId, bandId));
+    }
+
+    @PostMapping("/{bandId}/status/advance")
+    public ResponseEntity<BandStatusTransitionResponse> advanceStatus(
+            @LoginUser Long userId,
+            @PathVariable Long bandId
+    ) {
+        return ResponseEntity.ok(bandService.advanceBandStatus(userId, bandId));
     }
 }
 
