@@ -57,7 +57,11 @@ class BandServiceTest {
                 ),
                 mock(ScheduleGenerationService.class),
                 mock(com.sync.repository.GroupVoteInfoRepository.class),
-                mock(org.springframework.messaging.simp.SimpMessagingTemplate.class)
+                mock(org.springframework.messaging.simp.SimpMessagingTemplate.class),
+                mock(com.sync.repository.ScheduleRepository.class),
+                mock(com.sync.repository.ScheduleAltRepository.class),
+                mock(com.sync.repository.VoteRepository.class),
+                mock(com.sync.repository.PlaceBookmarkRepository.class)
         );
     }
 

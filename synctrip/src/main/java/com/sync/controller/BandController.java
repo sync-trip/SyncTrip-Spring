@@ -97,6 +97,15 @@ public class BandController {
         return ResponseEntity.ok(bandService.markNotReady(userId, bandId));
     }
 
+    @DeleteMapping("/{bandId}")
+    public ResponseEntity<Void> deleteBand(
+            @LoginUser Long userId,
+            @PathVariable Long bandId
+    ) {
+        bandService.deleteBand(userId, bandId);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/{bandId}/status/advance")
     public ResponseEntity<BandStatusTransitionResponse> advanceStatus(
             @LoginUser Long userId,
