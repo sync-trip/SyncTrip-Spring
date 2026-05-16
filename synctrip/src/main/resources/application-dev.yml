@@ -33,6 +33,7 @@ app:
       - /swagger-ui/**
       - /v3/api-docs/**
       - /actuator/**
+      - /ws/**
   invite:
     # dev 환경에서는 테스트 도메인으로 공유 링크를 생성한다.
     share-base-url: ${APP_INVITE_SHARE_BASE_URL:https://test.sync-trip.app/invite?code=}

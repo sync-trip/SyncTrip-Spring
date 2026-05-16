@@ -37,7 +37,7 @@ public class Vote {
     private Place place;
 
     // 1=LIKE, -1=DISLIKE, 0=자동LIKE(본인 북마크 장소)
-    @Column(name = "result", nullable = false)
+    @Column(name = "result", nullable = false, columnDefinition = "TINYINT")
     private int result;
 
     @CreationTimestamp
