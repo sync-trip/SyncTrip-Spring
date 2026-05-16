@@ -115,4 +115,34 @@ public class AuthService {
         }
         return response.kakaoAccount().profile().profileImageUrl();
     }
+
+    /**
+     * 로그아웃 처리
+     * JWT는 서버에서 관리하지 않는 Stateless 방식이므로,
+     * 백엔드에서는 특별한 처리가 없고 프론트엔드에서 로컬 토큰을 삭제하면 된다.
+     * (향후 토큰 블랙리스트 필요 시 확장)
+     */
+    public void logout(Long userId) {
+        // 현재: Stateless JWT이므로 백엔드에서 할 일 없음
+        // 향후: refresh token 블랙리스트 DB 저장 등 추가 가능
+        // → userId는 로그 기록이나 감시 목적으로 사용 가능
+    }
+
+    /**
+     * 회원탈퇴 (Soft Delete)
+     * - 사용자 계정을 논리 삭제 (is_deleted = true)
+     * - 기존 데이터는 보존
+     */
+    @Transactional
+    public void withdrawUser(Long userId) {
+        User user = userRepository.findByIdAndIsDeletedFalse(userId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND,
+                        "사용자를 찾을 수 없습니다."
+                ));
+
+        // Soft Delete: isDeleted = true로 설정
+        user.withdraw();
+        userRepository.save(user);
+    }
 }

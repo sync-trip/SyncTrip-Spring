@@ -1,7 +1,18 @@
 -- ════════════════════════════════════════
--- SyncTrip DDL v5
--- 작성일: 2026-04-23
+-- SyncTrip DDL v6
+-- 작성일: 2026-04-30
 -- 총 테이블: 17개 + 트리거 2개
+-- ════════════════════════════════════════
+-- v5 → v6 변경사항 (의사코드 v2.4 정합성):
+--   1. group_members.joined_after_voting 컬럼 추가
+--      → TRAVELLING/DONE 단계 가입자의 권한 제한 (장바구니/투표 X)
+--      → FIX-39 (v2.4) 반영
+--   2. places.opening_hours 코멘트 보강
+--      → 해외 전용 (국내는 카카오 API 미제공으로 항상 NULL)
+--      → FIX-40 (v2.4) 반영
+--   3. schedule_alts.alt_rank 제거
+--      → Plan B 폭포수 검색이 동적 정렬 사용 (priority + 거리)
+--      → FIX-31 (v2.3) 반영, 사용되지 않는 컬럼 제거
 -- ════════════════════════════════════════
 -- v4 → v5 변경사항:
 --   1. notifications.type: VARCHAR(50) → ENUM(4종) 전환 (일관성 확보)
@@ -14,8 +25,6 @@
 --   v3 (이전):       ENUM 전환 1차, 파생 컬럼 제거, group_exchange_rates 분리
 -- ════════════════════════════════════════
 
--- 현재 데이터베이스 선택
-USE synctripdb;
 
 -- 1. users
 CREATE TABLE `users` (
@@ -102,14 +111,16 @@ CREATE TABLE `group_exchange_rates` (
 
 
 -- 6. group_members
+-- [v6 수정 1] joined_after_voting 컬럼 추가 (TRAVELLING/DONE 단계 가입자 권한 제한)
 CREATE TABLE `group_members` (
-  `group_member_id` BIGINT                 NOT NULL AUTO_INCREMENT COMMENT '그룹 멤버 고유 ID',
-  `group_id`        BIGINT                 NOT NULL                COMMENT '그룹 ID (FK → groups)',
-  `user_id`         BIGINT                 NOT NULL                COMMENT '회원 ID (FK → users)',
-  `role`            ENUM('OWNER','MEMBER') NOT NULL DEFAULT 'MEMBER' COMMENT '역할',
-  `is_ready`        BOOLEAN                NOT NULL DEFAULT FALSE  COMMENT 'Ready 상태',
-  `bookmark_count`  INT                    NOT NULL DEFAULT 0      COMMENT '현재 담기 개수 (1인당 최대 5개 제한 체크용 / place_bookmarks 트리거로 자동 동기화)',
-  `joined_at`       TIMESTAMP              NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '그룹 참여일자',
+  `group_member_id`      BIGINT                 NOT NULL AUTO_INCREMENT COMMENT '그룹 멤버 고유 ID',
+  `group_id`             BIGINT                 NOT NULL                COMMENT '그룹 ID (FK → groups)',
+  `user_id`              BIGINT                 NOT NULL                COMMENT '회원 ID (FK → users)',
+  `role`                 ENUM('OWNER','MEMBER') NOT NULL DEFAULT 'MEMBER' COMMENT '역할',
+  `is_ready`             BOOLEAN                NOT NULL DEFAULT FALSE  COMMENT 'Ready 상태 (한 번 TRUE로 설정 후 해제 불가 — 백엔드 방어)',
+  `bookmark_count`       INT                    NOT NULL DEFAULT 0      COMMENT '현재 담기 개수 (1인당 최대 5개 제한 체크용 / place_bookmarks 트리거로 자동 동기화)',
+  `joined_after_voting`  BOOLEAN                NOT NULL DEFAULT FALSE  COMMENT '투표 종료 후 가입 여부 (TRUE=권한 제한: 장바구니 추가/투표 불가, 일정 보기/가계부/앨범/Plan B만 가능)',
+  `joined_at`            TIMESTAMP              NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '그룹 참여일자',
   PRIMARY KEY (`group_member_id`),
   UNIQUE KEY `uq_group_members` (`group_id`, `user_id`),
   CONSTRAINT `fk_group_members_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`group_id`),
@@ -130,7 +141,7 @@ CREATE TABLE `places` (
   `address`            VARCHAR(255) NULL                    COMMENT '주소',
   `rating`             FLOAT        NULL                    COMMENT '평점',
   `thumbnail_url`      VARCHAR(500) NULL                    COMMENT '장소 썸네일 이미지 URL',
-  `opening_hours`      JSON         NULL                    COMMENT '요일별 영업시간 (정규화 스키마는 별도 문서 참조)',
+  `opening_hours`      JSON         NULL                    COMMENT '요일별 영업시간 (해외 전용 / 국내는 항상 NULL — 카카오 API 미제공). 스키마: {"MON":[{"open":"09:00","close":"22:00"}],...}',
   `estimated_duration` INT          NOT NULL DEFAULT 60     COMMENT '예상 체류시간 (분, 카테고리 기본값: FOOD=60 / CULTURE=90 / ACTIVITY=120 / SHOPPING=60 / NATURE=90)',
   PRIMARY KEY (`place_id`),
   UNIQUE KEY `uq_places_source` (`api_source`, `external_id`)
@@ -194,14 +205,14 @@ CREATE TABLE `schedules` (
 
 
 -- 11. schedule_alts
+-- [v6 수정 3] alt_rank 컬럼 제거 (Plan B 폭포수 검색이 동적 정렬 사용 — 의사코드 v2.3 §7.3)
 CREATE TABLE `schedule_alts` (
   `schedule_alt_id` BIGINT      NOT NULL AUTO_INCREMENT COMMENT '대안 장소 고유 ID',
   `group_id`        BIGINT      NOT NULL                COMMENT '그룹 ID (FK → groups)',
   `place_id`        BIGINT      NOT NULL                COMMENT '대안 장소 ID (FK → places)',
   `category`        ENUM('FOOD','CULTURE','ACTIVITY','SHOPPING','NATURE','ETC') NOT NULL COMMENT '카테고리',
   `density_point`   INT         NOT NULL                COMMENT 'Density Point (places.density_point 캐시)',
-  `priority_score`  FLOAT       NOT NULL                COMMENT 'Weighted Cost 기반 우선순위 점수',
-  `alt_rank`        INT         NOT NULL                COMMENT '전체 altPool 내 순위',
+  `priority_score`  FLOAT       NOT NULL                COMMENT 'Weighted Cost 기반 우선순위 점수 (Plan B 폭포수 검색 시 정렬 키)',
   PRIMARY KEY (`schedule_alt_id`),
   UNIQUE KEY `uq_schedule_alts` (`group_id`, `place_id`),
   CONSTRAINT `fk_schedule_alts_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`group_id`),

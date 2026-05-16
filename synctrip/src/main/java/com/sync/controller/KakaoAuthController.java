@@ -1,5 +1,6 @@
 package com.sync.controller;
 
+import com.sync.common.annotation.LoginUser;
 import com.sync.dto.auth.KakaoLoginRequest;
 import com.sync.dto.auth.LoginResponse;
 import com.sync.dto.auth.TokenRefreshRequest;
@@ -8,6 +9,8 @@ import com.sync.service.AuthService;
 import com.sync.service.KakaoAuthService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -59,4 +62,22 @@ public class KakaoAuthController {
     public LoginResponse refresh(@RequestBody TokenRefreshRequest request) {
         return authService.refresh(request.refreshToken());
     }
+
+    @PostMapping("/logout")
+    // 로그아웃: JWT는 Stateless이므로 프론트에서 로컬 토큰 삭제만 하면 됨
+    // 백엔드는 로그 기록 등의 처리만 수행
+    public ResponseEntity<Void> logout(@LoginUser Long userId) {
+        authService.logout(userId);
+        log.info("사용자 로그아웃: userId={}", userId);
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/withdraw")
+    // 회원탈퇴: 사용자 계정을 논리 삭제 (is_deleted = true)
+    public ResponseEntity<Void> withdraw(@LoginUser Long userId) {
+        authService.withdrawUser(userId);
+        log.info("사용자 탈퇴 처리 완료: userId={}", userId);
+        return ResponseEntity.ok().build();
+    }
 }
+
