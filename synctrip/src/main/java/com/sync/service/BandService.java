@@ -18,7 +18,11 @@ import com.sync.dto.ws.StatusEvent;
 import com.sync.repository.BandMemberRepository;
 import com.sync.repository.BandRepository;
 import com.sync.repository.GroupVoteInfoRepository;
+import com.sync.repository.PlaceBookmarkRepository;
+import com.sync.repository.ScheduleAltRepository;
+import com.sync.repository.ScheduleRepository;
 import com.sync.repository.UserRepository;
+import com.sync.repository.VoteRepository;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.net.URLEncoder;
@@ -40,6 +44,10 @@ public class BandService {
     private final ScheduleGenerationService scheduleGenerationService;
     private final GroupVoteInfoRepository groupVoteInfoRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final ScheduleRepository scheduleRepository;
+    private final ScheduleAltRepository scheduleAltRepository;
+    private final VoteRepository voteRepository;
+    private final PlaceBookmarkRepository placeBookmarkRepository;
 
     public BandService(BandRepository bandRepository,
                        BandMemberRepository bandMemberRepository,
@@ -47,7 +55,11 @@ public class BandService {
                        BandInviteProperties bandInviteProperties,
                        ScheduleGenerationService scheduleGenerationService,
                        GroupVoteInfoRepository groupVoteInfoRepository,
-                       SimpMessagingTemplate messagingTemplate) {
+                       SimpMessagingTemplate messagingTemplate,
+                       ScheduleRepository scheduleRepository,
+                       ScheduleAltRepository scheduleAltRepository,
+                       VoteRepository voteRepository,
+                       PlaceBookmarkRepository placeBookmarkRepository) {
         this.bandRepository = bandRepository;
         this.bandMemberRepository = bandMemberRepository;
         this.userRepository = userRepository;
@@ -55,6 +67,10 @@ public class BandService {
         this.scheduleGenerationService = scheduleGenerationService;
         this.groupVoteInfoRepository = groupVoteInfoRepository;
         this.messagingTemplate = messagingTemplate;
+        this.scheduleRepository = scheduleRepository;
+        this.scheduleAltRepository = scheduleAltRepository;
+        this.voteRepository = voteRepository;
+        this.placeBookmarkRepository = placeBookmarkRepository;
     }
 
     public BandResponse createBand(Long userId, BandCreateRequest request) {
@@ -113,6 +129,27 @@ public class BandService {
             member.markJoinedAfterVoting();
         }
         bandMemberRepository.save(member);
+    }
+
+    public void deleteBand(Long userId, Long bandId) {
+        User user = userRepository.findByIdAndIsDeletedFalse(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
+
+        Band band = bandRepository.findById(bandId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "밴드를 찾을 수 없습니다."));
+
+        if (!band.getOwner().getId().equals(user.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "밴드는 방장만 삭제할 수 있습니다.");
+        }
+
+        // FK 의존 순서에 따라 연관 데이터를 먼저 삭제한다.
+        scheduleRepository.deleteAll(scheduleRepository.findByBandIdOrderByDayNumberAscSlotOrderAsc(bandId));
+        scheduleAltRepository.deleteAll(scheduleAltRepository.findByBandIdOrderByPriorityScoreDesc(bandId));
+        voteRepository.deleteAll(voteRepository.findByBandId(bandId));
+        groupVoteInfoRepository.findByBandId(bandId).ifPresent(groupVoteInfoRepository::delete);
+        placeBookmarkRepository.deleteAll(placeBookmarkRepository.findByBandId(bandId));
+        bandMemberRepository.deleteAll(bandMemberRepository.findByBandId(bandId));
+        bandRepository.delete(band);
     }
 
     public BandReadyResponse markReady(Long userId, Long bandId) {

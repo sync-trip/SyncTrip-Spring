@@ -13,8 +13,14 @@ public record NearbySearchResponse(List<Place> places) {
             List<String> types,
             LocalizedText displayName,
             LatLng location,
-            RegularOpeningHours regularOpeningHours
+            Double rating,
+            String formattedAddress,
+            RegularOpeningHours regularOpeningHours,
+            List<Photo> photos
     ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Photo(String name) {}
 
     public record LocalizedText(String text, String languageCode) {}
 
