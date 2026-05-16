@@ -25,6 +25,7 @@
 --   v3 (이전):       ENUM 전환 1차, 파생 컬럼 제거, group_exchange_rates 분리
 -- ════════════════════════════════════════
 
+use synctripdb;
 
 -- 1. users
 CREATE TABLE `users` (
@@ -46,8 +47,8 @@ CREATE TABLE `users` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
--- 2. groups
-CREATE TABLE `groups` (
+-- 2. user_groups
+CREATE TABLE `user_groups` (
   `group_id`               BIGINT       NOT NULL AUTO_INCREMENT COMMENT '그룹 고유 ID',
   `owner_id`               BIGINT       NOT NULL                COMMENT '방장 회원 ID (FK → users)',
   `title`                  VARCHAR(100) NOT NULL                COMMENT '여행 제목',
@@ -58,7 +59,7 @@ CREATE TABLE `groups` (
   `is_overseas`            BOOLEAN      NOT NULL DEFAULT FALSE  COMMENT '해외 여행 여부 (FALSE=카카오맵, TRUE=구글)',
   `start_date`             DATE         NOT NULL                COMMENT '여행 시작일',
   `end_date`               DATE         NOT NULL                COMMENT '여행 종료일',
-  `invite_code`            VARCHAR(20)  NOT NULL                COMMENT '그룹 초대 코드 (6자리)',
+  `invite_code`            VARCHAR(20)  NOT NULL                COMMENT '그룹 초대 코드 (8자리)',
   `invite_code_expired_at` TIMESTAMP    NOT NULL                COMMENT '초대 코드 만료 시각 (72시간)',
   `max_members`            INT          NOT NULL DEFAULT 8      COMMENT '그룹 최대 인원 (최대 8명)',
   `travel_style`           ENUM('RELAXED','PACKED') NOT NULL DEFAULT 'PACKED' COMMENT '여행 스타일 (RELAXED=여유롭게, PACKED=빡빡하게)',
@@ -70,43 +71,43 @@ CREATE TABLE `groups` (
   `created_at`             TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '그룹 생성일자',
   `updated_at`             TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '그룹 수정일자',
   PRIMARY KEY (`group_id`),
-  UNIQUE KEY `uq_groups_invite_code` (`invite_code`),
-  CONSTRAINT `fk_groups_owner` FOREIGN KEY (`owner_id`) REFERENCES `users` (`user_id`)
+  UNIQUE KEY `uq_user_groups_invite_code` (`invite_code`),
+  CONSTRAINT `fk_user_groups_owner` FOREIGN KEY (`owner_id`) REFERENCES `users` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
 -- 3. group_vote_info
 CREATE TABLE `group_vote_info` (
   `group_vote_info_id` BIGINT    NOT NULL AUTO_INCREMENT COMMENT '투표 정보 고유 ID',
-  `group_id`           BIGINT    NOT NULL UNIQUE         COMMENT '그룹 ID (FK → groups)',
+  `group_id`           BIGINT    NOT NULL UNIQUE         COMMENT '그룹 ID (FK → user_groups)',
   `vote_started_at`    TIMESTAMP NULL                    COMMENT '투표 시작 시각',
   `vote_ended_at`      TIMESTAMP NULL                    COMMENT '투표 종료 시각',
   `is_force_started`   BOOLEAN   NOT NULL DEFAULT FALSE  COMMENT '방장 강제 시작 여부 (FALSE=전원 Ready 자동시작 / TRUE=방장 수동시작)',
   PRIMARY KEY (`group_vote_info_id`),
-  CONSTRAINT `fk_group_vote_info_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`group_id`)
+  CONSTRAINT `fk_group_vote_info_group` FOREIGN KEY (`group_id`) REFERENCES `user_groups` (`group_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
 -- 4. group_finance
 CREATE TABLE `group_finance` (
   `group_finance_id` BIGINT      NOT NULL AUTO_INCREMENT COMMENT '재정 정보 고유 ID',
-  `group_id`         BIGINT      NOT NULL UNIQUE         COMMENT '그룹 ID (FK → groups)',
+  `group_id`         BIGINT      NOT NULL UNIQUE         COMMENT '그룹 ID (FK → user_groups)',
   `base_currency`    VARCHAR(10) NOT NULL DEFAULT 'KRW'  COMMENT '그룹 공통 기준 통화 (그룹 생성 시 국가코드 기반 자동 세팅)',
   PRIMARY KEY (`group_finance_id`),
-  CONSTRAINT `fk_group_finance_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`group_id`)
+  CONSTRAINT `fk_group_finance_group` FOREIGN KEY (`group_id`) REFERENCES `user_groups` (`group_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
 -- 5. group_exchange_rates
 CREATE TABLE `group_exchange_rates` (
   `group_exchange_rate_id` BIGINT         NOT NULL AUTO_INCREMENT COMMENT '환율 고유 ID',
-  `group_id`               BIGINT         NOT NULL                COMMENT '그룹 ID (FK → groups)',
+  `group_id`               BIGINT         NOT NULL                COMMENT '그룹 ID (FK → user_groups)',
   `currency`               VARCHAR(10)    NOT NULL                COMMENT '통화 코드 (USD, JPY 등)',
   `exchange_rate`          DECIMAL(10, 4) NOT NULL                COMMENT 'base_currency 기준 환율',
   `rate_updated_at`        TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '환율 업데이트 시각',
   PRIMARY KEY (`group_exchange_rate_id`),
   UNIQUE KEY `uq_group_exchange_rates` (`group_id`, `currency`),
-  CONSTRAINT `fk_group_exchange_rates_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`group_id`)
+  CONSTRAINT `fk_group_exchange_rates_group` FOREIGN KEY (`group_id`) REFERENCES `user_groups` (`group_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
@@ -114,7 +115,7 @@ CREATE TABLE `group_exchange_rates` (
 -- [v6 수정 1] joined_after_voting 컬럼 추가 (TRAVELLING/DONE 단계 가입자 권한 제한)
 CREATE TABLE `group_members` (
   `group_member_id`      BIGINT                 NOT NULL AUTO_INCREMENT COMMENT '그룹 멤버 고유 ID',
-  `group_id`             BIGINT                 NOT NULL                COMMENT '그룹 ID (FK → groups)',
+  `group_id`             BIGINT                 NOT NULL                COMMENT '그룹 ID (FK → user_groups)',
   `user_id`              BIGINT                 NOT NULL                COMMENT '회원 ID (FK → users)',
   `role`                 ENUM('OWNER','MEMBER') NOT NULL DEFAULT 'MEMBER' COMMENT '역할',
   `is_ready`             BOOLEAN                NOT NULL DEFAULT FALSE  COMMENT 'Ready 상태 (한 번 TRUE로 설정 후 해제 불가 — 백엔드 방어)',
@@ -123,7 +124,7 @@ CREATE TABLE `group_members` (
   `joined_at`            TIMESTAMP              NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '그룹 참여일자',
   PRIMARY KEY (`group_member_id`),
   UNIQUE KEY `uq_group_members` (`group_id`, `user_id`),
-  CONSTRAINT `fk_group_members_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`group_id`),
+  CONSTRAINT `fk_group_members_group` FOREIGN KEY (`group_id`) REFERENCES `user_groups` (`group_id`),
   CONSTRAINT `fk_group_members_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -151,13 +152,13 @@ CREATE TABLE `places` (
 -- 8. place_bookmarks
 CREATE TABLE `place_bookmarks` (
   `place_bookmark_id` BIGINT    NOT NULL AUTO_INCREMENT COMMENT '장바구니 고유 ID',
-  `group_id`          BIGINT    NOT NULL                COMMENT '그룹 ID (FK → groups)',
+  `group_id`          BIGINT    NOT NULL                COMMENT '그룹 ID (FK → user_groups)',
   `user_id`           BIGINT    NOT NULL                COMMENT '담은 회원 ID (FK → users)',
   `place_id`          BIGINT    NOT NULL                COMMENT '장소 ID (FK → places)',
   `created_at`        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '담은 일자',
   PRIMARY KEY (`place_bookmark_id`),
   UNIQUE KEY `uq_place_bookmarks` (`group_id`, `user_id`, `place_id`),
-  CONSTRAINT `fk_place_bookmarks_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`group_id`),
+  CONSTRAINT `fk_place_bookmarks_group` FOREIGN KEY (`group_id`) REFERENCES `user_groups` (`group_id`),
   CONSTRAINT `fk_place_bookmarks_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`),
   CONSTRAINT `fk_place_bookmarks_place` FOREIGN KEY (`place_id`) REFERENCES `places` (`place_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -167,14 +168,14 @@ CREATE TABLE `place_bookmarks` (
 -- [v5 수정 3] voted_at 코멘트 보강 (UPDATE 금지 정책 명시)
 CREATE TABLE `votes` (
   `vote_id`  BIGINT    NOT NULL AUTO_INCREMENT COMMENT '투표 고유 ID',
-  `group_id` BIGINT    NOT NULL                COMMENT '그룹 ID (FK → groups)',
+  `group_id` BIGINT    NOT NULL                COMMENT '그룹 ID (FK → user_groups)',
   `user_id`  BIGINT    NOT NULL                COMMENT '투표한 회원 ID (FK → users)',
   `place_id` BIGINT    NOT NULL                COMMENT '투표 대상 장소 ID (FK → places)',
   `result`   TINYINT   NOT NULL                COMMENT '1=LIKE / -1=DISLIKE / 0=자동LIKE(본인 장소)',
   `voted_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '투표 일시 (UPDATE 금지 — 블라인드 투표 철학, 재투표는 uq_votes UNIQUE KEY로 DB 차단)',
   PRIMARY KEY (`vote_id`),
   UNIQUE KEY `uq_votes` (`group_id`, `user_id`, `place_id`),
-  CONSTRAINT `fk_votes_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`group_id`),
+  CONSTRAINT `fk_votes_group` FOREIGN KEY (`group_id`) REFERENCES `user_groups` (`group_id`),
   CONSTRAINT `fk_votes_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`),
   CONSTRAINT `fk_votes_place` FOREIGN KEY (`place_id`) REFERENCES `places` (`place_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -184,7 +185,7 @@ CREATE TABLE `votes` (
 -- [v5 수정 2] cluster_id 제거 (day_number와 1:1 중복)
 CREATE TABLE `schedules` (
   `schedule_id`           BIGINT    NOT NULL AUTO_INCREMENT COMMENT '일정 고유 ID',
-  `group_id`              BIGINT    NOT NULL                COMMENT '그룹 ID (FK → groups)',
+  `group_id`              BIGINT    NOT NULL                COMMENT '그룹 ID (FK → user_groups)',
   `day_number`            INT       NOT NULL                COMMENT '여행 일차 (1부터 시작, K-Means 클러스터 ID와 동일)',
   `slot_order`            INT       NOT NULL                COMMENT '하루 내 방문 순서',
   `place_id`              BIGINT    NULL                    COMMENT '배정된 장소 ID (NULL이면 자유시간 슬롯)',
@@ -195,7 +196,7 @@ CREATE TABLE `schedules` (
   `updated_at`            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '최종 수정일시',
   PRIMARY KEY (`schedule_id`),
   UNIQUE KEY `uq_schedules_slot` (`group_id`, `day_number`, `slot_order`),
-  CONSTRAINT `fk_schedules_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`group_id`),
+  CONSTRAINT `fk_schedules_group` FOREIGN KEY (`group_id`) REFERENCES `user_groups` (`group_id`),
   CONSTRAINT `fk_schedules_place` FOREIGN KEY (`place_id`) REFERENCES `places` (`place_id`),
   CONSTRAINT `chk_schedules_free_time` CHECK (
     (is_free_time = TRUE  AND place_id IS NULL) OR
@@ -208,14 +209,14 @@ CREATE TABLE `schedules` (
 -- [v6 수정 3] alt_rank 컬럼 제거 (Plan B 폭포수 검색이 동적 정렬 사용 — 의사코드 v2.3 §7.3)
 CREATE TABLE `schedule_alts` (
   `schedule_alt_id` BIGINT      NOT NULL AUTO_INCREMENT COMMENT '대안 장소 고유 ID',
-  `group_id`        BIGINT      NOT NULL                COMMENT '그룹 ID (FK → groups)',
+  `group_id`        BIGINT      NOT NULL                COMMENT '그룹 ID (FK → user_groups)',
   `place_id`        BIGINT      NOT NULL                COMMENT '대안 장소 ID (FK → places)',
   `category`        ENUM('FOOD','CULTURE','ACTIVITY','SHOPPING','NATURE','ETC') NOT NULL COMMENT '카테고리',
   `density_point`   INT         NOT NULL                COMMENT 'Density Point (places.density_point 캐시)',
   `priority_score`  FLOAT       NOT NULL                COMMENT 'Weighted Cost 기반 우선순위 점수 (Plan B 폭포수 검색 시 정렬 키)',
   PRIMARY KEY (`schedule_alt_id`),
   UNIQUE KEY `uq_schedule_alts` (`group_id`, `place_id`),
-  CONSTRAINT `fk_schedule_alts_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`group_id`),
+  CONSTRAINT `fk_schedule_alts_group` FOREIGN KEY (`group_id`) REFERENCES `user_groups` (`group_id`),
   CONSTRAINT `fk_schedule_alts_place` FOREIGN KEY (`place_id`) REFERENCES `places` (`place_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -223,7 +224,7 @@ CREATE TABLE `schedule_alts` (
 -- 12. expenses
 CREATE TABLE `expenses` (
   `expense_id`  BIGINT         NOT NULL AUTO_INCREMENT COMMENT '지출 고유 ID',
-  `group_id`    BIGINT         NOT NULL                COMMENT '그룹 ID (FK → groups)',
+  `group_id`    BIGINT         NOT NULL                COMMENT '그룹 ID (FK → user_groups)',
   `payer_id`    BIGINT         NOT NULL                COMMENT '결제자 회원 ID (FK → users)',
   `item_name`   VARCHAR(100)   NOT NULL                COMMENT '지출 항목명',
   `amount`      DECIMAL(12, 2) NOT NULL                COMMENT '결제 금액',
@@ -232,7 +233,7 @@ CREATE TABLE `expenses` (
   `ocr_raw`     JSON           NULL                    COMMENT 'Vision AI 추출 원본',
   `paid_at`     TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '결제 일시',
   PRIMARY KEY (`expense_id`),
-  CONSTRAINT `fk_expenses_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`group_id`),
+  CONSTRAINT `fk_expenses_group` FOREIGN KEY (`group_id`) REFERENCES `user_groups` (`group_id`),
   CONSTRAINT `fk_expenses_payer` FOREIGN KEY (`payer_id`) REFERENCES `users` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -255,7 +256,7 @@ CREATE TABLE `expense_members` (
 CREATE TABLE `notifications` (
   `notification_id` BIGINT       NOT NULL AUTO_INCREMENT COMMENT '알림 고유 ID',
   `user_id`         BIGINT       NOT NULL                COMMENT '수신 회원 ID (FK → users)',
-  `group_id`        BIGINT       NULL                    COMMENT '관련 그룹 ID (FK → groups)',
+  `group_id`        BIGINT       NULL                    COMMENT '관련 그룹 ID (FK → user_groups)',
   `type`            ENUM(
                       'MEMBER_READY',
                       'VOTE_STARTED',
@@ -267,20 +268,20 @@ CREATE TABLE `notifications` (
   `created_at`      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '알림 생성일시',
   PRIMARY KEY (`notification_id`),
   CONSTRAINT `fk_notifications_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`),
-  CONSTRAINT `fk_notifications_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`group_id`)
+  CONSTRAINT `fk_notifications_group` FOREIGN KEY (`group_id`) REFERENCES `user_groups` (`group_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
 -- 15. album_photos
 CREATE TABLE `album_photos` (
   `album_photo_id` BIGINT       NOT NULL AUTO_INCREMENT COMMENT '앨범 사진 고유 ID',
-  `group_id`       BIGINT       NOT NULL                COMMENT '그룹 ID (FK → groups)',
+  `group_id`       BIGINT       NOT NULL                COMMENT '그룹 ID (FK → user_groups)',
   `uploader_id`    BIGINT       NOT NULL                COMMENT '업로드한 회원 ID (FK → users)',
   `photo_url`      VARCHAR(500) NOT NULL                COMMENT '사진 저장 URL',
   `taken_at`       TIMESTAMP    NULL                    COMMENT '촬영 시각',
   `uploaded_at`    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '업로드 일시',
   PRIMARY KEY (`album_photo_id`),
-  CONSTRAINT `fk_album_photos_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`group_id`),
+  CONSTRAINT `fk_album_photos_group` FOREIGN KEY (`group_id`) REFERENCES `user_groups` (`group_id`),
   CONSTRAINT `fk_album_photos_uploader` FOREIGN KEY (`uploader_id`) REFERENCES `users` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -289,14 +290,14 @@ CREATE TABLE `album_photos` (
 CREATE TABLE `passport_stamps` (
   `passport_stamp_id` BIGINT       NOT NULL AUTO_INCREMENT COMMENT '여권 스탬프 고유 ID',
   `user_id`           BIGINT       NOT NULL                COMMENT '회원 ID (FK → users)',
-  `group_id`          BIGINT       NULL                    COMMENT '여행 그룹 ID (FK → groups)',
+  `group_id`          BIGINT       NULL                    COMMENT '여행 그룹 ID (FK → user_groups)',
   `city`              VARCHAR(100) NOT NULL                COMMENT '다녀온 도시명',
   `country`           VARCHAR(100) NULL                    COMMENT '다녀온 국가명',
   `country_code`      VARCHAR(5)   NULL                    COMMENT '국가 코드 (국기 이미지 표시용)',
   `stamped_at`        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '스탬프 생성 일시',
   PRIMARY KEY (`passport_stamp_id`),
   CONSTRAINT `fk_passport_stamps_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`),
-  CONSTRAINT `fk_passport_stamps_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`group_id`)
+  CONSTRAINT `fk_passport_stamps_group` FOREIGN KEY (`group_id`) REFERENCES `user_groups` (`group_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 

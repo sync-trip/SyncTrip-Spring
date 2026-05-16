@@ -93,4 +93,9 @@ public class BandMember {
     public void updateReady(boolean isReady) {
         this.isReady = isReady;
     }
+
+    public void markJoinedAfterVoting() {
+        // 투표가 시작된 뒤 합류한 멤버는 장바구니/투표에서 제한을 받는다.
+        this.joinedAfterVoting = true;
+    }
 }

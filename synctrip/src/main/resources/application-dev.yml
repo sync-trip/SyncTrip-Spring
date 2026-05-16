@@ -1,7 +1,7 @@
 spring:
   config:
     activate:
-      on-profile: prod
+      on-profile: dev
 
   datasource:
     url: ${DB_URL}
@@ -14,6 +14,15 @@ spring:
       ddl-auto: validate
     show-sql: false
 
+logging:
+  level:
+    root: INFO
+    com.sync: DEBUG
+    org.springframework.web: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+
+# dev 환경: 보안 기능 OFF (개발 편의성 우선)
 # 보안 설정: 환경별로 다르게 적용됨
 app:
   security:
@@ -25,13 +34,16 @@ app:
       - /v3/api-docs/**
       - /actuator/**
   invite:
-    # 운영 환경에서는 실제 프로젝트 도메인으로 공유 링크를 생성한다.
-    share-base-url: ${APP_INVITE_SHARE_BASE_URL:https://api.sync-trip.app/invite?code=}
+    # dev 환경에서는 테스트 도메인으로 공유 링크를 생성한다.
+    share-base-url: ${APP_INVITE_SHARE_BASE_URL:https://test.sync-trip.app/invite?code=}
     # 딥링크는 앱 스킴을 사용하므로 dev/prod 모두 동일하게 유지한다.
     deep-link-base-url: ${APP_INVITE_DEEP_LINK_BASE_URL:synctrip://band/join?code=}
+# dev 환경: 모든 엔드포인트 노출(actuator, swagger 등)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
 
-logging:
-  level:
-    root: info
-    com.sync: info
+
 
