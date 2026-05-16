@@ -21,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import static org.mockito.Mockito.mock;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -53,7 +54,10 @@ class BandServiceTest {
                 new BandInviteProperties(
                         "https://test.sync-trip.app/invite?code=",
                         "synctrip://band/join?code="
-                )
+                ),
+                mock(ScheduleGenerationService.class),
+                mock(com.sync.repository.GroupVoteInfoRepository.class),
+                mock(org.springframework.messaging.simp.SimpMessagingTemplate.class)
         );
     }
 

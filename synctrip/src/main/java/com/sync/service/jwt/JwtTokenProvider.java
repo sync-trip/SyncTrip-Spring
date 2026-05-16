@@ -48,6 +48,10 @@ public class JwtTokenProvider {
         }
     }
 
+    public Long getUserIdFromToken(String token) {
+        return Long.parseLong(parse(token).getPayload().getSubject());
+    }
+
     private String createToken(User user, String type, long ttlSeconds) {
         // subject에는 내부 사용자 ID를 넣고, type(access/refresh)로 용도를 구분
         Instant now = Instant.now();

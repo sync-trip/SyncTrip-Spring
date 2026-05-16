@@ -12,14 +12,19 @@ import com.sync.dto.band.BandMemberResponse;
 import com.sync.dto.band.BandReadyResponse;
 import com.sync.dto.band.BandResponse;
 import com.sync.dto.band.BandStatusTransitionResponse;
+import com.sync.domain.vote.GroupVoteInfo;
+import com.sync.dto.ws.ReadyEvent;
+import com.sync.dto.ws.StatusEvent;
 import com.sync.repository.BandMemberRepository;
 import com.sync.repository.BandRepository;
+import com.sync.repository.GroupVoteInfoRepository;
 import com.sync.repository.UserRepository;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import org.springframework.http.HttpStatus;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -32,15 +37,24 @@ public class BandService {
     private final BandMemberRepository bandMemberRepository;
     private final UserRepository userRepository;
     private final BandInviteProperties bandInviteProperties;
+    private final ScheduleGenerationService scheduleGenerationService;
+    private final GroupVoteInfoRepository groupVoteInfoRepository;
+    private final SimpMessagingTemplate messagingTemplate;
 
-    public BandService(BandRepository bandRepository, 
-                       BandMemberRepository bandMemberRepository, 
+    public BandService(BandRepository bandRepository,
+                       BandMemberRepository bandMemberRepository,
                        UserRepository userRepository,
-                       BandInviteProperties bandInviteProperties) {
+                       BandInviteProperties bandInviteProperties,
+                       ScheduleGenerationService scheduleGenerationService,
+                       GroupVoteInfoRepository groupVoteInfoRepository,
+                       SimpMessagingTemplate messagingTemplate) {
         this.bandRepository = bandRepository;
         this.bandMemberRepository = bandMemberRepository;
         this.userRepository = userRepository;
         this.bandInviteProperties = bandInviteProperties;
+        this.scheduleGenerationService = scheduleGenerationService;
+        this.groupVoteInfoRepository = groupVoteInfoRepository;
+        this.messagingTemplate = messagingTemplate;
     }
 
     public BandResponse createBand(Long userId, BandCreateRequest request) {
@@ -128,6 +142,20 @@ public class BandService {
         band.advanceStatus();
         bandRepository.save(band);
 
+        if (previousStatus == BandStatus.PLANNING) {
+            groupVoteInfoRepository.save(GroupVoteInfo.start(band, true));
+        } else if (previousStatus == BandStatus.VOTING) {
+            groupVoteInfoRepository.findByBandId(band.getId())
+                    .ifPresent(info -> {
+                        info.end();
+                        groupVoteInfoRepository.save(info);
+                    });
+            scheduleGenerationService.generate(band);
+        }
+
+        messagingTemplate.convertAndSend("/topic/bands/" + band.getId() + "/status",
+                new StatusEvent(band.getId(), band.getStatus()));
+
         return new BandStatusTransitionResponse(band.getId(), previousStatus, band.getStatus());
     }
 
@@ -200,9 +228,16 @@ public class BandService {
         boolean allReady = totalCount > 0 && totalCount == readyCount;
 
         if (ready && allReady) {
-            band.advanceStatus();
+            band.advanceStatus();  // PLANNING → VOTING
             bandRepository.save(band);
+            groupVoteInfoRepository.save(GroupVoteInfo.start(band, false));
+            messagingTemplate.convertAndSend("/topic/bands/" + bandId + "/status",
+                    new StatusEvent(bandId, band.getStatus()));
         }
+
+        ReadyEvent readyEvent = new ReadyEvent(
+                user.getId(), member.isReady(), readyCount, totalCount, allReady, band.getStatus());
+        messagingTemplate.convertAndSend("/topic/bands/" + bandId + "/ready", readyEvent);
 
         return new BandReadyResponse(
                 band.getId(),

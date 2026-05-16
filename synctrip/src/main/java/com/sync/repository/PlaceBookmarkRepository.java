@@ -17,6 +17,10 @@ public interface PlaceBookmarkRepository extends JpaRepository<PlaceBookmark, Lo
 
     long countByBandIdAndUserId(Long bandId, Long userId);
 
+    boolean existsByBandIdAndUserIdAndPlaceId(Long bandId, Long userId, Long placeId);
+
+    List<PlaceBookmark> findByBandId(Long bandId);
+
     void deleteByBandIdAndUserIdAndPlaceId(Long bandId, Long userId, Long placeId);
 }
 

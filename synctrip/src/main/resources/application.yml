@@ -24,6 +24,7 @@ app:
       - /swagger-ui/**
       - /v3/api-docs/**
       - /actuator/**
+      - /ws/**
   invite:
     # 기본값은 테스트 도메인으로 두고, 프로필별 설정으로 덮어쓴다.
     share-base-url: ${APP_INVITE_SHARE_BASE_URL:https://test.sync-trip.app/invite?code=}
@@ -48,6 +49,11 @@ kakao:
   client-secret: ${KAKAO_CLIENT_SECRET}
   redirect-uri: ${KAKAO_REDIRECT_URI}
   scope: ${KAKAO_SCOPE:account_email,profile_nickname,profile_image}
+
+google:
+  maps:
+    api-key: ${GOOGLE_MAPS_API_KEY:}
+    places-base-url: ${GOOGLE_PLACES_BASE_URL:https://places.googleapis.com}
 
 management:
   endpoints:
