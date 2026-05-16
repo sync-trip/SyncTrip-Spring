@@ -127,11 +127,9 @@ public class PlacePickService {
         loadBand(bandId);
         BandMember member = loadBandMember(bandId, userId);
         validatePickableBand(member.getBand());
-        if (member.isJoinedAfterVoting()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "투표 이후 합류한 멤버는 장바구니를 볼 수만 있고 수정할 수 없습니다.");
-        }
 
         // 2) 현재 사용자의 장바구니 목록을 최신순으로 가져온다.
+        // joined_after_voting 멤버는 담은 장소가 없으므로 자연히 빈 목록이 반환된다.
         List<PlacePickResponse> items = placeBookmarkRepository.findByBandIdAndUserIdOrderByCreatedAtDesc(bandId, userId)
                 .stream()
                 .map(this::toResponse)
