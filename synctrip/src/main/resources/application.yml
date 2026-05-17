@@ -52,7 +52,7 @@ kakao:
 
 google:
   maps:
-    api-key: ${GOOGLE_MAPS_API_KEY:}
+    api-key: ${GOOGLE_MAPS_API_KEY}
     places-base-url: ${GOOGLE_PLACES_BASE_URL:https://places.googleapis.com}
 
 management:
