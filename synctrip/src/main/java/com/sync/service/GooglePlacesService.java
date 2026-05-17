@@ -26,7 +26,8 @@ public class GooglePlacesService {
 
     private static final String NEARBY_SEARCH_PATH = "/v1/places:searchNearby";
     private static final String FIELD_MASK =
-            "places.id,places.displayName,places.location,places.types,places.regularOpeningHours";
+            "places.id,places.displayName,places.location,places.types," +
+            "places.regularOpeningHours,places.rating,places.formattedAddress,places.photos";
     private static final int MAX_RESULT_COUNT = 20;
 
     private final RestTemplate restTemplate;
@@ -79,6 +80,15 @@ public class GooglePlacesService {
             throw new ResponseStatusException(BAD_GATEWAY,
                     "Google Places API 호출 실패: " + ex.getResponseBodyAsString(), ex);
         }
+    }
+
+    /**
+     * Google Places 사진 이름으로 썸네일 URL을 생성한다.
+     * Android Glide/Coil이 302 리다이렉트를 자동으로 따라간다.
+     */
+    public String buildPhotoUrl(String photoName) {
+        return properties.placesBaseUrl() + "/v1/" + photoName
+                + "/media?maxHeightPx=400&maxWidthPx=400&key=" + properties.apiKey();
     }
 
     private HttpHeaders buildHeaders() {
