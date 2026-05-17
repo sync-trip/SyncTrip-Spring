@@ -8,6 +8,7 @@ import com.sync.dto.band.BandMemberResponse;
 import com.sync.dto.band.BandReadyResponse;
 import com.sync.dto.band.BandResponse;
 import com.sync.dto.band.BandStatusTransitionResponse;
+import com.sync.dto.band.BandUpdateRequest;
 import com.sync.service.BandService;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
@@ -104,6 +105,15 @@ public class BandController {
     ) {
         bandService.deleteBand(userId, bandId);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{bandId}/update")
+    public ResponseEntity<BandResponse> updateBand(
+            @LoginUser Long userId,
+            @PathVariable Long bandId,
+            @RequestBody BandUpdateRequest request
+    ) {
+        return ResponseEntity.ok(bandService.updateBand(userId, bandId, request));
     }
 
     @PostMapping("/{bandId}/status/advance")

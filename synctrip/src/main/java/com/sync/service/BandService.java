@@ -12,6 +12,7 @@ import com.sync.dto.band.BandMemberResponse;
 import com.sync.dto.band.BandReadyResponse;
 import com.sync.dto.band.BandResponse;
 import com.sync.dto.band.BandStatusTransitionResponse;
+import com.sync.dto.band.BandUpdateRequest;
 import com.sync.domain.vote.GroupVoteInfo;
 import com.sync.dto.ws.ReadyEvent;
 import com.sync.dto.ws.StatusEvent;
@@ -108,7 +109,7 @@ public class BandService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
 
-        Band band = bandRepository.findByInviteCode(inviteCode)
+        Band band = bandRepository.findActiveByInviteCode(inviteCode)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "유효하지 않은 초대 코드입니다."));
 
         if (band.getInviteCodeExpiredAt() != null && band.getInviteCodeExpiredAt().isBefore(java.time.LocalDateTime.now())) {
@@ -142,14 +143,42 @@ public class BandService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "밴드는 방장만 삭제할 수 있습니다.");
         }
 
-        // FK 의존 순서에 따라 연관 데이터를 먼저 삭제한다.
-        scheduleRepository.deleteAll(scheduleRepository.findByBandIdOrderByDayNumberAscSlotOrderAsc(bandId));
-        scheduleAltRepository.deleteAll(scheduleAltRepository.findByBandIdOrderByPriorityScoreDesc(bandId));
-        voteRepository.deleteAll(voteRepository.findByBandId(bandId));
-        groupVoteInfoRepository.findByBandId(bandId).ifPresent(groupVoteInfoRepository::delete);
-        placeBookmarkRepository.deleteAll(placeBookmarkRepository.findByBandId(bandId));
-        bandMemberRepository.deleteAll(bandMemberRepository.findByBandId(bandId));
-        bandRepository.delete(band);
+        // 소프트 삭제 처리
+        band.delete();
+        bandRepository.save(band);
+    }
+
+    public BandResponse updateBand(Long userId, Long bandId, BandUpdateRequest request) {
+        User user = userRepository.findByIdAndIsDeletedFalse(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
+
+        Band band = bandRepository.findById(bandId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "밴드를 찾을 수 없습니다."));
+
+        if (!band.getOwner().getId().equals(user.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "밴드 정보는 방장만 수정할 수 있습니다.");
+        }
+
+        band.updateInfo(
+                request.name(),
+                request.destination(),
+                request.destinationLat(),
+                request.destinationLng(),
+                request.countryCode(),
+                request.overseas(),
+                request.startDate(),
+                request.endDate()
+        );
+        bandRepository.save(band);
+
+        return new BandResponse(
+                band.getId(),
+                band.getName(),
+                band.getDestination(),
+                band.getStartDate(),
+                band.getEndDate(),
+                band.getInviteCode()
+        );
     }
 
     public BandReadyResponse markReady(Long userId, Long bandId) {

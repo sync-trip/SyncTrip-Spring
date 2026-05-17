@@ -86,6 +86,12 @@ public class Band {
     @Column(name = "closed_by", length = 20)
     private String closedBy;
 
+    @Column(name = "is_deleted", nullable = false)
+    private boolean isDeleted = false;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -198,6 +204,32 @@ public class Band {
         this.status = nextStatus;
     }
 
+    /**
+     * 여행 기본 정보 수정 (PLANNING 단계에서만 가능)
+     */
+    public void updateInfo(String name, String destination, double lat, double lng,
+                          String countryCode, boolean overseas, LocalDate start, LocalDate end) {
+        if (this.status != BandStatus.PLANNING) {
+            throw new IllegalStateException("여행 정보는 준비 단계(PLANNING)에서만 수정할 수 있습니다.");
+        }
+        this.name = name;
+        this.destination = destination;
+        this.destinationLat = lat;
+        this.destinationLng = lng;
+        this.countryCode = countryCode;
+        this.overseas = overseas;
+        this.startDate = start;
+        this.endDate = end;
+    }
+
+    /**
+     * 소프트 삭제 처리
+     */
+    public void delete() {
+        this.isDeleted = true;
+        this.deletedAt = LocalDateTime.now();
+    }
+
     public Long getId() {
         return id;
     }
@@ -272,5 +304,13 @@ public class Band {
 
     public String getClosedBy() {
         return closedBy;
+    }
+
+    public boolean isDeleted() {
+        return isDeleted;
+    }
+
+    public LocalDateTime getDeletedAt() {
+        return deletedAt;
     }
 }
