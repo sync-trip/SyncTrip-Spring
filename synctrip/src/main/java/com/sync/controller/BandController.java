@@ -49,13 +49,11 @@ public class BandController {
     }
 
     @PostMapping("/join")
-    // JWT 인증된 사용자가 초대 코드로 기존 밴드에 참여
-    public ResponseEntity<Void> joinBand(
+    public ResponseEntity<BandResponse> joinBand(
             @LoginUser Long userId,
             @RequestBody BandJoinRequest request
     ) {
-        bandService.joinBand(userId, request.inviteCode());
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(bandService.joinBand(userId, request.inviteCode()));
     }
 
     @PostMapping("/{bandId}/invite-code")

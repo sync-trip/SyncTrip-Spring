@@ -1,7 +1,7 @@
 # SyncTrip 알고리즘 의사코드 v2.6
 
 **작성일:** 2026-05-12 (v2.6 패치)
-**연관 문서:** `SyncTrip_인수인계문서_v6.1.md`, `SyncTrip_DDL_v6.sql`
+**연관 문서:** `SyncTrip_인수인계문서_v6.1.md`, `SyncTrip_DDL_v7.sql`
 
 **v2.5 → v2.6 변경 요약 (FOOD 동선 개선):**
 - [FIX-47] §5.4 `insert_food_by_window` — FOOD 선택 로직을 priority 순 → 삽입 위치 기준 nearest 방식으로 교체 (동선 지그재그 방지)
