@@ -55,7 +55,7 @@ class BandServiceTest {
                         "https://test.sync-trip.app/invite?code=",
                         "synctrip://band/join?code="
                 ),
-                mock(ScheduleGenerationService.class),
+                mock(ScheduleService.class),
                 mock(com.sync.repository.GroupVoteInfoRepository.class),
                 mock(org.springframework.messaging.simp.SimpMessagingTemplate.class),
                 mock(com.sync.repository.ScheduleRepository.class),

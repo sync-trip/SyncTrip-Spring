@@ -3,7 +3,6 @@ package com.sync.controller;
 import com.sync.common.annotation.LoginUser;
 import com.sync.dto.schedule.ScheduleAltResponse;
 import com.sync.dto.schedule.ScheduleResponse;
-import com.sync.service.ScheduleGenerateService;
 import com.sync.service.ScheduleService;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
@@ -18,19 +17,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class ScheduleController {
 
     private final ScheduleService scheduleService;
-    private final ScheduleGenerateService scheduleGenerateService;
 
-    public ScheduleController(ScheduleService scheduleService,
-                               ScheduleGenerateService scheduleGenerateService) {
+    public ScheduleController(ScheduleService scheduleService) {
         this.scheduleService = scheduleService;
-        this.scheduleGenerateService = scheduleGenerateService;
     }
 
     @PostMapping("/generate")
     public ResponseEntity<Void> generateSchedule(
             @LoginUser Long userId,
             @PathVariable Long bandId) {
-        scheduleGenerateService.generate(userId, bandId);
+        scheduleService.generateManual(userId, bandId);
         return ResponseEntity.ok().build();
     }
 

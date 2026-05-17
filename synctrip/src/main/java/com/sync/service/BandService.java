@@ -41,7 +41,7 @@ public class BandService {
     private final BandMemberRepository bandMemberRepository;
     private final UserRepository userRepository;
     private final BandInviteProperties bandInviteProperties;
-    private final ScheduleGenerationService scheduleGenerationService;
+    private final ScheduleService scheduleService;
     private final GroupVoteInfoRepository groupVoteInfoRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final ScheduleRepository scheduleRepository;
@@ -53,7 +53,7 @@ public class BandService {
                        BandMemberRepository bandMemberRepository,
                        UserRepository userRepository,
                        BandInviteProperties bandInviteProperties,
-                       ScheduleGenerationService scheduleGenerationService,
+                       ScheduleService scheduleService,
                        GroupVoteInfoRepository groupVoteInfoRepository,
                        SimpMessagingTemplate messagingTemplate,
                        ScheduleRepository scheduleRepository,
@@ -64,7 +64,7 @@ public class BandService {
         this.bandMemberRepository = bandMemberRepository;
         this.userRepository = userRepository;
         this.bandInviteProperties = bandInviteProperties;
-        this.scheduleGenerationService = scheduleGenerationService;
+        this.scheduleService = scheduleService;
         this.groupVoteInfoRepository = groupVoteInfoRepository;
         this.messagingTemplate = messagingTemplate;
         this.scheduleRepository = scheduleRepository;
@@ -187,7 +187,7 @@ public class BandService {
                         info.end();
                         groupVoteInfoRepository.save(info);
                     });
-            scheduleGenerationService.generate(band);
+            scheduleService.generateAutomated(band);
         }
 
         messagingTemplate.convertAndSend("/topic/bands/" + band.getId() + "/status",
