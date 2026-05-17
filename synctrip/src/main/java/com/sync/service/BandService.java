@@ -164,6 +164,27 @@ public class BandService {
         bandRepository.delete(band);
     }
 
+    public void deleteBand(Long userId, Long bandId) {
+        User user = userRepository.findByIdAndIsDeletedFalse(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
+
+        Band band = bandRepository.findById(bandId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "밴드를 찾을 수 없습니다."));
+
+        if (!band.getOwner().getId().equals(user.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "밴드는 방장만 삭제할 수 있습니다.");
+        }
+
+        // FK 의존 순서에 따라 연관 데이터를 먼저 삭제한다.
+        scheduleRepository.deleteAll(scheduleRepository.findByBandIdOrderByDayNumberAscSlotOrderAsc(bandId));
+        scheduleAltRepository.deleteAll(scheduleAltRepository.findByBandIdOrderByPriorityScoreDesc(bandId));
+        voteRepository.deleteAll(voteRepository.findByBandId(bandId));
+        groupVoteInfoRepository.findByBandId(bandId).ifPresent(groupVoteInfoRepository::delete);
+        placeBookmarkRepository.deleteAll(placeBookmarkRepository.findByBandId(bandId));
+        bandMemberRepository.deleteAll(bandMemberRepository.findByBandId(bandId));
+        bandRepository.delete(band);
+    }
+
     public BandReadyResponse markReady(Long userId, Long bandId) {
         return updateReadyState(userId, bandId, true);
     }
