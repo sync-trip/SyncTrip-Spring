@@ -100,11 +100,13 @@ public class BandService {
                 band.getDestination(),
                 band.getStartDate(),
                 band.getEndDate(),
-                band.getInviteCode()
+                band.getInviteCode(),
+                band.getStatus(),
+                true
         );
     }
 
-    public void joinBand(Long userId, String inviteCode) {
+    public BandResponse joinBand(Long userId, String inviteCode) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
 
@@ -124,11 +126,21 @@ public class BandService {
         }
 
         BandMember member = BandMember.create(user, band, BandRole.MEMBER);
-        // PLANNING 이후에 들어온 멤버는 장바구니/투표 권한을 제한할 수 있도록 표시한다.
         if (band.getStatus() != BandStatus.PLANNING) {
             member.markJoinedAfterVoting();
         }
         bandMemberRepository.save(member);
+
+        return new BandResponse(
+                band.getId(),
+                band.getName(),
+                band.getDestination(),
+                band.getStartDate(),
+                band.getEndDate(),
+                band.getInviteCode(),
+                band.getStatus(),
+                false
+        );
     }
 
     public void deleteBand(Long userId, Long bandId) {
@@ -312,7 +324,9 @@ public class BandService {
                         m.getBand().getDestination(),
                         m.getBand().getStartDate(),
                         m.getBand().getEndDate(),
-                        m.getBand().getInviteCode()
+                        m.getBand().getInviteCode(),
+                        m.getBand().getStatus(),
+                        m.getRole() == com.sync.domain.band.BandRole.OWNER
                 ))
                 .collect(Collectors.toList());
     }

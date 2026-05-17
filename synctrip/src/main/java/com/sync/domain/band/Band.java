@@ -45,7 +45,7 @@ public class Band {
     @Column(name = "destination_lng", nullable = false)
     private double destinationLng;
 
-    @Column(name = "country_code", nullable = false, length = 5)
+    @Column(name = "country_code", length = 5)
     private String countryCode;
 
     @Column(name = "is_overseas", nullable = false)
