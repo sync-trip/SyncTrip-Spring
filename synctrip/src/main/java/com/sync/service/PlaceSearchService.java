@@ -102,7 +102,7 @@ public class PlaceSearchService {
         userRepository.findByIdAndIsDeletedFalse(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
 
-        Band band = bandRepository.findById(bandId)
+        Band band = bandRepository.findByIdAndIsDeletedFalse(bandId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "밴드를 찾을 수 없습니다."));
 
         if (!band.isOverseas()) {

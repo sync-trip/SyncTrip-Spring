@@ -176,7 +176,7 @@ public class VoteService {
     }
 
     private Band loadBand(Long bandId) {
-        return bandRepository.findById(bandId)
+        return bandRepository.findByIdAndIsDeletedFalse(bandId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "밴드를 찾을 수 없습니다."));
     }
 

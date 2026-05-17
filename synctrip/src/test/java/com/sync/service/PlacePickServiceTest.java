@@ -95,7 +95,7 @@ class PlacePickServiceTest {
         PlaceBookmark savedBookmark = createBookmark(200L, band, user, savedPlace);
 
         when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
-        when(bandRepository.findById(10L)).thenReturn(Optional.of(band));
+        when(bandRepository.findByIdAndIsDeletedFalse(10L)).thenReturn(Optional.of(band));
         when(bandMemberRepository.findByBandIdAndUserId(10L, 1L)).thenReturn(Optional.of(member));
         when(placeRepository.findByApiSourceAndExternalId(PlaceApiSource.KAKAO, "kakao-123")).thenReturn(Optional.empty());
         when(placeRepository.save(any(Place.class))).thenAnswer(invocation -> {
@@ -159,7 +159,7 @@ class PlacePickServiceTest {
         );
 
         when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
-        when(bandRepository.findById(10L)).thenReturn(Optional.of(band));
+        when(bandRepository.findByIdAndIsDeletedFalse(10L)).thenReturn(Optional.of(band));
         when(bandMemberRepository.findByBandIdAndUserId(10L, 1L)).thenReturn(Optional.of(member));
         when(placeRepository.findByApiSourceAndExternalId(PlaceApiSource.KAKAO, "kakao-123")).thenReturn(Optional.of(place));
         when(placeBookmarkRepository.findByBandIdAndUserIdAndPlaceId(10L, 1L, 300L)).thenReturn(Optional.of(existingBookmark));
@@ -192,7 +192,7 @@ class PlacePickServiceTest {
         );
 
         when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
-        when(bandRepository.findById(10L)).thenReturn(Optional.of(band));
+        when(bandRepository.findByIdAndIsDeletedFalse(10L)).thenReturn(Optional.of(band));
         when(bandMemberRepository.findByBandIdAndUserId(10L, 1L)).thenReturn(Optional.of(member));
         when(placeRepository.findByApiSourceAndExternalId(PlaceApiSource.KAKAO, "kakao-999")).thenReturn(Optional.empty());
         when(placeRepository.save(any(Place.class))).thenAnswer(invocation -> {
@@ -234,7 +234,7 @@ class PlacePickServiceTest {
         setCreatedAt(bookmark, LocalDateTime.of(2026, 5, 14, 10, 15));
 
         when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
-        when(bandRepository.findById(10L)).thenReturn(Optional.of(band));
+        when(bandRepository.findByIdAndIsDeletedFalse(10L)).thenReturn(Optional.of(band));
         when(bandMemberRepository.findByBandIdAndUserId(10L, 1L)).thenReturn(Optional.of(member));
         when(placeBookmarkRepository.findByBandIdAndUserIdOrderByCreatedAtDesc(10L, 1L)).thenReturn(List.of(bookmark));
 
@@ -269,7 +269,7 @@ class PlacePickServiceTest {
         PlaceBookmark bookmark = createBookmark(200L, band, user, place);
 
         when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
-        when(bandRepository.findById(10L)).thenReturn(Optional.of(band));
+        when(bandRepository.findByIdAndIsDeletedFalse(10L)).thenReturn(Optional.of(band));
         when(bandMemberRepository.findByBandIdAndUserId(10L, 1L)).thenReturn(Optional.of(member));
         when(placeBookmarkRepository.findByBandIdAndUserIdAndPlaceId(10L, 1L, 300L)).thenReturn(Optional.of(bookmark));
 

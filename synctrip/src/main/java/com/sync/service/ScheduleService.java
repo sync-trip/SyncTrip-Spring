@@ -100,7 +100,7 @@ public class ScheduleService {
     }
 
     private void generateInternal(Long userId, Long bandId, boolean isAutomated) {
-        Band band = bandRepository.findById(bandId)
+        Band band = bandRepository.findByIdAndIsDeletedFalse(bandId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "밴드를 찾을 수 없습니다."));
 
         // 수동 생성 시 권한 및 상태 체크
@@ -323,7 +323,7 @@ public class ScheduleService {
     }
 
     private Band loadBand(Long bandId) {
-        return bandRepository.findById(bandId)
+        return bandRepository.findByIdAndIsDeletedFalse(bandId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "밴드를 찾을 수 없습니다."));
     }
 

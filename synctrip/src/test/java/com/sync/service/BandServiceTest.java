@@ -57,11 +57,7 @@ class BandServiceTest {
                 ),
                 mock(ScheduleService.class),
                 mock(com.sync.repository.GroupVoteInfoRepository.class),
-                mock(org.springframework.messaging.simp.SimpMessagingTemplate.class),
-                mock(com.sync.repository.ScheduleRepository.class),
-                mock(com.sync.repository.ScheduleAltRepository.class),
-                mock(com.sync.repository.VoteRepository.class),
-                mock(com.sync.repository.PlaceBookmarkRepository.class)
+                mock(org.springframework.messaging.simp.SimpMessagingTemplate.class)
         );
     }
 
@@ -88,8 +84,7 @@ class BandServiceTest {
         setInviteCodeExpiredAt(band, originalExpiredAt);
 
         when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(owner));
-        when(bandRepository.findById(10L)).thenReturn(Optional.of(band));
-        when(bandRepository.save(any(Band.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(bandRepository.findByIdAndIsDeletedFalse(10L)).thenReturn(Optional.of(band));
 
         BandInviteCodeResponse response = bandService.getOrRefreshInviteCode(1L, 10L);
 
@@ -98,7 +93,6 @@ class BandServiceTest {
         assertThat(response.inviteCodeExpiredAt()).isEqualTo(originalExpiredAt);
         assertThat(response.inviteShareLink()).isEqualTo("https://test.sync-trip.app/invite?code=" + originalInviteCode);
         assertThat(response.inviteDeepLink()).isEqualTo("synctrip://band/join?code=" + originalInviteCode);
-        verify(bandRepository).save(band);
     }
 
     @Test
@@ -124,7 +118,7 @@ class BandServiceTest {
         setInviteCodeExpiredAt(band, expiredAt);
 
         when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(owner));
-        when(bandRepository.findById(10L)).thenReturn(Optional.of(band));
+        when(bandRepository.findByIdAndIsDeletedFalse(10L)).thenReturn(Optional.of(band));
         when(bandRepository.save(any(Band.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         BandInviteCodeResponse response = bandService.getOrRefreshInviteCode(1L, 10L);
@@ -159,7 +153,7 @@ class BandServiceTest {
         setId(band, 10L);
 
         when(userRepository.findByIdAndIsDeletedFalse(2L)).thenReturn(Optional.of(otherUser));
-        when(bandRepository.findById(10L)).thenReturn(Optional.of(band));
+        when(bandRepository.findByIdAndIsDeletedFalse(10L)).thenReturn(Optional.of(band));
 
         ResponseStatusException exception = org.junit.jupiter.api.Assertions.assertThrows(
                 ResponseStatusException.class,
@@ -198,7 +192,7 @@ class BandServiceTest {
 
         when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(owner));
         when(userRepository.findByIdAndIsDeletedFalse(2L)).thenReturn(Optional.of(other));
-        when(bandRepository.findById(10L)).thenReturn(Optional.of(band));
+        when(bandRepository.findByIdAndIsDeletedFalse(10L)).thenReturn(Optional.of(band));
         when(bandMemberRepository.findByBandIdAndUserId(10L, 1L)).thenReturn(Optional.of(ownerMember));
         when(bandMemberRepository.findByBandIdAndUserId(10L, 2L)).thenReturn(Optional.of(otherMember));
         when(bandMemberRepository.countByBandId(10L)).thenReturn(2L);
@@ -253,7 +247,7 @@ class BandServiceTest {
         member.updateReady(true);
 
         when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
-        when(bandRepository.findById(10L)).thenReturn(Optional.of(band));
+        when(bandRepository.findByIdAndIsDeletedFalse(10L)).thenReturn(Optional.of(band));
         when(bandMemberRepository.findByBandIdAndUserId(10L, 1L)).thenReturn(Optional.of(member));
         when(bandMemberRepository.countByBandId(10L)).thenReturn(1L);
         when(bandMemberRepository.countByBandIdAndIsReadyTrue(10L)).thenAnswer(invocation -> member.isReady() ? 1L : 0L);
@@ -287,7 +281,7 @@ class BandServiceTest {
         setId(band, 10L);
 
         when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(owner));
-        when(bandRepository.findById(10L)).thenReturn(Optional.of(band));
+        when(bandRepository.findByIdAndIsDeletedFalse(10L)).thenReturn(Optional.of(band));
         when(bandRepository.save(any(Band.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         BandStatusTransitionResponse response = bandService.advanceBandStatus(1L, 10L);
