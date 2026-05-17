@@ -40,8 +40,7 @@
 --   2. schedules.cluster_id 제거 (day_number와 1:1 중복)
 --   3. votes.voted_at 코멘트 보강 (UPDATE 금지 정책 명시)
 -- ════════════════════════════════════════
-
-
+use synctrip_db;
 -- 1. users
 -- [v7 수정] deleted_at 컬럼 추가 (기존 is_deleted와 페어링)
 CREATE TABLE `users` (
