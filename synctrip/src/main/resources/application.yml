@@ -17,7 +17,7 @@ jwt:
 # 보안 설정: 환경별로 다르게 적용됨
 app:
   security:
-    enabled: ${APP_SECURITY_ENABLED}  # 기본: 개발 모드 (비활성화) 배포 시 (활성화)
+    enabled: ${APP_SECURITY_ENABLED:false}  # 기본: 개발 모드 (비활성화) 배포 시 (활성화)
     public-paths:
       - /auth/**
       - /debug/**
