@@ -11,6 +11,7 @@ public record BandResponse(
     LocalDate endDate,
     String inviteCode,
     BandStatus status,
-    boolean isOwner
+    boolean isOwner,
+    boolean isOverseas
 ) {
 }

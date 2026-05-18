@@ -85,7 +85,7 @@ public class BandService {
         return new BandResponse(
                 band.getId(), band.getName(), band.getDestination(),
                 band.getStartDate(), band.getEndDate(), band.getInviteCode(),
-                band.getStatus(), true
+                band.getStatus(), true, band.isOverseas()
         );
     }
 
@@ -122,7 +122,7 @@ public class BandService {
         return new BandResponse(
                 band.getId(), band.getName(), band.getDestination(),
                 band.getStartDate(), band.getEndDate(), band.getInviteCode(),
-                band.getStatus(), false
+                band.getStatus(), false, band.isOverseas()
         );
     }
 
@@ -152,7 +152,7 @@ public class BandService {
         return new BandResponse(
                 band.getId(), band.getName(), band.getDestination(),
                 band.getStartDate(), band.getEndDate(), band.getInviteCode(),
-                band.getStatus(), true
+                band.getStatus(), true, band.isOverseas()
         );
     }
 
@@ -298,7 +298,7 @@ public class BandService {
                 .map(m -> new BandResponse(
                         m.getBand().getId(), m.getBand().getName(), m.getBand().getDestination(),
                         m.getBand().getStartDate(), m.getBand().getEndDate(), m.getBand().getInviteCode(),
-                        m.getBand().getStatus(), m.getRole() == BandRole.OWNER
+                        m.getBand().getStatus(), m.getRole() == BandRole.OWNER, m.getBand().isOverseas()
                 )).collect(Collectors.toList());
     }
 }
