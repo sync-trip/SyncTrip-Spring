@@ -170,6 +170,11 @@ public class ScheduleService {
         // 3. 알고리즘 실행
         AlgorithmResult result = AlgorithmService.compute(input);
 
+        if (result.step3Result().daySchedules().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "일정 생성 결과가 없습니다. 장소 또는 투표 데이터를 확인해주세요.");
+        }
+
         // 4. 기존 데이터 삭제 및 저장 (Pool Swap 지원을 위해 모두 초기화 후 재생성)
         scheduleRepository.deleteAll(scheduleRepository.findByBandIdOrderByDayNumberAscSlotOrderAsc(bandId));
         scheduleAltRepository.deleteAll(scheduleAltRepository.findByBandIdOrderByPriorityScoreDesc(bandId));

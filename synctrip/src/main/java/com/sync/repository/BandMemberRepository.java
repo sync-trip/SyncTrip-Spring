@@ -52,8 +52,8 @@ public interface BandMemberRepository extends JpaRepository<BandMember, Long> {
     long countByBandIdAndIsReadyTrue(@Param("bandId") Long bandId);
 
     /**
-     * 유저가 참여 중인 모든 활성 밴드 멤버 정보 조회
+     * 유저가 참여 중인 모든 활성 밴드 멤버 정보 조회 (삭제된 밴드 제외)
      */
-    @Query("SELECT bm FROM BandMember bm WHERE bm.user.id = :userId AND bm.isDeleted = false")
+    @Query("SELECT bm FROM BandMember bm WHERE bm.user.id = :userId AND bm.isDeleted = false AND bm.band.isDeleted = false")
     List<BandMember> findByUserId(@Param("userId") Long userId);
 }
