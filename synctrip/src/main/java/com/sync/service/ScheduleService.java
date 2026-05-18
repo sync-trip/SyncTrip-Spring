@@ -41,6 +41,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -156,9 +157,24 @@ public class ScheduleService {
                 ))
                 .toList();
 
-        List<VoteInfo> voteInfos = votes.stream()
+        List<VoteInfo> voteInfos = new ArrayList<>(votes.stream()
                 .map(v -> new VoteInfo(v.getPlace().getId(), v.getUser().getId(), v.getResult()))
-                .toList();
+                .toList());
+
+        // 본인 장바구니 장소에 투표 기록이 없으면 result=0(자동 LIKE)으로 보완 — DB 저장 없이 알고리즘 전용
+        Set<String> votedKeys = votes.stream()
+                .map(v -> v.getUser().getId() + ":" + v.getPlace().getId())
+                .collect(Collectors.toSet());
+        Set<Long> votingMemberIds = members.stream()
+                .map(m -> m.getUser().getId())
+                .collect(Collectors.toSet());
+        for (PlaceBookmark bm : bookmarks) {
+            if (!votingMemberIds.contains(bm.getUser().getId())) continue;
+            String key = bm.getUser().getId() + ":" + bm.getPlace().getId();
+            if (!votedKeys.contains(key)) {
+                voteInfos.add(new VoteInfo(bm.getPlace().getId(), bm.getUser().getId(), 0));
+            }
+        }
 
         Map<Long, OpeningHours> openingHoursById = band.isOverseas()
                 ? buildOpeningHoursMap(bookmarks)

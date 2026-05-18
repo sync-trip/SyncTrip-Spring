@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/bands")
@@ -39,11 +40,9 @@ public class BandController {
     }
 
     @PostMapping
-    // JWT 인증된 사용자가 새로운 밴드(여행)를 생성
-    // @LoginUser: JWT의 subject(userId)를 자동으로 주입
     public ResponseEntity<BandResponse> createBand(
             @LoginUser Long userId,
-            @RequestBody BandCreateRequest request
+            @Valid @RequestBody BandCreateRequest request
     ) {
         return ResponseEntity.ok(bandService.createBand(userId, request));
     }

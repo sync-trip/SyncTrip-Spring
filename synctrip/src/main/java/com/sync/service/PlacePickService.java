@@ -110,7 +110,7 @@ public class PlacePickService {
         // 7) 1인당 5개 제한을 넘기면 저장하지 않는다.
         long currentCount = placeBookmarkRepository.countByBandIdAndUserId(bandId, userId);
         if (currentCount >= MAX_PICK_COUNT) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "장바구니는 최대 5개까지 담을 수 있습니다.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "장바구니는 최대 5개까지 담을 수 있습니다.");
         }
 
         // 8) 장바구니 항목을 저장하면 DB 트리거가 bookmark_count를 자동 갱신한다.

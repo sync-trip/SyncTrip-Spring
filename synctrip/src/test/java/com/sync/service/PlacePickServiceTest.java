@@ -208,7 +208,7 @@ class PlacePickServiceTest {
                 () -> placePickService.addPick(1L, 10L, request)
         );
 
-        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     @Test
