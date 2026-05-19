@@ -1,5 +1,6 @@
 package com.sync.dto.band;
 
+import com.sync.domain.band.TravelStyle;
 import java.time.LocalDate;
 
 public record BandUpdateRequest(
@@ -10,5 +11,9 @@ public record BandUpdateRequest(
     String countryCode,
     boolean overseas,
     LocalDate startDate,
-    LocalDate endDate
+    LocalDate endDate,
+    TravelStyle travelStyle,
+    String accommodationName,
+    Double accommodationLat,
+    Double accommodationLng
 ) {}

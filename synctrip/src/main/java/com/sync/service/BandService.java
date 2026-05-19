@@ -74,7 +74,8 @@ public class BandService {
         Band band = Band.create(
                 user, request.name(), request.destination(), request.destinationLat(),
                 request.destinationLng(), request.countryCode(), request.overseas(),
-                request.startDate(), request.endDate()
+                request.startDate(), request.endDate(), request.travelStyle(),
+                request.accommodationName(), request.accommodationLat(), request.accommodationLng()
         );
         bandRepository.save(band);
 
@@ -82,11 +83,7 @@ public class BandService {
         BandMember member = BandMember.create(user, band, BandRole.OWNER);
         bandMemberRepository.save(member);
 
-        return new BandResponse(
-                band.getId(), band.getName(), band.getDestination(),
-                band.getStartDate(), band.getEndDate(), band.getInviteCode(),
-                band.getStatus(), true, band.isOverseas()
-        );
+        return toBandResponse(band, true, 1);
     }
 
     /**
@@ -118,12 +115,9 @@ public class BandService {
             member.markJoinedAfterVoting();
         }
         bandMemberRepository.save(member);
-        
-        return new BandResponse(
-                band.getId(), band.getName(), band.getDestination(),
-                band.getStartDate(), band.getEndDate(), band.getInviteCode(),
-                band.getStatus(), false, band.isOverseas()
-        );
+
+        long memberCount = bandMemberRepository.countByBand(band);
+        return toBandResponse(band, false, (int) memberCount);
     }
 
     /**
@@ -145,15 +139,14 @@ public class BandService {
         band.updateInfo(
                 request.name(), request.destination(), request.destinationLat(),
                 request.destinationLng(), request.countryCode(), request.overseas(),
-                request.startDate(), request.endDate()
+                request.startDate(), request.endDate(),
+                request.travelStyle(), request.accommodationName(),
+                request.accommodationLat(), request.accommodationLng()
         );
         bandRepository.save(band);
 
-        return new BandResponse(
-                band.getId(), band.getName(), band.getDestination(),
-                band.getStartDate(), band.getEndDate(), band.getInviteCode(),
-                band.getStatus(), true, band.isOverseas()
-        );
+        long memberCount = bandMemberRepository.countByBandId(bandId);
+        return toBandResponse(band, true, (int) memberCount);
     }
 
     /**
@@ -165,7 +158,7 @@ public class BandService {
     }
 
     public BandReadyResponse markNotReady(Long userId, Long bandId) {
-        return updateReadyState(userId, bandId, false);
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "준비완료는 취소할 수 없습니다.");
     }
 
     /**
@@ -239,6 +232,11 @@ public class BandService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "투표 이후 합류한 멤버는 Ready 상태를 변경할 수 없습니다.");
         }
 
+        // 장바구니에 장소가 1개 이상 있어야 준비 완료 가능
+        if (ready && member.getBookmarkCount() < 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "장바구니에 장소를 1개 이상 담아야 준비 완료할 수 있습니다.");
+        }
+
         member.updateReady(ready);
         bandMemberRepository.save(member);
 
@@ -259,6 +257,15 @@ public class BandService {
                 new ReadyEvent(user.getId(), member.isReady(), readyCount, totalCount, allReady, band.getStatus()));
 
         return new BandReadyResponse(band.getId(), user.getId(), member.isReady(), readyCount, totalCount, allReady, band.getStatus());
+    }
+
+    private BandResponse toBandResponse(Band band, boolean isOwner, int memberCount) {
+        return new BandResponse(
+                band.getId(), band.getName(), band.getDestination(),
+                band.getStartDate(), band.getEndDate(), band.getInviteCode(),
+                band.getStatus(), isOwner, band.isOverseas(),
+                band.getTravelStyle(), band.getAccommodationName(), memberCount
+        );
     }
 
     /**
@@ -283,7 +290,8 @@ public class BandService {
         return bandMemberRepository.findByBandId(bandId).stream()
                 .map(m -> new BandMemberResponse(
                         m.getUser().getId(), m.getUser().getName(),
-                        m.getUser().getProfileImageUrl(), m.getRole(), m.isReady()
+                        m.getUser().getProfileImageUrl(), m.getRole(), m.isReady(),
+                        m.getJoinedAt(), m.getBookmarkCount()
                 )).collect(Collectors.toList());
     }
 
@@ -295,10 +303,9 @@ public class BandService {
         userRepository.findByIdAndIsDeletedFalse(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
         return bandMemberRepository.findByUserId(userId).stream()
-                .map(m -> new BandResponse(
-                        m.getBand().getId(), m.getBand().getName(), m.getBand().getDestination(),
-                        m.getBand().getStartDate(), m.getBand().getEndDate(), m.getBand().getInviteCode(),
-                        m.getBand().getStatus(), m.getRole() == BandRole.OWNER, m.getBand().isOverseas()
-                )).collect(Collectors.toList());
+                .map(m -> {
+                    long memberCount = bandMemberRepository.countByBandId(m.getBand().getId());
+                    return toBandResponse(m.getBand(), m.getRole() == BandRole.OWNER, (int) memberCount);
+                }).collect(Collectors.toList());
     }
 }
