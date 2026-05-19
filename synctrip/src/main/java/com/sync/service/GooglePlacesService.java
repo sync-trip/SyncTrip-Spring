@@ -19,15 +19,25 @@ import java.util.List;
 
 import static org.springframework.http.HttpStatus.BAD_GATEWAY;
 
+/**
+ * 구글 장소 검색 서비스 (해외 전용)
+ * - Google Places API (New)를 사용하여 주변 장소를 검색한다.
+ * - 장소 상세 정보 및 사진 URL 생성 기능을 제공한다.
+ */
 @Service
 public class GooglePlacesService {
 
     private static final Logger log = LoggerFactory.getLogger(GooglePlacesService.class);
 
+    // 구글 Nearby Search API 엔드포인트
     private static final String NEARBY_SEARCH_PATH = "/v1/places:searchNearby";
+    
+    // API 응답에서 받아올 데이터 필드 정의 (필요한 필드만 선택하여 비용 최적화)
     private static final String FIELD_MASK =
             "places.id,places.displayName,places.location,places.types," +
             "places.regularOpeningHours,places.rating,places.formattedAddress,places.photos";
+    
+    // API 1회 호출 시 최대 결과 개수 (구글 기본값 20)
     private static final int MAX_RESULT_COUNT = 20;
 
     private final RestTemplate restTemplate;
@@ -39,16 +49,18 @@ public class GooglePlacesService {
     }
 
     /**
-     * Google Places API (New) — Nearby Search로 주변 장소를 검색한다.
+     * 특정 좌표 중심의 주변 장소를 검색한다.
      *
      * @param lat           중심 위도
      * @param lng           중심 경도
-     * @param radiusMeters  검색 반경 (미터, 최대 50000)
-     * @param includedTypes Google Places 유형 필터 (예: "restaurant", "tourist_attraction")
+     * @param radiusMeters  검색 반경 (미터 단위, 최대 50,000)
+     * @param includedTypes 검색에 포함할 구글 장소 타입 리스트 (예: restaurant, museum)
+     * @return 구글 API 응답 객체 (검색된 장소 목록 포함)
      */
     public NearbySearchResponse searchNearby(double lat, double lng,
                                               double radiusMeters,
                                               List<String> includedTypes) {
+        // 구글 API 요청 바디 생성
         NearbySearchRequest body = new NearbySearchRequest(
                 new NearbySearchRequest.LocationRestriction(
                         new NearbySearchRequest.Circle(
@@ -56,7 +68,7 @@ public class GooglePlacesService {
                                 radiusMeters)),
                 includedTypes,
                 MAX_RESULT_COUNT,
-                "ko"
+                "ko" // 검색 결과 언어 설정 (한국어)
         );
 
         HttpHeaders headers = buildHeaders();
@@ -64,39 +76,44 @@ public class GooglePlacesService {
         String url = properties.placesBaseUrl() + NEARBY_SEARCH_PATH;
 
         try {
-            log.info("Google Places Nearby Search: lat={}, lng={}, radius={}m, types={}",
+            log.info("Google Places API 호출: lat={}, lng={}, radius={}m, types={}",
                     lat, lng, radiusMeters, includedTypes);
             ResponseEntity<NearbySearchResponse> response = restTemplate.exchange(
                     url, HttpMethod.POST, request, NearbySearchResponse.class);
 
             NearbySearchResponse result = response.getBody();
             if (result == null) {
-                throw new ResponseStatusException(BAD_GATEWAY, "Google Places API 응답이 비어 있습니다.");
+                throw new ResponseStatusException(BAD_GATEWAY, "Google API 응답이 비어 있습니다.");
             }
             return result;
         } catch (HttpStatusCodeException ex) {
-            log.error("Google Places API 오류. Status: {}, Body: {}",
+            log.error("Google API 호출 중 오류 발생. Status: {}, Body: {}",
                     ex.getStatusCode(), ex.getResponseBodyAsString());
             throw new ResponseStatusException(BAD_GATEWAY,
-                    "Google Places API 호출 실패: " + ex.getResponseBodyAsString(), ex);
+                    "Google API 연동 실패: " + ex.getResponseBodyAsString(), ex);
         }
     }
 
     /**
-     * Google Places 사진 이름으로 썸네일 URL을 생성한다.
-     * Android Glide/Coil이 302 리다이렉트를 자동으로 따라간다.
+     * 구글 장소 사진 참조값을 실제 접근 가능한 이미지 URL로 변환한다.
+     * @param photoName 구글에서 반환된 사진 리소스 이름
+     * @return 400x400 크기의 이미지 접근 URL
      */
     public String buildPhotoUrl(String photoName) {
         return properties.placesBaseUrl() + "/v1/" + photoName
                 + "/media?maxHeightPx=400&maxWidthPx=400&key=" + properties.apiKey();
     }
 
+    /**
+     * API 인증을 위한 HTTP 헤더 및 필드 마스크 설정
+     */
     private HttpHeaders buildHeaders() {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setAccept(List.of(MediaType.APPLICATION_JSON));
-        headers.set("X-Goog-Api-Key", properties.apiKey());
-        headers.set("X-Goog-FieldMask", FIELD_MASK);
+        headers.set("X-Goog-Api-Key", properties.apiKey()); // API 키 설정
+        headers.set("X-Goog-FieldMask", FIELD_MASK); // 응답 필드 제한 (비용 절감)
         return headers;
     }
 }
+

@@ -32,6 +32,7 @@ kakao:
   authorization-uri: https://kauth.kakao.com/oauth/authorize
   token-uri: https://kauth.kakao.com/oauth/token
   user-info-uri: https://kapi.kakao.com/v2/user/me
+  local-search-uri: https://dapi.kakao.com/v2/local/search/category.json
   client-id: test-client-id
   client-secret: test-client-secret
   redirect-uri: https://test.sync-trip.app/api/auth/kakao/callback
