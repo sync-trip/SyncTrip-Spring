@@ -247,32 +247,6 @@ public class BandService {
         return new BandReadyResponse(band.getId(), user.getId(), member.isReady(), readyCount, totalCount, allReady, band.getStatus());
     }
 
-    public void acquireEditLock(Long userId, Long bandId) {
-        Band band = bandRepository.findByIdAndIsDeletedFalseForUpdate(bandId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "밴드를 찾을 수 없습니다."));
-
-        if (bandMemberRepository.findByBandIdAndUserId(bandId, userId).isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "밴드 멤버가 아닙니다.");
-        }
-
-        if (band.isEditingLockActive() && !band.getCurrentlyEditingUserId().equals(userId)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "다른 사용자가 편집 중입니다.");
-        }
-
-        band.acquireEditLock(userId);
-        bandRepository.save(band);
-    }
-
-    public void releaseEditLock(Long userId, Long bandId) {
-        Band band = bandRepository.findByIdAndIsDeletedFalse(bandId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "밴드를 찾을 수 없습니다."));
-
-        if (userId.equals(band.getCurrentlyEditingUserId())) {
-            band.releaseEditLock();
-            bandRepository.save(band);
-        }
-    }
-
     private Band loadBandForOwner(Long userId, Long bandId) {
         userRepository.findByIdAndIsDeletedFalse(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));

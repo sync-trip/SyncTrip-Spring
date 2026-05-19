@@ -89,8 +89,6 @@ CREATE TABLE `user_groups` (
                                `last_editing_at`        TIMESTAMP    NULL                    COMMENT '편집 락 갱신 시각 (5분 경과 시 자동 만료)',
                                `is_deleted`              BOOLEAN     NOT NULL DEFAULT FALSE  COMMENT '그룹 삭제 여부 (Soft Delete) — USR-025 과거 여행 기록 보존',
                                `deleted_at`              TIMESTAMP   NULL                    COMMENT '삭제 시각 (NULL=활성, 휴지통/복구 정책용)',
-                               `currently_editing_user_id` BIGINT      NULL                    COMMENT '현재 편집 중인 사용자 ID (FK → users)',
-                               `last_editing_at`         TIMESTAMP   NULL                    COMMENT '마지막 편집 시각 (동시성 잠금용)',
                                `created_at`             TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '그룹 생성일자',
                                `updated_at`             TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '그룹 수정일자',
                                PRIMARY KEY (`group_id`),
