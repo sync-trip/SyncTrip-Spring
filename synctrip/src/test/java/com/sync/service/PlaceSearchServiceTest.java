@@ -141,7 +141,8 @@ class PlaceSearchServiceTest {
                 "KR",
                 false,
                 LocalDate.of(2026, 6, 1),
-                LocalDate.of(2026, 6, 5)
+                LocalDate.of(2026, 6, 5),
+                com.sync.domain.band.TravelStyle.PACKED, null, null, null
         );
         setId(band, id);
         return band;
