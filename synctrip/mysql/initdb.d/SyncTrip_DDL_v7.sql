@@ -163,7 +163,7 @@ CREATE TABLE `places` (
                           `longitude`          DOUBLE       NOT NULL                COMMENT '경도',
                           `address`            VARCHAR(255) NULL                    COMMENT '주소',
                           `rating`             FLOAT        NULL                    COMMENT '평점',
-                          `thumbnail_url`      VARCHAR(500) NULL                    COMMENT '장소 썸네일 이미지 URL',
+                          `thumbnail_url`      TEXT         NULL                    COMMENT '장소 썸네일 이미지 URL',
                           `opening_hours`      JSON         NULL                    COMMENT '요일별 영업시간 (해외 전용 / 국내는 항상 NULL — 카카오 API 미제공). 스키마: {"MON":[{"open":"09:00","close":"22:00"}],...}',
                           `estimated_duration` INT          NOT NULL DEFAULT 60     COMMENT '예상 체류시간 (분, 카테고리 기본값: FOOD=60 / CULTURE=90 / ACTIVITY=120 / SHOPPING=60 / NATURE=90)',
                           PRIMARY KEY (`place_id`),
