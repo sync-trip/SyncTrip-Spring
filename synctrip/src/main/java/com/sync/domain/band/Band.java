@@ -26,8 +26,8 @@ import org.hibernate.annotations.UpdateTimestamp;
 @Entity
 @Table(name = "user_groups")
 public class Band {
-    // 초대코드 유효 기간 (72시간)
     private static final long INVITE_CODE_TTL_HOURS = 72;
+    private static final int EDIT_LOCK_TIMEOUT_MINUTES = 5;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -91,8 +91,14 @@ public class Band {
     @Column(name = "closed_by", length = 20)
     private String closedBy; // 종료 주체
 
+    @Column(name = "currently_editing_user_id")
+    private Long currentlyEditingUserId;
+
+    @Column(name = "last_editing_at")
+    private LocalDateTime lastEditingAt;
+
     @Column(name = "is_deleted", nullable = false)
-    private boolean isDeleted = false; // 삭제 여부 (Soft Delete)
+    private boolean isDeleted = false;
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt; // 삭제 일시
@@ -103,7 +109,7 @@ public class Band {
 
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
-    private LocalDateTime updatedAt;
+    private LocalDateTime updatedAt = LocalDateTime.now();
 
     protected Band() {
     }
@@ -209,9 +215,22 @@ public class Band {
         this.accommodationLng = accommodationLng;
     }
 
-    /**
-     * 논리적 삭제(Soft Delete) 처리
-     */
+    public boolean isEditingLockActive() {
+        return currentlyEditingUserId != null
+                && lastEditingAt != null
+                && lastEditingAt.isAfter(LocalDateTime.now().minusMinutes(EDIT_LOCK_TIMEOUT_MINUTES));
+    }
+
+    public void acquireEditLock(Long userId) {
+        this.currentlyEditingUserId = userId;
+        this.lastEditingAt = LocalDateTime.now();
+    }
+
+    public void releaseEditLock() {
+        this.currentlyEditingUserId = null;
+        this.lastEditingAt = null;
+    }
+
     public void delete() {
         this.isDeleted = true;
         this.deletedAt = LocalDateTime.now();
@@ -240,4 +259,6 @@ public class Band {
     public String getClosedBy() { return closedBy; }
     public boolean isDeleted() { return isDeleted; }
     public LocalDateTime getDeletedAt() { return deletedAt; }
+    public Long getCurrentlyEditingUserId() { return currentlyEditingUserId; }
+    public LocalDateTime getLastEditingAt() { return lastEditingAt; }
 }

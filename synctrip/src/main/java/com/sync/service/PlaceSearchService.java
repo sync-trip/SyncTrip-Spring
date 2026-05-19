@@ -122,6 +122,7 @@ public class PlaceSearchService {
      */
     @Transactional
     public List<PlaceSearchResult> searchPlaces(Long userId, Long bandId,
+                                                 String keyword,
                                                  PlaceCategory category,
                                                  double radiusMeters) {
         // 1. 요청 데이터 검증 (사용자 및 밴드 존재 여부)
@@ -140,7 +141,7 @@ public class PlaceSearchService {
 
         // 3. 밴드의 국가 설정에 따라 국내/해외 검색 분기 처리
         if (band.isOverseas()) {
-            return searchOverseas(band, category, radiusMeters, myBookmarkPlaceIds);
+            return searchOverseas(band, keyword, category, radiusMeters, myBookmarkPlaceIds);
         } else {
             return searchDomestic(band, category, radiusMeters, myBookmarkPlaceIds);
         }
@@ -148,19 +149,23 @@ public class PlaceSearchService {
 
     /**
      * 해외 장소 검색 (Google Places API 활용)
+     * - keyword 있음 → Text Search (키워드 기반, locationBias로 목적지 우선)
+     * - keyword 없음 → Nearby Search (카테고리 브라우징)
      */
-    private List<PlaceSearchResult> searchOverseas(Band band, PlaceCategory category,
+    private List<PlaceSearchResult> searchOverseas(Band band, String keyword,
+                                                    PlaceCategory category,
                                                     double radiusMeters,
                                                     Set<Long> myBookmarkPlaceIds) {
-        // 구글 API에 전달할 장소 타입 리스트 결정
         List<String> includedTypes = category != null
                 ? CATEGORY_TO_GOOGLE_TYPES.getOrDefault(category, List.of())
                 : List.of();
 
-        // 구글 검색 호출
-        NearbySearchResponse response = googlePlacesService.searchNearby(
+        if (keyword == null || keyword.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "해외 장소 검색은 키워드가 필요합니다.");
+        }
+        NearbySearchResponse response = googlePlacesService.searchText(
                 band.getDestinationLat(), band.getDestinationLng(),
-                radiusMeters, includedTypes.isEmpty() ? null : includedTypes
+                keyword, includedTypes.isEmpty() ? null : includedTypes
         );
 
         if (response.places() == null || response.places().isEmpty()) {

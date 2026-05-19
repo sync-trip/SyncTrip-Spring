@@ -120,6 +120,24 @@ public class BandController {
     ) {
         return ResponseEntity.ok(bandService.advanceBandStatus(userId, bandId));
     }
+
+    @PostMapping("/{bandId}/edit/lock")
+    public ResponseEntity<Void> acquireEditLock(
+            @LoginUser Long userId,
+            @PathVariable Long bandId
+    ) {
+        bandService.acquireEditLock(userId, bandId);
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/{bandId}/edit/lock")
+    public ResponseEntity<Void> releaseEditLock(
+            @LoginUser Long userId,
+            @PathVariable Long bandId
+    ) {
+        bandService.releaseEditLock(userId, bandId);
+        return ResponseEntity.noContent().build();
+    }
 }
 
 

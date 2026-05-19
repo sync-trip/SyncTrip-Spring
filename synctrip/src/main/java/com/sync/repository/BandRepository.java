@@ -1,8 +1,10 @@
 package com.sync.repository;
 
 import com.sync.domain.band.Band;
+import jakarta.persistence.LockModeType;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -21,4 +23,8 @@ public interface BandRepository extends JpaRepository<Band, Long> {
      */
     @Query("SELECT b FROM Band b WHERE b.inviteCode = :inviteCode AND b.isDeleted = false")
     Optional<Band> findActiveByInviteCode(@Param("inviteCode") String inviteCode);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT b FROM Band b WHERE b.id = :id AND b.isDeleted = false")
+    Optional<Band> findByIdAndIsDeletedFalseForUpdate(@Param("id") Long id);
 }
