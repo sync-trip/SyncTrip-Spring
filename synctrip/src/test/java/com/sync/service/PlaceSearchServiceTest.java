@@ -100,7 +100,7 @@ class PlaceSearchServiceTest {
             return place;
         });
 
-        List<PlaceSearchResult> results = placeSearchService.searchPlaces(1L, 10L, PlaceCategory.CULTURE, 4200);
+        List<PlaceSearchResult> results = placeSearchService.searchPlaces(1L, 10L, null, PlaceCategory.CULTURE, 4200.0);
 
         assertThat(results).hasSize(1);
         assertThat(results.get(0).apiSource()).isEqualTo(PlaceApiSource.KAKAO);
@@ -119,7 +119,7 @@ class PlaceSearchServiceTest {
 
         org.springframework.web.server.ResponseStatusException ex =
                 org.junit.jupiter.api.Assertions.assertThrows(ResponseStatusException.class,
-                        () -> placeSearchService.searchPlaces(1L, 10L, null, 5000));
+                        () -> placeSearchService.searchPlaces(1L, 10L, null, null, 5000.0));
 
         assertThat(ex.getStatusCode().value()).isEqualTo(404);
     }
