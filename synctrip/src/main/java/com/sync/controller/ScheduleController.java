@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -42,5 +43,38 @@ public class ScheduleController {
             @LoginUser Long userId,
             @PathVariable Long bandId) {
         return ResponseEntity.ok(scheduleService.getScheduleAlts(userId, bandId));
+    }
+
+    @PostMapping("/plan-b")
+    public ResponseEntity<List<com.sync.dto.schedule.PlanBResponse>> getPlanBRecommendations(
+            @LoginUser Long userId,
+            @PathVariable Long bandId,
+            @RequestBody com.sync.dto.schedule.PlanBRequest request) {
+        return ResponseEntity.ok(scheduleService.getPlanBRecommendations(userId, bandId, request.targetPlaceId()));
+    }
+
+    @PostMapping("/swap")
+    public ResponseEntity<Void> swapSchedulePlace(
+            @LoginUser Long userId,
+            @PathVariable Long bandId,
+            @RequestBody com.sync.dto.schedule.ScheduleSwapRequest request) {
+        scheduleService.swapSchedulePlace(userId, bandId, request.scheduleId(), request.newPlaceId());
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/edit/start")
+    public ResponseEntity<Void> startEditing(
+            @LoginUser Long userId,
+            @PathVariable Long bandId) {
+        scheduleService.startEditing(userId, bandId);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/edit/finish")
+    public ResponseEntity<Void> finishEditing(
+            @LoginUser Long userId,
+            @PathVariable Long bandId) {
+        scheduleService.finishEditing(userId, bandId);
+        return ResponseEntity.ok().build();
     }
 }

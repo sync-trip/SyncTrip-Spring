@@ -73,6 +73,11 @@ public class Schedule {
         return new Schedule(band, place, dayNumber, slotOrder, startTime, durationMinutes, travelTimeFromPrev);
     }
 
+    public void updatePlace(Place newPlace) {
+        this.place = newPlace;
+        this.durationMinutes = newPlace.getEstimatedDuration();
+    }
+
     public Long getId() { return id; }
     public Band getBand() { return band; }
     public Place getPlace() { return place; }

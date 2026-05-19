@@ -93,21 +93,48 @@ public class Band {
 
     @Column(name = "is_deleted", nullable = false)
     private boolean isDeleted = false; // 삭제 여부 (Soft Delete)
+@Column(name = "deleted_at")
+private LocalDateTime deletedAt; // 삭제 일시
 
-    @Column(name = "deleted_at")
-    private LocalDateTime deletedAt; // 삭제 일시
+@Column(name = "currently_editing_user_id")
+private Long currentlyEditingUserId; // 현재 편집 중인 사용자 ID
 
-    @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+@Column(name = "last_editing_at")
+private LocalDateTime lastEditingAt; // 편집 시작/갱신 시각
 
-    @UpdateTimestamp
-    @Column(name = "updated_at", nullable = false)
-    private LocalDateTime updatedAt;
+@CreationTimestamp
+@Column(name = "created_at", nullable = false, updatable = false)
+private LocalDateTime createdAt;
 
-    protected Band() {
+protected Band() {
+}
+
+// -- 편집 잠금 관련 메서드 --
+public void startEditing(Long userId) {
+    this.currentlyEditingUserId = userId;
+    this.lastEditingAt = LocalDateTime.now();
+}
+
+public void finishEditing() {
+    this.currentlyEditingUserId = null;
+    this.lastEditingAt = null;
+}
+
+public boolean isEditingByOther(Long userId) {
+    if (this.currentlyEditingUserId == null) return false;
+    // 5분이 지나면 자동으로 잠금 해제된 것으로 간주 (좀비 잠금 방지)
+    if (this.lastEditingAt != null && this.lastEditingAt.isBefore(LocalDateTime.now().minusMinutes(5))) {
+        return false;
     }
+    return !this.currentlyEditingUserId.equals(userId);
+}
 
+public Long getCurrentlyEditingUserId() {
+    return currentlyEditingUserId;
+}
+// ----------------------
+@Column(name = "updated_at", nullable = false)
+private LocalDateTime updatedAt;
     private Band(User owner, String name, String destination, double destinationLat, double destinationLng,
                   String countryCode, boolean overseas, LocalDate startDate, LocalDate endDate,
                   String inviteCode, LocalDateTime inviteCodeExpiredAt, int maxMembers,
