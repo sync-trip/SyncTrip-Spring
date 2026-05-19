@@ -134,7 +134,7 @@ public Long getCurrentlyEditingUserId() {
 }
 // ----------------------
 @Column(name = "updated_at", nullable = false)
-private LocalDateTime updatedAt;
+private LocalDateTime updatedAt = LocalDateTime.now();
     private Band(User owner, String name, String destination, double destinationLat, double destinationLng,
                   String countryCode, boolean overseas, LocalDate startDate, LocalDate endDate,
                   String inviteCode, LocalDateTime inviteCodeExpiredAt, int maxMembers,
