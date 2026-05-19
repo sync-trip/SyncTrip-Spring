@@ -9,21 +9,27 @@ spring:
       prod: "prod, common"
 
 jwt:
-  issuer: ${JWT_ISSUER:synctrip}
+  issuer: ${JWT_ISSUER}
   secret: ${JWT_SECRET}
-  access-token-ttl-seconds: ${JWT_ACCESS_TOKEN_TTL_SECONDS:900}
-  refresh-token-ttl-seconds: ${JWT_REFRESH_TOKEN_TTL_SECONDS:1209600}
+  access-token-ttl-seconds: ${JWT_ACCESS_TOKEN_TTL_SECONDS}
+  refresh-token-ttl-seconds: ${JWT_REFRESH_TOKEN_TTL_SECONDS}
 
 # 보안 설정: 환경별로 다르게 적용됨
 app:
   security:
-    enabled: ${APP_SECURITY_ENABLED:true}  # 기본: 개발 모드 (비활성화) 배포 시 (활성화)
+    enabled: ${APP_SECURITY_ENABLED:false}  # 기본: 개발 모드 (비활성화) 배포 시 (활성화)
     public-paths:
-      - /api/auth/**
+      - /auth/**
       - /debug/**
       - /swagger-ui/**
       - /v3/api-docs/**
       - /actuator/**
+      - /ws/**
+  invite:
+    # 기본값은 테스트 도메인으로 두고, 프로필별 설정으로 덮어쓴다.
+    share-base-url: ${APP_INVITE_SHARE_BASE_URL:https://test.sync-trip.app/invite?code=}
+    # 앱 설치 시 바로 열기 위한 커스텀 딥링크
+    deep-link-base-url: ${APP_INVITE_DEEP_LINK_BASE_URL:synctrip://band/join?code=}
 
 ---
 spring:
@@ -36,13 +42,18 @@ spring:
     default-property-inclusion: non_null
 
 kakao:
-  authorization-uri: ${KAKAO_AUTHORIZATION_URI:https://kauth.kakao.com/oauth/authorize}
-  token-uri: ${KAKAO_TOKEN_URI:https://kauth.kakao.com/oauth/token}
-  user-info-uri: ${KAKAO_USER_INFO_URI:https://kapi.kakao.com/v2/user/me}
+  authorization-uri: ${KAKAO_AUTHORIZATION_URI}
+  token-uri: ${KAKAO_TOKEN_URI}
+  user-info-uri: ${KAKAO_USER_INFO_URI}
   client-id: ${KAKAO_CLIENT_ID}
   client-secret: ${KAKAO_CLIENT_SECRET}
   redirect-uri: ${KAKAO_REDIRECT_URI}
   scope: ${KAKAO_SCOPE:account_email,profile_nickname,profile_image}
+
+google:
+  maps:
+    api-key: ${GOOGLE_MAPS_API_KEY}
+    places-base-url: ${GOOGLE_PLACES_BASE_URL:https://places.googleapis.com}
 
 management:
   endpoints:

@@ -77,16 +77,14 @@ public class SecurityConfig {
 
     /**
      * @LoginUser 어노테이션 처리용 ArgumentResolver 등록
-     * 운영 환경에서만 등록 (개발 환경에서는 불필요)
+     * 개발 환경에서도 에뮬레이터/Postman 편의를 위해 항상 등록하되, 내부에서 보안 설정에 따라 다르게 동작함
      */
     @Bean
     public WebMvcConfigurer webMvcConfigurer() {
         return new WebMvcConfigurer() {
             @Override
             public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
-                if (securityProperties.enabled()) {
-                    resolvers.add(new LoginUserArgumentResolver());
-                }
+                resolvers.add(new LoginUserArgumentResolver(jwtTokenProvider, securityProperties.enabled()));
             }
         };
     }

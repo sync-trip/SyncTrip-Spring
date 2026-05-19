@@ -19,11 +19,16 @@ app:
   security:
     enabled: ${APP_SECURITY_ENABLED:true}  # 기본: 개발 모드 (비활성화)
     public-paths:
-      - /api/auth/**
+      - /auth/**
       - /debug/**
       - /swagger-ui/**
       - /v3/api-docs/**
       - /actuator/**
+  invite:
+    # 운영 환경에서는 실제 프로젝트 도메인으로 공유 링크를 생성한다.
+    share-base-url: ${APP_INVITE_SHARE_BASE_URL:https://api.sync-trip.app/invite?code=}
+    # 딥링크는 앱 스킴을 사용하므로 dev/prod 모두 동일하게 유지한다.
+    deep-link-base-url: ${APP_INVITE_DEEP_LINK_BASE_URL:synctrip://band/join?code=}
 
 logging:
   level:

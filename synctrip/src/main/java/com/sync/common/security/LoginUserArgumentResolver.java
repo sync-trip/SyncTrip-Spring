@@ -1,6 +1,7 @@
 package com.sync.common.security;
 
 import com.sync.common.annotation.LoginUser;
+import com.sync.service.jwt.JwtTokenProvider;
 import org.springframework.core.MethodParameter;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.support.WebDataBinderFactory;
@@ -12,17 +13,21 @@ import org.springframework.web.method.support.ModelAndViewContainer;
  * @LoginUser 어노테이션이 붙은 핸들러 메서드 파라미터에 현재 로그인한 사용자 ID를 주입
  *
  * 동작:
- * 1. SecurityContextHolder에서 현재 인증 정보 꺼냄
- * 2. principal에 저장된 userId (문자열) → Long으로 변환
+ * 1. 보안 활성화 시: SecurityContextHolder에서 현재 인증 정보 꺼냄
+ * 2. 보안 비활성화 시:
+ *    - 1순위: URL 쿼리 파라미터 (?userId=...)
+ *    - 2순위: Authorization 헤더 (JWT 토큰)
  * 3. 메서드 파라미터에 주입
- *
- * 사용 예:
- * @PostMapping
- * public ResponseEntity<BandResponse> createBand(
- *     @LoginUser Long userId
- * ) { ... }
  */
 public class LoginUserArgumentResolver implements HandlerMethodArgumentResolver {
+
+    private final JwtTokenProvider jwtTokenProvider;
+    private final boolean securityEnabled;
+
+    public LoginUserArgumentResolver(JwtTokenProvider jwtTokenProvider, boolean securityEnabled) {
+        this.jwtTokenProvider = jwtTokenProvider;
+        this.securityEnabled = securityEnabled;
+    }
 
     @Override
     public boolean supportsParameter(MethodParameter parameter) {
@@ -37,16 +42,42 @@ public class LoginUserArgumentResolver implements HandlerMethodArgumentResolver 
             NativeWebRequest webRequest,
             WebDataBinderFactory binderFactory
     ) throws Exception {
-        // SecurityContextHolder에서 인증 정보 추출
-        var authentication = SecurityContextHolder.getContext().getAuthentication();
+        // [1] 보안이 활성화된 경우 (운영 환경)
+        if (securityEnabled) {
+            var authentication = SecurityContextHolder.getContext().getAuthentication();
 
-        if (authentication == null || !authentication.isAuthenticated()) {
-            throw new IllegalArgumentException("인증되지 않은 요청입니다.");
+            if (authentication == null || !authentication.isAuthenticated()) {
+                throw new IllegalArgumentException("인증되지 않은 요청입니다.");
+            }
+
+            String userIdStr = (String) authentication.getPrincipal();
+            return Long.parseLong(userIdStr);
         }
 
-        // principal에 저장된 userId (문자열) → Long으로 변환
-        String userIdStr = (String) authentication.getPrincipal();
-        return Long.parseLong(userIdStr);
+        // [2] 보안이 비활성화된 경우 (개발 환경 편의 기능)
+
+        // 2-1. URL 파라미터 확인 (Postman 테스트용: ?userId=1)
+        String userIdParam = webRequest.getParameter("userId");
+        if (userIdParam != null && !userIdParam.isBlank()) {
+            try {
+                return Long.parseLong(userIdParam);
+            } catch (NumberFormatException e) {
+                // 숫자가 아니면 무시하고 다음 단계로
+            }
+        }
+
+        // 2-2. Authorization 헤더 확인 (에뮬레이터 테스트용)
+        String authHeader = webRequest.getHeader("Authorization");
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7);
+            try {
+                return jwtTokenProvider.getUserIdFromToken(token);
+            } catch (Exception e) {
+                // 토큰이 유효하지 않으면 무시 (보안 비활성화 모드이므로)
+            }
+        }
+
+        throw new IllegalArgumentException("사용자 정보를 찾을 수 없습니다. (보안 비활성화 모드: ?userId=파라미터를 붙이거나 올바른 토큰을 보내주세요)");
     }
 }
 

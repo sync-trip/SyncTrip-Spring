@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>SyncTrip WebSocket 테스트</title>
+  <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7/bundles/stomp.umd.min.js"></script>
+  <style>
+    body { font-family: monospace; max-width: 900px; margin: 20px auto; padding: 0 16px; }
+    .section { border: 1px solid #ccc; border-radius: 6px; padding: 12px; margin-bottom: 16px; }
+    label { display: inline-block; width: 90px; font-weight: bold; }
+    input { width: 340px; padding: 4px; margin: 3px 0; }
+    button { margin: 4px; padding: 6px 14px; cursor: pointer; }
+    #log { background: #111; color: #0f0; padding: 12px; height: 360px;
+           overflow-y: auto; border-radius: 4px; font-size: 13px; }
+    .ts { color: #888; }
+    .event-ready  { color: #4af; }
+    .event-vote   { color: #fa4; }
+    .event-status { color: #f4a; }
+    .connected { color: #4f4; font-weight: bold; }
+    .error { color: #f44; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px;
+             font-size: 12px; margin-left: 6px; }
+    #connStatus { font-weight: bold; color: #f44; }
+  </style>
+</head>
+<body>
+  <h2>SyncTrip WebSocket 실시간 테스트</h2>
+  <p>브라우저 탭을 2개 열어 각각 다른 유저로 테스트하세요.</p>
+
+  <!-- 연결 설정 -->
+  <div class="section">
+    <h3>① 연결 설정 &nbsp;<span id="connStatus">⛔ 미연결</span></h3>
+    <div>
+      <label>서버 URL</label>
+      <input id="serverUrl" value="wss://test.sync-trip.app/ws">
+    </div>
+    <div>
+      <label>JWT Token</label>
+      <input id="jwtToken" placeholder="Bearer 없이 토큰만 입력" style="width:500px">
+    </div>
+    <div>
+      <label>Band ID</label>
+      <input id="bandId" value="1" style="width:80px">
+    </div>
+    <button onclick="connect()">연결</button>
+    <button onclick="disconnect()">연결 해제</button>
+  </div>
+
+  <!-- 이벤트 발생 -->
+  <div class="section">
+    <h3>② 이벤트 발생 (Postman 대신 직접 호출)</h3>
+    <p style="color:#888;font-size:13px">버튼을 누르면 REST API를 호출합니다. 다른 탭에서 실시간 이벤트가 수신되는지 확인하세요.</p>
+    <button onclick="apiCall('POST', '/api/bands/' + bid() + '/ready', null)">✅ Ready ON</button>
+    <button onclick="apiCall('DELETE', '/api/bands/' + bid() + '/ready', null)">❌ Ready OFF</button>
+    <br>
+    <label style="width:auto">Place ID:</label>
+    <input id="placeId" value="1" style="width:60px">
+    <label style="width:auto">Result:</label>
+    <select id="voteResult">
+      <option value="1">1 (LIKE)</option>
+      <option value="-1">-1 (DISLIKE)</option>
+    </select>
+    <button onclick="castVote()">🗳️ 투표</button>
+    <br><br>
+    <button onclick="apiCall('POST', '/api/bands/' + bid() + '/status/advance', null)">⏭️ 상태 전환 (advance)</button>
+    <button onclick="apiCall('GET', '/api/bands/' + bid() + '/votes/status/group', null)">📊 그룹 투표 현황 조회</button>
+  </div>
+
+  <!-- 이벤트 로그 -->
+  <div class="section">
+    <h3>③ 실시간 이벤트 수신 로그</h3>
+    <button onclick="clearLog()">로그 지우기</button>
+    <div id="log"></div>
+  </div>
+
+  <script>
+    let stompClient = null;
+
+    function bid() { return document.getElementById('bandId').value; }
+    function token() { return document.getElementById('jwtToken').value.trim(); }
+
+    function log(msg, cls = '') {
+      const el = document.getElementById('log');
+      const ts = new Date().toLocaleTimeString();
+      el.innerHTML += `<div><span class="ts">[${ts}]</span> <span class="${cls}">${msg}</span></div>`;
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function clearLog() { document.getElementById('log').innerHTML = ''; }
+
+    function connect() {
+      if (!token()) { alert('JWT 토큰을 입력하세요'); return; }
+
+      stompClient = new StompJs.Client({
+        brokerURL: document.getElementById('serverUrl').value,
+        connectHeaders: { Authorization: 'Bearer ' + token() },
+        reconnectDelay: 5000,
+        onConnect: () => {
+          document.getElementById('connStatus').textContent = '✅ 연결됨';
+          document.getElementById('connStatus').style.color = '#4f4';
+          log('WebSocket 연결 성공', 'connected');
+
+          const bandId = bid();
+
+          stompClient.subscribe(`/topic/bands/${bandId}/ready`, msg => {
+            const data = JSON.parse(msg.body);
+            log(`[READY] userId=${data.userId} isReady=${data.isReady} (${data.readyCount}/${data.totalCount}) allReady=${data.allReady} status=${data.bandStatus}`, 'event-ready');
+          });
+
+          stompClient.subscribe(`/topic/bands/${bandId}/votes`, msg => {
+            const data = JSON.parse(msg.body);
+            log(`[VOTE] userId=${data.userId} placeId=${data.placeId} 투표완료=${data.myVotedCount}/${data.totalPlaces}`, 'event-vote');
+          });
+
+          stompClient.subscribe(`/topic/bands/${bandId}/status`, msg => {
+            const data = JSON.parse(msg.body);
+            log(`[STATUS 변경] bandId=${data.bandId} → ${data.status}`, 'event-status');
+          });
+
+          log(`구독 완료 → /topic/bands/${bandId}/ready, /votes, /status`);
+        },
+        onDisconnect: () => {
+          document.getElementById('connStatus').textContent = '⛔ 미연결';
+          document.getElementById('connStatus').style.color = '#f44';
+          log('연결 해제됨', 'error');
+        },
+        onStompError: frame => {
+          log('STOMP 오류: ' + frame.headers['message'], 'error');
+        }
+      });
+
+      stompClient.activate();
+    }
+
+    function disconnect() {
+      if (stompClient) stompClient.deactivate();
+    }
+
+    function apiCall(method, path, body) {
+      const base = document.getElementById('serverUrl').value
+        .replace('wss://', 'https://').replace('ws://', 'http://').split('/ws')[0];
+      const url = `${base}${path}`;
+      const opts = {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token()
+        }
+      };
+      if (body) opts.body = JSON.stringify(body);
+
+      log(`→ ${method} ${path}`);
+      fetch(url, opts)
+        .then(r => r.text().then(t => {
+          log(`← ${r.status} ${t}`, r.ok ? '' : 'error');
+        }))
+        .catch(e => log('fetch 오류: ' + e, 'error'));
+    }
+
+    function castVote() {
+      const placeId = parseInt(document.getElementById('placeId').value);
+      const result = parseInt(document.getElementById('voteResult').value);
+      apiCall('POST', '/api/bands/' + bid() + '/votes', { placeId, result });
+    }
+  </script>
+</body>
+</html>
