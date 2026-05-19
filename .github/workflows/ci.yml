@@ -48,36 +48,12 @@ jobs:
       # OpenAPI JSON 파일 생성 (Swagger 명세 추출)
       - name: Generate OpenAPI JSON
         shell: pwsh
-        run: .\gradlew.bat generateOpenApiDocs --no-daemon --info
+        run: |
+          $env:SPRING_CONFIG_ADDITIONAL_LOCATION = "file:" + ((Resolve-Path ".\build\resources\test").Path -replace '\\', '/') + "/"
+          .\gradlew.bat generateOpenApiDocs --no-daemon --info
         env:
           SPRING_PROFILES_ACTIVE: test
           SERVER_PORT: 8081
-          # GitHub Secrets 및 Variables를 구분하여 주입 (deploy.yml 참고)
-          APP_SECURITY_ENABLED: "false"
-          
-          # SECRETS
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          KAKAO_CLIENT_ID: ${{ secrets.KAKAO_CLIENT_ID }}
-          KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
-          
-          # VARIABLES
-          JWT_ISSUER: ${{ vars.JWT_ISSUER }}
-          JWT_ACCESS_TOKEN_TTL_SECONDS: ${{ vars.JWT_ACCESS_TOKEN_TTL_SECONDS }}
-          JWT_REFRESH_TOKEN_TTL_SECONDS: ${{ vars.JWT_REFRESH_TOKEN_TTL_SECONDS }}
-          
-          # KAKAO (CI에서는 dev/test용 URI 사용)
-          KAKAO_REDIRECT_URI: ${{ vars.KAKAO_REDIRECT_URI_DEV }}
-          KAKAO_AUTHORIZATION_URI: https://kauth.kakao.com/oauth/authorize
-          KAKAO_TOKEN_URI: https://kauth.kakao.com/oauth/token
-          KAKAO_USER_INFO_URI: https://kapi.kakao.com/v2/user/me
-          
-          # Google 및 기타
-          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
-          
-          # DB (테스트용 H2)
-          DB_URL: "jdbc:h2:mem:testdb"
-          DB_USERNAME: "sa"
-          DB_PASSWORD: ""
 
       # 1. OpenAPI 형식을 Postman 형식으로 번역하기 위해 Node.js 환경 세팅
       - name: Set up Node.js

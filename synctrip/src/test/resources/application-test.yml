@@ -37,3 +37,8 @@ kakao:
   redirect-uri: https://test.sync-trip.app/api/auth/kakao/callback
   scope: account_email,profile_nickname,profile_image
 
+google:
+  maps:
+    api-key: test-google-maps-api-key
+    places-base-url: https://places.googleapis.com
+
