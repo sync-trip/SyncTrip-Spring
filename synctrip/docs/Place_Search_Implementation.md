@@ -1,57 +1,259 @@
-# 장소 검색 기능 분석 및 구현 현황 보고서
+# SyncTrip 백엔드 장소 검색 기능 구현 현황
 
-본 문서는 `PlaceSearchService`를 중심으로 한 국내(Kakao) 및 해외(Google) 장소 검색 기능의 구현 현황과 문제점을 분석한 결과입니다.
-
-## 1. 개요
-SyncTrip 서비스는 사용자의 여행지 위치에 따라 최적화된 지도 API를 사용하도록 설계되었습니다.
-- **국내 여행 (Korea):** Kakao Local API 사용 (정밀도 및 데이터 풍부성)
-- **해외 여행 (Overseas):** Google Places API 사용 (글로벌 범용성)
-
-## 2. 코드 분석 결과
-
-### 2.1 `PlaceSearchService` 내 예외 처리의 의미
-사용자가 지적한 코드는 다음과 같습니다:
-```java
-if (!band.isOverseas()) {
-    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "국내 장소 검색은 카카오맵을 사용합니다.");
-}
-```
-- **현재 동작:** 국내 여행(`isOverseas == false`)인 경우, 검색을 진행하지 않고 즉시 예외를 발생시킵니다.
-- **판단:** 이는 국내 검색 로직이 아직 **통합되지 않았음을 의미**합니다. 즉, 현재 상태로는 국내 장소 검색 기능이 **정상적으로 작동하지 않습니다.**
-
-### 2.2 구현 현황 및 문제점
-분석 결과, 시스템은 다음과 같이 "미완성" 상태인 것으로 확인되었습니다.
-
-| 구분 | 현황 | 비고 |
-|---|---|---|
-| **Google 연동 (`GooglePlacesService`)** | 완료 | `PlaceSearchService`에 통합되어 해외 검색 정상 작동 |
-| **Kakao 연동 (`KakaoPlacesService`)** | 완료 | API 호출 및 결과 파싱 로직은 구현되어 있음 |
-| **서비스 통합 (`PlaceSearchService`)** | **미흡** | `KakaoPlacesService`를 주입받지 않고 있으며, 국내 검색 시 예외만 발생시킴 |
-| **테스트 코드 (`PlaceSearchServiceTest`)** | **실패(컴파일 에러)** | 테스트 코드는 통합된 생성자를 기대하고 있으나, 실제 코드가 달라 빌드 오류 발생 |
-
-## 3. 구현된 기능 목록
-
-### 3.1 공통 기능
-- **장소 캐싱:** 외부 API(Google/Kakao) 검색 결과를 `places` 테이블에 자동 저장 및 동기화 (External ID 기반 중복 방지).
-- **북마크 연동:** 검색 결과 반환 시 현재 사용자의 북마크 여부(`isBookmarked`)를 포함.
-- **카테고리 매핑:** 외부 API의 복잡한 타입을 서비스 표준 카테고리(음식, 문화, 활동, 쇼핑, 자연)로 변환.
-
-### 3.2 Google Places (해외)
-- **반경 검색:** 여행 목적지 중심 지정된 반경 내 검색.
-- **영업 시간 변환:** Google의 복잡한 운영 시간 데이터를 JSON 구조로 변환하여 저장.
-- **이미지 URL 빌드:** Google Photo Reference를 실제 접근 가능한 URL로 변환.
-
-### 3.3 Kakao Local (국내)
-- **카테고리 그룹 검색:** Kakao 전용 그룹 코드(FD6, CT1 등)를 활용한 검색.
-- **좌표 체계 대응:** Google과 반대인 Kakao의 좌표 체계(x=경도, y=위도) 처리.
-- **결과 중복 제거:** 여러 카테고리에 걸쳐 검색된 동일 장소에 대한 중복 제거.
-
-## 4. 향후 조치 제안
-현재 프로젝트는 **컴파일 에러 상태**이며 국내 검색이 차단되어 있습니다. 이를 해결하기 위해 다음 작업이 필요합니다:
-1. `PlaceSearchService` 생성자에 `KakaoPlacesService` 주입.
-2. `searchPlaces` 메서드 내에서 `isOverseas()` 여부에 따라 분기 로직 구현 (Kakao 호출 추가).
-3. Kakao 검색 결과를 `Place` 엔티티로 변환하여 저장하는 로직 추가.
+## 📋 프로젝트 개요
+SyncTrip는 그룹 여행 의사결정 및 일정 최적화 플랫폼으로,  
+국내/해외 여행에 맞는 자동 장소 검색 및 동선 최적화를 제공합니다.
 
 ---
-*작성일: 2026년 5월 19일*
-*작성자: Gemini CLI*
+
+## ✅ 현재 구현된 기능
+
+### 1. 국내 장소 검색 (Kakao Local API)
+**파일**: `KakaoPlacesService.java`
+
+- **역할**: Kakao Local API를 통해 국내 주변 장소 검색
+- **입력**: 좌표(lat, lng), 검색 반경(미터), 카테고리 필터
+- **출력**: 거리순 정렬된 장소 목록 (중복 제거)
+- **카테고리 매핑**:
+  - FD6/CE7 → FOOD (음식점)
+  - CT1/AT4 → CULTURE (문화/관광)
+  - SC4 → SHOPPING (쇼핑)
+  - PK6 → NATURE (공원/자연)
+  - AT4 → ACTIVITY (관광지)
+
+**핵심 로직**:
+```
+1. PlaceCategory → Kakao 그룹 코드 변환
+2. 각 그룹 코드별로 API 호출 (예: FOOD면 FD6, CE7 두 번 호출)
+3. 결과 합치기 (ID 기준 중복 제거)
+4. 거리순 정렬해 반환
+```
+
+---
+
+### 2. 해외 장소 검색 (Google Places API)
+**파일**: `GooglePlacesService.java` (기존)
+
+- **역할**: Google Places API를 통해 해외 주변 장소 검색
+- **입력**: 좌표(lat, lng), 검색 반경(미터), 카테고리 필터
+- **출력**: 거리순 정렬된 장소 목록 + 영업시간 정보
+- **특징**:
+  - Google Types → SyncTrip 카테고리 자동 매핑
+  - 영업시간(opening_hours) JSON으로 저장
+
+---
+
+### 3. 통합 검색 라우팅
+**파일**: `PlaceSearchService.java`
+
+#### 엔드포인트
+```
+GET /api/bands/{bandId}/places/search
+  ?category=FOOD&radiusMeters=5000
+```
+
+#### 자동 라우팅 로직
+```
+if (band.isOverseas == true)
+  → Google Places API (해외)
+else
+  → Kakao Local API (국내)
+```
+
+#### 처리 과정
+1. 사용자/밴드 권한 검증
+2. API 호출 (국내/해외 자동 선택)
+3. 결과를 `places` 테이블에 캐싱
+   - `PlaceApiSource` enum으로 출처 구분 (KAKAO / GOOGLE)
+   - 중복 저장 방지 (externalId 기준)
+4. 사용자의 북마크 여부 조회 및 응답에 포함
+5. `PlaceSearchResult` DTO로 변환 후 반환
+
+#### 응답 형식
+```json
+{
+  "placeId": 300,
+  "apiSource": "KAKAO",
+  "externalId": "kakao-123",
+  "name": "경복궁",
+  "category": "CULTURE",
+  "latitude": 37.579617,
+  "longitude": 126.977041,
+  "address": "서울 종로구 사직로 161",
+  "rating": 4.7,
+  "thumbnailUrl": "...",
+  "isBookmarked": false
+}
+```
+
+---
+
+### 4. 장소 캐싱
+**목적**: 동일 장소를 재검색해도 DB에 중복 저장 방지
+
+**구현**:
+```
+1. API 응답 수신
+2. places 테이블에서 (apiSource, externalId) 조합으로 검색
+3. 존재하면 → 메타데이터만 업데이트
+4. 없으면 → 새로운 Place 엔티티 생성 후 저장
+```
+
+**국내/해외 차이**:
+- **국내 (Kakao)**: opening_hours = NULL (저장 안 함)
+- **해외 (Google)**: opening_hours = JSON (영업시간 정보 포함)
+
+---
+
+## 🔧 설정 및 환경변수
+
+### application.yml
+```yaml
+kakao:
+  local-search-uri: https://dapi.kakao.com/v2/local/search/category.json
+  client-id: ${KAKAO_CLIENT_ID}
+  client-secret: ${KAKAO_CLIENT_SECRET}
+
+google:
+  maps:
+    api-key: ${GOOGLE_MAPS_API_KEY}
+    places-base-url: https://places.googleapis.com
+```
+
+### .env (로컬 개발용)
+```
+KAKAO_CLIENT_ID=<카카오 앱 ID>
+KAKAO_CLIENT_SECRET=<카카오 앱 시크릿>
+KAKAO_LOCAL_SEARCH_URI=https://dapi.kakao.com/v2/local/search/category.json
+
+GOOGLE_MAPS_API_KEY=<Google API Key>
+GOOGLE_PLACES_BASE_URL=https://places.googleapis.com
+```
+
+---
+
+## 📊 아키텍처 흐름도
+
+```
+사용자 요청
+  ↓
+PlaceController.searchPlaces()
+  ↓
+PlaceSearchService.searchPlaces()
+  ↓
+  ├─ band.isOverseas() == true
+  │   └─ GooglePlacesService.searchNearby()
+  │       ├─ Google Places API 호출
+  │       └─ 결과 → places 테이블 캐싱
+  │
+  └─ band.isOverseas() == false
+      └─ KakaoPlacesService.searchNearby()
+          ├─ Kakao Local API 호출 (다중 category code)
+          └─ 결과 → places 테이블 캐싱
+  ↓
+PlaceSearchResult[] 변환
+  ├─ Place 엔티티 → DTO
+  ├─ isBookmarked 플래그 추가
+  └─ JSON 응답
+  ↓
+응답 (200 OK)
+```
+
+---
+
+## 🧪 테스트
+
+### 단위 테스트
+- `KakaoPlacesServiceTest`: Kakao API 호출 및 중복 제거 검증
+- `PlaceSearchServiceTest`: 국내 검색 라우팅 및 캐싱 검증
+
+**실행**:
+```bash
+./gradlew test --tests com.sync.service.KakaoPlacesServiceTest
+./gradlew test --tests com.sync.service.PlaceSearchServiceTest
+```
+
+---
+
+## 📝 미구현 / 보완 필요 사항
+
+### 1. 지도 SDK (프론트 담당)
+- Google Maps SDK (안드로이드 앱에서 지도 표시)
+- Kakao Map SDK (안드로이드 앱에서 지도 표시)
+- **백엔드는 장소 데이터만 제공, 지도 렌더링은 프론트 책임**
+
+### 2. 영업시간 고급 처리 (선택)
+- 현재: 요일별 첫 번째 period만 사용
+- 개선: 여러 period(예: 11:00-14:00, 17:00-21:00) 모두 처리
+- 개선: 자정 넘는 운영 시간(23:00-02:00) 처리
+
+### 3. 고급 검색 기능
+- 가격대(가성비) 필터
+- 평점 필터링
+- 영업 상태(영업중/폐업) 확인
+- 사용자 리뷰 통합
+
+### 4. 성능 최적화 (선택)
+- API 응답 캐싱 (Redis 등)
+- 배치 검색 (여러 카테고리 동시 호출)
+- 비동기 처리 (CompletableFuture)
+
+---
+
+## 🚀 다음 작업 순서 추천
+
+### 우선순위 1: 프론트 연동 검증
+1. Postman/OpenAPI로 API 테스트
+2. 안드로이드 앱과 통합 테스트
+3. 응답 포맷 확인 및 조정
+
+### 우선순위 2: 영업시간 고급 처리
+1. 요일별 다중 period 지원
+2. 자정 넘는 시간대 처리
+3. 스케줄 생성 시 영업시간 검증
+
+### 우선순위 3: 추가 필터링
+1. 평점 기반 정렬/필터
+2. 가격대 표시 (Google Places rating만 현재)
+
+---
+
+## 📚 관련 파일 목록
+
+| 파일 | 역할 | 상태 |
+|---|---|---|
+| `KakaoPlacesService.java` | 국내 장소 검색 | ✅ 완료 |
+| `GooglePlacesService.java` | 해외 장소 검색 | ✅ 완료 (기존) |
+| `PlaceSearchService.java` | 통합 검색 라우팅 | ✅ 완료 |
+| `PlaceController.java` | REST 엔드포인트 | ✅ 완료 |
+| `KakaoProperties.java` | Kakao 설정 | ✅ 완료 |
+| `GoogleMapsProperties.java` | Google 설정 | ✅ 완료 |
+| `.env` | 환경변수 (로컬) | ✅ 완료 |
+| `.env.example` | 환경변수 템플릿 | ✅ 완료 |
+| `application.yml` | Spring 설정 | ✅ 완료 |
+
+---
+
+## 💡 핵심 설계 원칙
+
+1. **국내/해외 자동 분기**
+   - 밴드의 `isOverseas` 플래그로 결정
+   - 서비스 레이어에서 자동 라우팅
+
+2. **순수 함수 기반 알고리즘**
+   - 검색 로직은 DB 독립적
+   - 캐싱은 서비스 레이어에서만
+
+3. **출처별 메타데이터 관리**
+   - PlaceApiSource enum으로 구분
+   - externalId로 중복 저장 방지
+
+4. **트랜잭션 안전성**
+   - @Transactional로 DB 일관성 보장
+   - API 호출과 캐싱을 한 트랜잭션으로 처리
+
+---
+
+**작성 일시**: 2026-05-19  
+**프로젝트**: SyncTrip Backend v1.0
+
