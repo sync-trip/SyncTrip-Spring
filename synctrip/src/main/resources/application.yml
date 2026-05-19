@@ -93,6 +93,18 @@ google:
     api-key: ${GOOGLE_MAPS_API_KEY}
     # Google Places API 베이스 URL (고정값)
     places-base-url: ${GOOGLE_PLACES_BASE_URL:https://places.googleapis.com}
+  # ════════════════════════════════════════════════════════════════
+  # Google OAuth 설정 (모바일 앱용)
+  # ════════════════════════════════════════════════════════════════
+  # 용도: 안드로이드에서 받은 Google ID Token 검증
+  # 백엔드에서 필요한 것은 클라이언트 ID뿐입니다.
+  # (client-secret, redirect-uri는 웹 로그인 전용이므로 제거했습니다)
+  # ════════════════════════════════════════════════════════════════
+  client:
+    # Google OAuth 클라이언트 ID (.env에서 로드)
+    # 구글 클라우드 콘솔에서 "웹 애플리케이션"으로 생성한 클라이언트 ID
+    # 형식: xxxxxxxxx.apps.googleusercontent.com
+    id: ${GOOGLE_OAUTH_CLIENT_ID}
 
 management:
   endpoints:
