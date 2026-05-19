@@ -56,6 +56,12 @@ public class ScheduleAlt {
         return new ScheduleAlt(band, place, priorityScore);
     }
 
+    public void updatePlace(Place newPlace) {
+        this.place = newPlace;
+        this.category = newPlace.getCategory();
+        this.densityPoint = newPlace.getDensityPoint();
+    }
+
     public Long getId() { return id; }
     public Band getBand() { return band; }
     public Place getPlace() { return place; }

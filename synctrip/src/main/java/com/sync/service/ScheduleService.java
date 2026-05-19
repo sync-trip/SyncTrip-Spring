@@ -25,6 +25,7 @@ import com.sync.dto.schedule.ScheduleDayResponse;
 import com.sync.dto.schedule.SchedulePlaceInfo;
 import com.sync.dto.schedule.ScheduleResponse;
 import com.sync.dto.schedule.ScheduleSlotResponse;
+import com.sync.dto.schedule.PlanBResponse;
 import com.sync.repository.BandMemberRepository;
 import com.sync.repository.BandRepository;
 import com.sync.repository.PlaceBookmarkRepository;
@@ -302,6 +303,138 @@ public class ScheduleService {
                 .stream()
                 .map(this::toAltResponse)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<PlanBResponse> getPlanBRecommendations(Long userId, Long bandId, Long targetPlaceId) {
+        loadActiveUser(userId);
+        Band band = loadBand(bandId);
+        requireMembership(bandId, userId);
+
+        Place targetPlace = placeRepository.findById(targetPlaceId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "대체할 기준 장소를 찾을 수 없습니다."));
+
+        // 현재 일정에 포함된 장소 ID 수집 (중복 추천 방지)
+        Set<Long> scheduledPlaceIds = scheduleRepository.findByBandIdOrderByDayNumberAscSlotOrderAsc(bandId).stream()
+                .filter(s -> s.getPlace() != null)
+                .map(s -> s.getPlace().getId())
+                .collect(Collectors.toSet());
+
+        List<ScheduleAlt> alts = scheduleAltRepository.findByBandIdOrderByPriorityScoreDesc(bandId);
+        
+        List<PlanBResponse> candidates = new ArrayList<>();
+        
+        for (ScheduleAlt alt : alts) {
+            if (scheduledPlaceIds.contains(alt.getPlace().getId())) continue;
+            if (alt.getCategory() != com.sync.domain.place.PlaceCategory.valueOf(targetPlace.getCategory().name())) continue;
+
+            double distKm = haversine(
+                    targetPlace.getLatitude(), targetPlace.getLongitude(),
+                    alt.getPlace().getLatitude(), alt.getPlace().getLongitude()
+            );
+
+            // 반경 1km 이내 제한 (알고리즘 상수는 PLANB_MAX_DIST_KM = 1.0)
+            if (distKm > 1.0) continue;
+
+            double geoScore = Math.max(0.0, 1.0 - distKm / 1.0);
+            // 점수 계산: 투표 점수 60% + 거리 점수 40% (알고리즘 기본값)
+            double recommendScore = alt.getPriorityScore() * 0.6 + geoScore * 0.4;
+
+            candidates.add(new PlanBResponse(
+                    alt.getPlace().getId(),
+                    alt.getCategory(),
+                    recommendScore,
+                    distKm,
+                    false, // alt는 overflow가 아님
+                    toPlaceInfo(alt.getPlace())
+            ));
+        }
+
+        candidates.sort((a, b) -> Double.compare(b.recommendScore(), a.recommendScore()));
+
+        // 최대 3개 추천
+        int limit = Math.min(candidates.size(), 3);
+        return candidates.subList(0, limit);
+    }
+
+    @Transactional
+    public void startEditing(Long userId, Long bandId) {
+        loadActiveUser(userId);
+        Band band = loadBand(bandId);
+        requireMembership(bandId, userId);
+
+        if (band.isEditingByOther(userId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "다른 사용자가 편집 중입니다.");
+        }
+
+        band.startEditing(userId);
+        bandRepository.save(band);
+    }
+
+    @Transactional
+    public void finishEditing(Long userId, Long bandId) {
+        loadActiveUser(userId);
+        Band band = loadBand(bandId);
+        
+        // 본인이 잠금을 가지고 있을 때만 해제 가능
+        if (band.getCurrentlyEditingUserId() != null && band.getCurrentlyEditingUserId().equals(userId)) {
+            band.finishEditing();
+            bandRepository.save(band);
+        }
+    }
+
+    @Transactional
+    public void swapSchedulePlace(Long userId, Long bandId, Long scheduleId, Long newPlaceId) {
+        loadActiveUser(userId);
+        Band band = loadBand(bandId);
+        requireMembership(bandId, userId);
+        requireEditingLock(band, userId);
+
+        // 1. 교체할 일정 슬롯 확인
+        Schedule schedule = scheduleRepository.findById(scheduleId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "수정할 일정 슬롯을 찾을 수 없습니다."));
+
+        if (!schedule.getBand().getId().equals(bandId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "해당 밴드의 일정이 아닙니다.");
+        }
+
+        Place oldPlace = schedule.getPlace();
+        Place newPlace = placeRepository.findById(newPlaceId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "새로운 장소 정보를 찾을 수 없습니다."));
+
+        // 2. 예비 목록(ScheduleAlt)에서 새 장소 확인
+        ScheduleAlt altEntry = scheduleAltRepository.findByBandIdAndPlaceId(bandId, newPlaceId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "예비 목록에 없는 장소는 교체할 수 없습니다."));
+
+        // 3. 상호 교체 수행 (Swap)
+        // 일정 슬롯 업데이트
+        schedule.updatePlace(newPlace);
+        scheduleRepository.save(schedule);
+
+        // 예비 목록 업데이트 (기존 장소를 예비 목록으로 보냄 -> 되돌리기 가능)
+        altEntry.updatePlace(oldPlace);
+        scheduleAltRepository.save(altEntry);
+        
+        log.info("일정 상호 교체 완료: band={}, slot={}, {} <-> {}", 
+                bandId, scheduleId, oldPlace.getName(), newPlace.getName());
+    }
+
+    private void requireEditingLock(Band band, Long userId) {
+        if (band.isEditingByOther(userId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "다른 사용자가 편집 중입니다. 편집 시작을 먼저 해주세요.");
+        }
+        if (band.getCurrentlyEditingUserId() == null || !band.getCurrentlyEditingUserId().equals(userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "편집 권한이 없습니다. 편집 시작 버튼을 눌러주세요.");
+        }
+    }
+
+    private static double haversine(double lat1, double lng1, double lat2, double lng2) {
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLng = Math.toRadians(lng2 - lng1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return 6371.0 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
     private ScheduleSlotResponse toSlotResponse(Schedule s) {
