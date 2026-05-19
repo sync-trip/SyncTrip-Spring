@@ -17,7 +17,6 @@ import com.sync.repository.PlaceBookmarkRepository;
 import com.sync.repository.PlaceRepository;
 import com.sync.repository.UserRepository;
 import java.util.List;
-import java.util.Objects;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -188,11 +187,21 @@ public class PlacePickService {
     }
 
     private void validateRequest(PlacePickRequest request) {
-        Objects.requireNonNull(request, "장소 정보가 필요합니다.");
-        Objects.requireNonNull(request.apiSource(), "apiSource가 필요합니다.");
-        Objects.requireNonNull(request.externalId(), "externalId가 필요합니다.");
-        Objects.requireNonNull(request.name(), "name이 필요합니다.");
-        Objects.requireNonNull(request.category(), "category가 필요합니다.");
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "장소 정보가 필요합니다.");
+        }
+        if (request.apiSource() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "apiSource가 필요합니다.");
+        }
+        if (request.externalId() == null || request.externalId().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "externalId가 필요합니다.");
+        }
+        if (request.name() == null || request.name().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "name이 필요합니다.");
+        }
+        if (request.category() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "category가 필요합니다.");
+        }
     }
 
     private PlacePickResponse toResponse(PlaceBookmark bookmark) {

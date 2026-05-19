@@ -19,6 +19,8 @@ public record BandCreateRequest(
 
     double destinationLat,
     double destinationLng,
+
+    @NotBlank(message = "국가 코드를 입력해주세요")
     String countryCode,
     boolean overseas
 ) {

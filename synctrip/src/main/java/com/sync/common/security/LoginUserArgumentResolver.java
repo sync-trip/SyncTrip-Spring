@@ -3,11 +3,13 @@ package com.sync.common.security;
 import com.sync.common.annotation.LoginUser;
 import com.sync.service.jwt.JwtTokenProvider;
 import org.springframework.core.MethodParameter;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.support.WebDataBinderFactory;
 import org.springframework.web.context.request.NativeWebRequest;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.method.support.ModelAndViewContainer;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * @LoginUser 어노테이션이 붙은 핸들러 메서드 파라미터에 현재 로그인한 사용자 ID를 주입
@@ -47,11 +49,18 @@ public class LoginUserArgumentResolver implements HandlerMethodArgumentResolver 
             var authentication = SecurityContextHolder.getContext().getAuthentication();
 
             if (authentication == null || !authentication.isAuthenticated()) {
-                throw new IllegalArgumentException("인증되지 않은 요청입니다.");
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "인증되지 않은 요청입니다.");
             }
 
-            String userIdStr = (String) authentication.getPrincipal();
-            return Long.parseLong(userIdStr);
+            Object principal = authentication.getPrincipal();
+            if (!(principal instanceof String userIdStr)) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "유효하지 않은 인증 정보입니다.");
+            }
+            try {
+                return Long.parseLong(userIdStr);
+            } catch (NumberFormatException e) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "유효하지 않은 사용자 ID입니다.");
+            }
         }
 
         // [2] 보안이 비활성화된 경우 (개발 환경 편의 기능)
@@ -77,7 +86,7 @@ public class LoginUserArgumentResolver implements HandlerMethodArgumentResolver 
             }
         }
 
-        throw new IllegalArgumentException("사용자 정보를 찾을 수 없습니다. (보안 비활성화 모드: ?userId=파라미터를 붙이거나 올바른 토큰을 보내주세요)");
+        throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "사용자 정보를 찾을 수 없습니다. (?userId=파라미터 또는 올바른 Bearer 토큰이 필요합니다)");
     }
 }
 
