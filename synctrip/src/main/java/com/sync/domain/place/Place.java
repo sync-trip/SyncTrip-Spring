@@ -52,7 +52,7 @@ public class Place {
     @Column(name = "rating")
     private Float rating;
 
-    @Column(name = "thumbnail_url", length = 500)
+    @Column(name = "thumbnail_url", columnDefinition = "TEXT")
     private String thumbnailUrl;
 
     @Column(name = "opening_hours", columnDefinition = "json")
