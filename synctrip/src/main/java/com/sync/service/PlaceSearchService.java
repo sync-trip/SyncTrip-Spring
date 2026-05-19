@@ -120,7 +120,7 @@ public class PlaceSearchService {
      * @param radiusMeters 검색 반경 (단위: 미터)
      * @return 검색된 장소 목록 (북마크 여부 포함)
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public List<PlaceSearchResult> searchPlaces(Long userId, Long bandId,
                                                  PlaceCategory category,
                                                  double radiusMeters) {

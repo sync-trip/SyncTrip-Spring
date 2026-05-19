@@ -1,0 +1,10 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.example.synctrip",
+    "sha256_cert_fingerprints": [
+      "C7:BA:DA:31:0E:06:8B:76:4E:4C:F0:15:FB:2C:39:6E:12:FF:53:3B:14:61:39:4C:8D:B8:40:A9:7F:B3:50:01"
+    ]
+  }
+}]
