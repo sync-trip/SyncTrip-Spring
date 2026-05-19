@@ -36,6 +36,8 @@ app:
       - /v3/api-docs/**
       - /actuator/**
       - /ws/**
+      - /invite
+      - /.well-known/**
   invite:
     # 밴드 초대 링크의 베이스 URL (프로필별로 override 가능)
     share-base-url: ${APP_INVITE_SHARE_BASE_URL:https://test.sync-trip.app/invite?code=}
