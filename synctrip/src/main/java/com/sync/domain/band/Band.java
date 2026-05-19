@@ -138,13 +138,14 @@ public class Band {
      */
     public static Band create(User owner, String name, String destination, double destinationLat,
                               double destinationLng, String countryCode, boolean overseas,
-                              LocalDate startDate, LocalDate endDate) {
+                              LocalDate startDate, LocalDate endDate, TravelStyle travelStyle,
+                              String accommodationName, Double accommodationLat, Double accommodationLng) {
         return new Band(
                 owner, name, destination, destinationLat, destinationLng,
                 countryCode, overseas, startDate, endDate,
                 generateInviteCode(),
                 LocalDateTime.now().plusHours(INVITE_CODE_TTL_HOURS),
-                8, TravelStyle.PACKED, null, null, null,
+                8, travelStyle, accommodationName, accommodationLat, accommodationLng,
                 BandStatus.PLANNING, null
         );
     }
@@ -186,7 +187,9 @@ public class Band {
      * 여행 기본 정보 수정 (PLANNING 단계에서만 허용)
      */
     public void updateInfo(String name, String destination, double lat, double lng,
-                          String countryCode, boolean overseas, LocalDate start, LocalDate end) {
+                          String countryCode, boolean overseas, LocalDate start, LocalDate end,
+                          TravelStyle travelStyle, String accommodationName,
+                          Double accommodationLat, Double accommodationLng) {
         if (this.status != BandStatus.PLANNING) {
             throw new IllegalStateException("여행 정보 수정은 준비 단계(PLANNING)에서만 가능합니다.");
         }
@@ -198,6 +201,12 @@ public class Band {
         this.overseas = overseas;
         this.startDate = start;
         this.endDate = end;
+        if (travelStyle != null) {
+            this.travelStyle = travelStyle;
+        }
+        this.accommodationName = accommodationName;
+        this.accommodationLat = accommodationLat;
+        this.accommodationLng = accommodationLng;
     }
 
     /**

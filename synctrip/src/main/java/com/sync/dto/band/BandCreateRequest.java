@@ -1,5 +1,6 @@
 package com.sync.dto.band;
 
+import com.sync.domain.band.TravelStyle;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
@@ -22,6 +23,14 @@ public record BandCreateRequest(
 
     @NotBlank(message = "국가 코드를 입력해주세요")
     String countryCode,
-    boolean overseas
+
+    boolean overseas,
+
+    @NotNull(message = "여행 스타일을 선택해주세요")
+    TravelStyle travelStyle,
+
+    String accommodationName,
+    Double accommodationLat,
+    Double accommodationLng
 ) {
 }

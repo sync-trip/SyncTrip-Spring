@@ -108,4 +108,5 @@ public class BandMember {
     public boolean isJoinedAfterVoting() { return joinedAfterVoting; }
     public boolean isDeleted() { return isDeleted; }
     public LocalDateTime getDeletedAt() { return deletedAt; }
+    public LocalDateTime getJoinedAt() { return joinedAt; }
 }
