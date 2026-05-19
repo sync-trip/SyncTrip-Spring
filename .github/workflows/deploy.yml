@@ -40,7 +40,8 @@ jobs:
       KAKAO_CLIENT_ID: ${{ secrets.KAKAO_CLIENT_ID }}
       KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
-
+      # 구글 지도 API 키 주입 추가
+      GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
       # ===== VARIABLES (GitHub Variables에 저장해야 함) =====
 
       # JWT 설정값 (공개 설정)
@@ -73,7 +74,8 @@ jobs:
             'JWT_ACCESS_TOKEN_TTL_SECONDS', 'JWT_REFRESH_TOKEN_TTL_SECONDS',
             'KAKAO_REDIRECT_URI_MAIN', 'KAKAO_REDIRECT_URI_DEV',
             'APP_INVITE_SHARE_BASE_URL_MAIN', 'APP_INVITE_SHARE_BASE_URL_DEV',
-            'APP_INVITE_DEEP_LINK_BASE_URL_MAIN', 'APP_INVITE_DEEP_LINK_BASE_URL_DEV'
+            'APP_INVITE_DEEP_LINK_BASE_URL_MAIN', 'APP_INVITE_DEEP_LINK_BASE_URL_DEV',
+            'GOOGLE_MAPS_API_KEY'
           )
           foreach ($key in $required) {
             if ([string]::IsNullOrWhiteSpace((Get-Item -Path "Env:$key" -ErrorAction SilentlyContinue).Value)) {
