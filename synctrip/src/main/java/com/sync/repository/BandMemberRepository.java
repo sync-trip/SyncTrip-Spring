@@ -5,7 +5,9 @@ import com.sync.domain.band.BandMember;
 import com.sync.domain.user.User;
 import java.util.List;
 import java.util.Optional;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -32,6 +34,14 @@ public interface BandMemberRepository extends JpaRepository<BandMember, Long> {
      */
     @Query("SELECT bm FROM BandMember bm WHERE bm.band.id = :bandId AND bm.user.id = :userId AND bm.isDeleted = false")
     Optional<BandMember> findByBandIdAndUserId(@Param("bandId") Long bandId, @Param("userId") Long userId);
+
+    /**
+     * 특정 밴드 내의 특정 유저 멤버 정보를 잠금 상태로 조회
+     * - 장바구니 추가/삭제 시 bookmark_count 동시성 충돌을 막기 위해 사용한다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT bm FROM BandMember bm WHERE bm.band.id = :bandId AND bm.user.id = :userId AND bm.isDeleted = false")
+    Optional<BandMember> findByBandIdAndUserIdForUpdate(@Param("bandId") Long bandId, @Param("userId") Long userId);
 
     /**
      * 밴드의 현재 참여 인원 수 계산

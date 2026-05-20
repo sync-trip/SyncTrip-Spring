@@ -1,6 +1,7 @@
 package com.sync.dto.band;
 
 import com.sync.domain.band.BandStatus;
+import com.sync.domain.band.TravelStyle;
 import java.time.LocalDate;
 
 public record BandResponse(
@@ -12,6 +13,9 @@ public record BandResponse(
     String inviteCode,
     BandStatus status,
     boolean isOwner,
-    boolean isOverseas
+    boolean isOverseas,
+    TravelStyle travelStyle,
+    String accommodationName,
+    int memberCount
 ) {
 }

@@ -32,11 +32,12 @@ public class PlaceController {
     public ResponseEntity<List<PlaceSearchResult>> searchPlaces(
             @LoginUser Long userId,
             @PathVariable Long bandId,
+            @RequestParam(required = false) String keyword,
             @RequestParam(required = false) PlaceCategory category,
             @RequestParam(defaultValue = "5000") double radiusMeters
     ) {
         return ResponseEntity.ok(
-                placeSearchService.searchPlaces(userId, bandId, category, radiusMeters)
+                placeSearchService.searchPlaces(userId, bandId, keyword, category, radiusMeters)
         );
     }
 }

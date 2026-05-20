@@ -4,6 +4,7 @@ import com.sync.domain.band.Band;
 import com.sync.domain.band.BandMember;
 import com.sync.domain.band.BandRole;
 import com.sync.domain.band.BandStatus;
+import com.sync.domain.band.TravelStyle;
 import com.sync.domain.user.User;
 import com.sync.config.BandInviteProperties;
 import com.sync.dto.band.BandInviteCodeResponse;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import static org.mockito.Mockito.mock;
+import static org.mockito.ArgumentMatchers.anyLong;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -46,7 +48,6 @@ class BandServiceTest {
 
     @BeforeEach
     void setUp() {
-        // 각 테스트마다 동일한 초대 링크 베이스를 쓰도록 서비스 객체를 직접 생성한다.
         bandService = new BandService(
                 bandRepository,
                 bandMemberRepository,
@@ -75,7 +76,8 @@ class BandServiceTest {
                 "KR",
                 false,
                 LocalDate.of(2026, 6, 1),
-                LocalDate.of(2026, 6, 5)
+                LocalDate.of(2026, 6, 5),
+                TravelStyle.PACKED, null, null, null
         );
         setId(band, 10L);
 
@@ -109,7 +111,8 @@ class BandServiceTest {
                 "KR",
                 false,
                 LocalDate.of(2026, 6, 1),
-                LocalDate.of(2026, 6, 5)
+                LocalDate.of(2026, 6, 5),
+                TravelStyle.PACKED, null, null, null
         );
         setId(band, 10L);
 
@@ -148,7 +151,8 @@ class BandServiceTest {
                 "KR",
                 false,
                 LocalDate.of(2026, 6, 1),
-                LocalDate.of(2026, 6, 5)
+                LocalDate.of(2026, 6, 5),
+                TravelStyle.PACKED, null, null, null
         );
         setId(band, 10L);
 
@@ -181,14 +185,18 @@ class BandServiceTest {
                 "KR",
                 false,
                 LocalDate.of(2026, 6, 1),
-                LocalDate.of(2026, 6, 5)
+                LocalDate.of(2026, 6, 5),
+                TravelStyle.PACKED, null, null, null
         );
         setId(band, 10L);
 
         BandMember ownerMember = BandMember.create(owner, band, BandRole.OWNER);
         setId(ownerMember, 101L);
+        setBookmarkCount(ownerMember, 1);
+
         BandMember otherMember = BandMember.create(other, band, BandRole.MEMBER);
         setId(otherMember, 102L);
+        setBookmarkCount(otherMember, 1);
 
         when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(owner));
         when(userRepository.findByIdAndIsDeletedFalse(2L)).thenReturn(Optional.of(other));
@@ -198,12 +206,8 @@ class BandServiceTest {
         when(bandMemberRepository.countByBandId(10L)).thenReturn(2L);
         when(bandMemberRepository.countByBandIdAndIsReadyTrue(10L)).thenAnswer(invocation -> {
             long count = 0L;
-            if (ownerMember.isReady()) {
-                count++;
-            }
-            if (otherMember.isReady()) {
-                count++;
-            }
+            if (ownerMember.isReady()) count++;
+            if (otherMember.isReady()) count++;
             return count;
         });
         when(bandMemberRepository.save(any(BandMember.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -225,41 +229,12 @@ class BandServiceTest {
     }
 
     @Test
-    void markNotReady_clearsReadyStateWithoutAdvancingBand() {
-        User user = User.kakaoUser("user@example.com", "user", null, "100");
-        setId(user, 1L);
-
-        Band band = Band.create(
-                user,
-                "봄여행",
-                "제주도",
-                33.4996,
-                126.5312,
-                "KR",
-                false,
-                LocalDate.of(2026, 6, 1),
-                LocalDate.of(2026, 6, 5)
+    void markNotReady_throwsForbidden() {
+        ResponseStatusException exception = org.junit.jupiter.api.Assertions.assertThrows(
+                ResponseStatusException.class,
+                () -> bandService.markNotReady(1L, 10L)
         );
-        setId(band, 10L);
-
-        BandMember member = BandMember.create(user, band, BandRole.OWNER);
-        setId(member, 101L);
-        member.updateReady(true);
-
-        when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
-        when(bandRepository.findByIdAndIsDeletedFalse(10L)).thenReturn(Optional.of(band));
-        when(bandMemberRepository.findByBandIdAndUserId(10L, 1L)).thenReturn(Optional.of(member));
-        when(bandMemberRepository.countByBandId(10L)).thenReturn(1L);
-        when(bandMemberRepository.countByBandIdAndIsReadyTrue(10L)).thenAnswer(invocation -> member.isReady() ? 1L : 0L);
-        when(bandMemberRepository.save(any(BandMember.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        BandReadyResponse response = bandService.markNotReady(1L, 10L);
-
-        assertThat(response.isReady()).isFalse();
-        assertThat(response.readyCount()).isEqualTo(0L);
-        assertThat(response.allReady()).isFalse();
-        assertThat(response.bandStatus()).isEqualTo(BandStatus.PLANNING);
-        assertThat(member.isReady()).isFalse();
+        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     }
 
     @Test
@@ -276,7 +251,8 @@ class BandServiceTest {
                 "KR",
                 false,
                 LocalDate.of(2026, 6, 1),
-                LocalDate.of(2026, 6, 5)
+                LocalDate.of(2026, 6, 5),
+                TravelStyle.PACKED, null, null, null
         );
         setId(band, 10L);
 
@@ -306,7 +282,8 @@ class BandServiceTest {
                 "KR",
                 false,
                 LocalDate.of(2026, 6, 1),
-                LocalDate.of(2026, 6, 5)
+                LocalDate.of(2026, 6, 5),
+                TravelStyle.PACKED, null, null, null
         );
         setId(band1, 10L);
 
@@ -319,7 +296,8 @@ class BandServiceTest {
                 "KR",
                 false,
                 LocalDate.of(2026, 7, 1),
-                LocalDate.of(2026, 7, 7)
+                LocalDate.of(2026, 7, 7),
+                TravelStyle.RELAXED, null, null, null
         );
         setId(band2, 11L);
 
@@ -331,6 +309,7 @@ class BandServiceTest {
 
         when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
         when(bandMemberRepository.findByUserId(1L)).thenReturn(java.util.List.of(member1, member2));
+        when(bandMemberRepository.countByBandId(anyLong())).thenReturn(1L);
 
         java.util.List<BandResponse> responses = bandService.getMyBands(1L);
 
@@ -365,6 +344,16 @@ class BandServiceTest {
         }
     }
 
+    private void setBookmarkCount(BandMember member, int count) {
+        try {
+            java.lang.reflect.Field field = BandMember.class.getDeclaredField("bookmarkCount");
+            field.setAccessible(true);
+            field.set(member, count);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private void setInviteCodeExpiredAt(Band band, LocalDateTime value) {
         try {
             java.lang.reflect.Field field = Band.class.getDeclaredField("inviteCodeExpiredAt");
@@ -375,4 +364,3 @@ class BandServiceTest {
         }
     }
 }
-

@@ -26,8 +26,8 @@ import org.hibernate.annotations.UpdateTimestamp;
 @Entity
 @Table(name = "user_groups")
 public class Band {
-    // 초대코드 유효 기간 (72시간)
     private static final long INVITE_CODE_TTL_HOURS = 72;
+    private static final int EDIT_LOCK_TIMEOUT_MINUTES = 5;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -91,6 +91,12 @@ public class Band {
     @Column(name = "closed_by", length = 20)
     private String closedBy; // 종료 주체
 
+    @Column(name = "currently_editing_user_id")
+    private Long currentlyEditingUserId;
+
+    @Column(name = "last_editing_at")
+    private LocalDateTime lastEditingAt;
+
     @Column(name = "is_deleted", nullable = false)
     private boolean isDeleted = false; // 삭제 여부 (Soft Delete)
 
@@ -138,13 +144,14 @@ public class Band {
      */
     public static Band create(User owner, String name, String destination, double destinationLat,
                               double destinationLng, String countryCode, boolean overseas,
-                              LocalDate startDate, LocalDate endDate) {
+                              LocalDate startDate, LocalDate endDate, TravelStyle travelStyle,
+                              String accommodationName, Double accommodationLat, Double accommodationLng) {
         return new Band(
                 owner, name, destination, destinationLat, destinationLng,
                 countryCode, overseas, startDate, endDate,
                 generateInviteCode(),
                 LocalDateTime.now().plusHours(INVITE_CODE_TTL_HOURS),
-                8, TravelStyle.PACKED, null, null, null,
+                8, travelStyle, accommodationName, accommodationLat, accommodationLng,
                 BandStatus.PLANNING, null
         );
     }
@@ -186,7 +193,9 @@ public class Band {
      * 여행 기본 정보 수정 (PLANNING 단계에서만 허용)
      */
     public void updateInfo(String name, String destination, double lat, double lng,
-                          String countryCode, boolean overseas, LocalDate start, LocalDate end) {
+                          String countryCode, boolean overseas, LocalDate start, LocalDate end,
+                          TravelStyle travelStyle, String accommodationName,
+                          Double accommodationLat, Double accommodationLng) {
         if (this.status != BandStatus.PLANNING) {
             throw new IllegalStateException("여행 정보 수정은 준비 단계(PLANNING)에서만 가능합니다.");
         }
@@ -198,11 +207,32 @@ public class Band {
         this.overseas = overseas;
         this.startDate = start;
         this.endDate = end;
+        if (travelStyle != null) {
+            this.travelStyle = travelStyle;
+        }
+        this.accommodationName = accommodationName;
+        this.accommodationLat = accommodationLat;
+        this.accommodationLng = accommodationLng;
     }
 
-    /**
-     * 논리적 삭제(Soft Delete) 처리
-     */
+    public void startEditing(Long userId) {
+        this.currentlyEditingUserId = userId;
+        this.lastEditingAt = LocalDateTime.now();
+    }
+
+    public void finishEditing() {
+        this.currentlyEditingUserId = null;
+        this.lastEditingAt = null;
+    }
+
+    public boolean isEditingByOther(Long userId) {
+        if (currentlyEditingUserId == null) return false;
+        if (lastEditingAt != null && lastEditingAt.isBefore(LocalDateTime.now().minusMinutes(EDIT_LOCK_TIMEOUT_MINUTES))) {
+            return false;
+        }
+        return !currentlyEditingUserId.equals(userId);
+    }
+
     public void delete() {
         this.isDeleted = true;
         this.deletedAt = LocalDateTime.now();
@@ -231,4 +261,6 @@ public class Band {
     public String getClosedBy() { return closedBy; }
     public boolean isDeleted() { return isDeleted; }
     public LocalDateTime getDeletedAt() { return deletedAt; }
+    public Long getCurrentlyEditingUserId() { return currentlyEditingUserId; }
+    public LocalDateTime getLastEditingAt() { return lastEditingAt; }
 }
