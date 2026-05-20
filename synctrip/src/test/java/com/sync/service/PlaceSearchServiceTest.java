@@ -124,6 +124,24 @@ class PlaceSearchServiceTest {
         assertThat(ex.getStatusCode().value()).isEqualTo(404);
     }
 
+    @Test
+    void searchPlaces_overseasRequiresKeyword() {
+        User user = createUser(1L);
+        Band band = createBandOverseas(20L, 35.6762, 139.6503);
+
+        when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
+        when(bandRepository.findByIdAndIsDeletedFalse(20L)).thenReturn(Optional.of(band));
+        when(placeBookmarkRepository.findByBandIdAndUserIdOrderByCreatedAtDesc(20L, 1L)).thenReturn(List.of());
+
+        ResponseStatusException ex = org.junit.jupiter.api.Assertions.assertThrows(
+                ResponseStatusException.class,
+                () -> placeSearchService.searchPlaces(1L, 20L, "", PlaceCategory.CULTURE, 5000.0)
+        );
+
+        assertThat(ex.getStatusCode().value()).isEqualTo(400);
+        verifyNoInteractions(googlePlacesService);
+    }
+
     private User createUser(Long id) {
         User user = User.kakaoUser("user@example.com", "사용자", null, "oauth-1");
         setId(user, id);
@@ -140,6 +158,24 @@ class PlaceSearchServiceTest {
                 126.9780,
                 "KR",
                 false,
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 5),
+                com.sync.domain.band.TravelStyle.PACKED, null, null, null
+        );
+        setId(band, id);
+        return band;
+    }
+
+    private Band createBandOverseas(Long id, double lat, double lng) {
+        User owner = createUser(999L);
+        Band band = Band.create(
+                owner,
+                "해외여행",
+                "도쿄",
+                lat,
+                lng,
+                "JP",
+                true,
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 5),
                 com.sync.domain.band.TravelStyle.PACKED, null, null, null
