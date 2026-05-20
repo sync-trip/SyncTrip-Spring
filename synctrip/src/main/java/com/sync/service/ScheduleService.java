@@ -517,6 +517,10 @@ public class ScheduleService {
         if (band.getCurrentlyEditingUserId() == null || !band.getCurrentlyEditingUserId().equals(userId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "편집 권한이 없습니다. 편집 시작 버튼을 눌러주세요.");
         }
+        
+        // 활동 중이므로 락 시간 갱신
+        band.refreshEditingLock();
+        bandRepository.save(band);
     }
 
     private static double haversine(double lat1, double lng1, double lat2, double lng2) {

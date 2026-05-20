@@ -220,6 +220,10 @@ public class Band {
         this.lastEditingAt = LocalDateTime.now();
     }
 
+    public void refreshEditingLock() {
+        this.lastEditingAt = LocalDateTime.now();
+    }
+
     public void finishEditing() {
         this.currentlyEditingUserId = null;
         this.lastEditingAt = null;
