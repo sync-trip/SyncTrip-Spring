@@ -38,6 +38,17 @@ kakao:
   redirect-uri: https://test.sync-trip.app/api/auth/kakao/callback
   scope: account_email,profile_nickname,profile_image
 
+exchangerate:
+  api-key: test-exchange-rate-api-key
+  base-url: https://v6.exchangerate-api.com
+
+gemini:
+  api-key: test-gemini-api-key
+  base-url: https://generativelanguage.googleapis.com
+  model: gemini-3.5-flash
+
+# FCM 미설정 → Firebase 초기화 안 함 (ConditionalOnProperty)
+# fcm.credentials-json 미설정 시 FcmService는 로그만 출력하고 건너뜀
 google:
   maps:
     api-key: test-google-maps-api-key

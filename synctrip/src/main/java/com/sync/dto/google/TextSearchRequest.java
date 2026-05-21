@@ -1,11 +1,11 @@
 package com.sync.dto.google;
 
-import java.util.List;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public record TextSearchRequest(
         String textQuery,
         LocationBias locationBias,
-        List<String> includedTypes,
         int maxResultCount,
         String languageCode
 ) {

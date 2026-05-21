@@ -1,5 +1,6 @@
 package com.sync.domain.user;
 
+import com.sync.domain.notification.NotificationType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -49,8 +50,17 @@ public class User {
     @Column(name = "noti_member_ready", nullable = false)
     private boolean notiMemberReady = true;
 
+    @Column(name = "noti_member_joined", nullable = false)
+    private boolean notiMemberJoined = true;
+
+    @Column(name = "fcm_token", length = 255)
+    private String fcmToken;
+
     @Column(name = "is_deleted", nullable = false)
     private boolean isDeleted = false;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -103,8 +113,38 @@ public class User {
         return oauthId;
     }
 
+    public String getFcmToken() {
+        return fcmToken;
+    }
+
     public boolean isDeleted() {
         return isDeleted;
+    }
+
+    // 특정 알림 타입의 수신 여부 반환
+    public boolean isNotificationEnabled(NotificationType type) {
+        return switch (type) {
+            case VOTE_STARTED        -> notiVoteStarted;
+            case SCHEDULE_UPDATED    -> notiScheduleUpdated;
+            case SETTLEMENT_REQUEST  -> notiSettlementRequest;
+            case MEMBER_READY        -> notiMemberReady;
+            case MEMBER_JOINED       -> notiMemberJoined;
+        };
+    }
+
+    // 특정 알림 타입의 수신 여부 변경
+    public void updateNotificationSetting(NotificationType type, boolean enabled) {
+        switch (type) {
+            case VOTE_STARTED        -> notiVoteStarted = enabled;
+            case SCHEDULE_UPDATED    -> notiScheduleUpdated = enabled;
+            case SETTLEMENT_REQUEST  -> notiSettlementRequest = enabled;
+            case MEMBER_READY        -> notiMemberReady = enabled;
+            case MEMBER_JOINED       -> notiMemberJoined = enabled;
+        }
+    }
+
+    public void updateFcmToken(String fcmToken) {
+        this.fcmToken = fcmToken;
     }
 
     public void updateProfile(String name, String profileImageUrl, String email) {
@@ -113,9 +153,14 @@ public class User {
         this.email = email;
     }
 
+    public LocalDateTime getDeletedAt() {
+        return deletedAt;
+    }
+
     // 회원탈퇴: Soft Delete (물리 삭제 대신 논리 삭제)
     public void withdraw() {
         this.isDeleted = true;
+        this.deletedAt = LocalDateTime.now();
     }
 }
 

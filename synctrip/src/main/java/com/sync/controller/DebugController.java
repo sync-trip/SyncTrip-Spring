@@ -1,9 +1,12 @@
 package com.sync.controller;
 
+import com.sync.domain.notification.NotificationType;
 import com.sync.domain.user.OauthProvider;
 import com.sync.domain.user.User;
+import com.sync.dto.notification.NotificationResponse;
 import com.sync.dto.schedule.PlanBResponse;
 import com.sync.repository.UserRepository;
+import com.sync.service.NotificationService;
 import com.sync.service.ScheduleService;
 import com.sync.service.jwt.JwtTokenProvider;
 import java.util.List;
@@ -41,13 +44,16 @@ public class DebugController {
     private final JwtTokenProvider jwtTokenProvider;
     private final UserRepository userRepository;
     private final ScheduleService scheduleService;
+    private final NotificationService notificationService;
 
     public DebugController(JwtTokenProvider jwtTokenProvider,
                            UserRepository userRepository,
-                           ScheduleService scheduleService) {
+                           ScheduleService scheduleService,
+                           NotificationService notificationService) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.userRepository = userRepository;
         this.scheduleService = scheduleService;
+        this.notificationService = notificationService;
     }
 
     /**
@@ -162,6 +168,49 @@ public class DebugController {
      *   ]
      * }
      */
+    /**
+     * 특정 유저에게 알림 1건 발송
+     *
+     * curl -X POST "http://localhost:8080/debug/notify?userId=1&bandId=10&type=VOTE_STARTED&content=테스트"
+     */
+    @PostMapping("/notify")
+    public ResponseEntity<?> sendNotification(
+            @RequestParam Long userId,
+            @RequestParam(required = false) Long bandId,
+            @RequestParam(defaultValue = "VOTE_STARTED") NotificationType type,
+            @RequestParam(defaultValue = "테스트 알림입니다.") String content
+    ) {
+        notificationService.notify(userId, bandId, type, content);
+        List<NotificationResponse> notifications = notificationService.getNotifications(userId, 0, 20);
+        return ResponseEntity.ok(Map.of(
+                "sent", true,
+                "userId", userId,
+                "type", type,
+                "content", content,
+                "recentNotifications", notifications
+        ));
+    }
+
+    /**
+     * 밴드 전원에게 알림 발송
+     *
+     * curl -X POST "http://localhost:8080/debug/notify-all?bandId=10&type=SCHEDULE_UPDATED&content=일정확인"
+     */
+    @PostMapping("/notify-all")
+    public ResponseEntity<?> sendNotificationAll(
+            @RequestParam Long bandId,
+            @RequestParam(defaultValue = "SCHEDULE_UPDATED") NotificationType type,
+            @RequestParam(defaultValue = "테스트 단체 알림입니다.") String content
+    ) {
+        notificationService.notifyAll(bandId, type, content);
+        return ResponseEntity.ok(Map.of(
+                "sent", true,
+                "bandId", bandId,
+                "type", type,
+                "content", content
+        ));
+    }
+
     @GetMapping("/plan-b")
     public ResponseEntity<?> debugPlanB(
         @RequestParam Long userId,

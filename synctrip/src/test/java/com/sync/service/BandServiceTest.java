@@ -14,6 +14,7 @@ import com.sync.dto.band.BandStatusTransitionResponse;
 import com.sync.repository.BandMemberRepository;
 import com.sync.repository.BandRepository;
 import com.sync.repository.UserRepository;
+import com.sync.service.NotificationService;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -58,7 +59,8 @@ class BandServiceTest {
                 ),
                 mock(ScheduleService.class),
                 mock(com.sync.repository.GroupVoteInfoRepository.class),
-                mock(org.springframework.messaging.simp.SimpMessagingTemplate.class)
+                mock(org.springframework.messaging.simp.SimpMessagingTemplate.class),
+                mock(NotificationService.class)
         );
     }
 

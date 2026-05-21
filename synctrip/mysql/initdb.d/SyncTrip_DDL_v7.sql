@@ -54,6 +54,8 @@ CREATE TABLE `users` (
                          `noti_schedule_updated`   BOOLEAN      NOT NULL DEFAULT TRUE   COMMENT '일정 변경 알림',
                          `noti_settlement_request` BOOLEAN      NOT NULL DEFAULT TRUE   COMMENT '정산 요청 알림',
                          `noti_member_ready`       BOOLEAN      NOT NULL DEFAULT TRUE   COMMENT '멤버 Ready 알림',
+                         `noti_member_joined`      BOOLEAN      NOT NULL DEFAULT TRUE   COMMENT '새 멤버 합류 알림',
+                         `fcm_token`               VARCHAR(255) NULL                    COMMENT 'FCM 디바이스 토큰 (푸시 알림용)',
                          `is_deleted`              BOOLEAN      NOT NULL DEFAULT FALSE  COMMENT '탈퇴 여부 (Soft Delete)',
                          `deleted_at`              TIMESTAMP    NULL                    COMMENT '탈퇴 시각 (NULL=정상회원, 휴지통/재가입 정책용)',
                          `created_at`              TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '가입일자',
@@ -259,6 +261,7 @@ CREATE TABLE `expenses` (
                             `is_deleted`  BOOLEAN        NOT NULL DEFAULT FALSE  COMMENT '삭제 여부 (Soft Delete) — 정산 무결성 보존',
                             `deleted_at`  TIMESTAMP      NULL                    COMMENT '삭제 시각 (NULL=유효 지출)',
                             `paid_at`     TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '결제 일시',
+                            `created_at`  TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '지출 등록 일시',
                             PRIMARY KEY (`expense_id`),
                             CONSTRAINT `fk_expenses_group` FOREIGN KEY (`group_id`) REFERENCES `user_groups` (`group_id`),
                             CONSTRAINT `fk_expenses_payer` FOREIGN KEY (`payer_id`) REFERENCES `users` (`user_id`)
@@ -286,6 +289,7 @@ CREATE TABLE `notifications` (
                                  `group_id`        BIGINT       NULL                    COMMENT '관련 그룹 ID (FK → user_groups)',
                                  `type`            ENUM(
                       'MEMBER_READY',
+                      'MEMBER_JOINED',
                       'VOTE_STARTED',
                       'SCHEDULE_UPDATED',
                       'SETTLEMENT_REQUEST'
@@ -295,7 +299,9 @@ CREATE TABLE `notifications` (
                                  `created_at`      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '알림 생성일시',
                                  PRIMARY KEY (`notification_id`),
                                  CONSTRAINT `fk_notifications_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`),
-                                 CONSTRAINT `fk_notifications_group` FOREIGN KEY (`group_id`) REFERENCES `user_groups` (`group_id`)
+                                 CONSTRAINT `fk_notifications_group` FOREIGN KEY (`group_id`) REFERENCES `user_groups` (`group_id`),
+                                 INDEX `idx_notifications_user_created` (`user_id`, `created_at` DESC),
+                                 INDEX `idx_notifications_user_unread` (`user_id`, `is_read`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 

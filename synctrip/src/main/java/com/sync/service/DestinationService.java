@@ -1,36 +1,22 @@
 package com.sync.service;
 
-import com.sync.config.KakaoProperties;
 import com.sync.dto.destination.DestinationResponse;
-import com.sync.dto.kakao.KakaoLocalSearchResponse;
+import com.sync.dto.google.NearbySearchResponse;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.HttpStatusCodeException;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.web.server.ResponseStatusException;
-import org.springframework.web.util.UriComponentsBuilder;
-
-import static org.springframework.http.HttpStatus.BAD_GATEWAY;
 
 @Service
 public class DestinationService {
 
     private static final Logger log = LoggerFactory.getLogger(DestinationService.class);
 
-    // 한국 위도/경도 바운딩 박스
     private static final double KR_LAT_MIN = 33.0;
     private static final double KR_LAT_MAX = 38.9;
     private static final double KR_LNG_MIN = 124.0;
     private static final double KR_LNG_MAX = 132.0;
-
-    private static final String KAKAO_KEYWORD_URL = "https://dapi.kakao.com/v2/local/search/keyword.json";
 
     private static final String IMG = "https://images.unsplash.com/";
 
@@ -43,7 +29,7 @@ public class DestinationService {
         new DestinationResponse("도쿄", "일본", "JP",
                 35.6762, 139.6503, true, "일본",
                 "신주쿠, 시부야, 아키하바라",
-                IMG + "photo-1540959179-fd27c7e4b24d?w=400&q=80"),
+                IMG + "photo-1503899036084-c55cdd92da26?w=400&q=80"),
         new DestinationResponse("오사카", "일본", "JP",
                 34.6937, 135.5023, true, "일본",
                 "오사카, 교토, 고베, 나라",
@@ -51,7 +37,7 @@ public class DestinationService {
         new DestinationResponse("후쿠오카", "일본", "JP",
                 33.5904, 130.4017, true, "일본",
                 "후쿠오카, 유후인, 벳부",
-                null),
+                IMG + "photo-1590559899731-a382839e5549?w=400&q=80"),
         new DestinationResponse("삿포로", "일본", "JP",
                 43.0618, 141.3545, true, "일본",
                 "삿포로, 하코다테, 오타루",
@@ -59,7 +45,7 @@ public class DestinationService {
         new DestinationResponse("나고야", "일본", "JP",
                 35.1815, 136.9066, true, "일본",
                 "나고야, 다카야마, 시라카와고",
-                null),
+                IMG + "photo-1524413840807-0c3cb6fa808d?w=400&q=80"),
 
         // ── 동남아시아 ────────────────────────────────────────────────────
         new DestinationResponse("방콕", "태국", "TH",
@@ -77,17 +63,17 @@ public class DestinationService {
         new DestinationResponse("다낭", "베트남", "VN",
                 16.0544, 108.2022, true, "동남아시아",
                 "다낭, 호이안, 후에",
-                null),
+                IMG + "photo-1559592413-7cec4d0cae2b?w=400&q=80"),
         new DestinationResponse("세부", "필리핀", "PH",
                 10.3157, 123.8854, true, "동남아시아",
                 "세부, 보홀, 막탄",
-                null),
+                IMG + "photo-1573551089778-46a7abc39d9f?w=400&q=80"),
 
         // ── 유럽 ──────────────────────────────────────────────────────────
         new DestinationResponse("파리", "프랑스", "FR",
                 48.8566, 2.3522, true, "유럽",
                 "에펠탑, 루브르, 샹젤리제",
-                IMG + "photo-1502602439-6c4e8291cf6b?w=400&q=80"),
+                IMG + "photo-1502602898657-3e91760cbb34?w=400&q=80"),
         new DestinationResponse("런던", "영국", "GB",
                 51.5074, -0.1278, true, "유럽",
                 "빅벤, 타워브리지, 버킹엄궁전",
@@ -103,13 +89,13 @@ public class DestinationService {
         new DestinationResponse("암스테르담", "네덜란드", "NL",
                 52.3676, 4.9041, true, "유럽",
                 "운하, 반고흐미술관, 안네의집",
-                null),
+                IMG + "photo-1534351590666-13e3e96b5017?w=400&q=80"),
 
         // ── 미주/오세아니아 ───────────────────────────────────────────────
         new DestinationResponse("뉴욕", "미국", "US",
                 40.7128, -74.0060, true, "미주/오세아니아",
                 "맨해튼, 센트럴파크, 자유의여신상",
-                IMG + "photo-1538970272646-f61fabb3bcc2?w=400&q=80"),
+                IMG + "photo-1534430480872-3498386e7856?w=400&q=80"),
         new DestinationResponse("하와이", "미국", "US",
                 21.3069, -157.8583, true, "미주/오세아니아",
                 "와이키키, 마우이, 빅아일랜드",
@@ -123,11 +109,11 @@ public class DestinationService {
         new DestinationResponse("홍콩", "홍콩", "HK",
                 22.3193, 114.1694, true, "중화권",
                 "빅토리아피크, 침사추이, 란콰이펑",
-                null),
+                IMG + "photo-1477959858617-67f85cf4f1df?w=400&q=80"),
         new DestinationResponse("타이베이", "대만", "TW",
                 25.0330, 121.5654, true, "중화권",
                 "지우펀, 101빌딩, 예류",
-                null),
+                IMG + "photo-1552465011-b4e21bf6e79a?w=400&q=80"),
 
         // ── 국내 ──────────────────────────────────────────────────────────
         new DestinationResponse("서울", "대한민국", "KR",
@@ -137,92 +123,103 @@ public class DestinationService {
         new DestinationResponse("제주", "대한민국", "KR",
                 33.4996, 126.5312, false, "국내",
                 "성산일출봉, 한라산, 협재해수욕장",
-                null),
+                IMG + "photo-1598935898639-81586f7d2129?w=400&q=80"),
         new DestinationResponse("부산", "대한민국", "KR",
                 35.1796, 129.0756, false, "국내",
                 "해운대, 광안리, 감천문화마을",
-                null),
+                "https://plus.unsplash.com/premium_photo-1661963645994-e1303df0d8c8?w=400&q=80"),
         new DestinationResponse("경주", "대한민국", "KR",
                 35.8562, 129.2247, false, "국내",
                 "불국사, 첨성대, 동궁과월지",
-                null),
+                IMG + "photo-1589394815804-964ed0be2eb5?w=400&q=80"),
         new DestinationResponse("속초", "대한민국", "KR",
                 38.2070, 128.5919, false, "국내",
                 "설악산, 청초호, 속초해수욕장",
-                null),
+                IMG + "photo-1601128533718-374ffcca299b?w=400&q=80"),
         new DestinationResponse("강릉", "대한민국", "KR",
                 37.7519, 128.8760, false, "국내",
                 "경포대, 정동진, 안목커피거리",
-                null),
+                IMG + "photo-1506905925346-21bda4d32df4?w=400&q=80"),
         new DestinationResponse("전주", "대한민국", "KR",
                 35.8242, 127.1480, false, "국내",
                 "전주한옥마을, 비빔밥, 막걸리골목",
-                null),
+                IMG + "photo-1582721478779-0ae163c05a60?w=400&q=80"),
         new DestinationResponse("여수", "대한민국", "KR",
                 34.7604, 127.6622, false, "국내",
                 "돌산도, 여수밤바다, 오동도",
-                null)
+                IMG + "photo-1578469645742-46cae010e5d4?w=400&q=80")
     );
 
-    private final RestTemplate restTemplate;
-    private final KakaoProperties kakaoProperties;
+    private final GooglePlacesService googlePlacesService;
 
-    public DestinationService(RestTemplate restTemplate, KakaoProperties kakaoProperties) {
-        this.restTemplate = restTemplate;
-        this.kakaoProperties = kakaoProperties;
+    public DestinationService(GooglePlacesService googlePlacesService) {
+        this.googlePlacesService = googlePlacesService;
     }
 
     public List<DestinationResponse> getPopular() {
         return POPULAR;
     }
 
+    @Cacheable(value = "destination-search", key = "#query.toLowerCase()")
     public List<DestinationResponse> search(String query) {
-        String url = UriComponentsBuilder.fromHttpUrl(KAKAO_KEYWORD_URL)
-                .queryParam("query", query)
-                .queryParam("size", 5)
-                .toUriString();
+        NearbySearchResponse response = googlePlacesService.searchDestination(query);
+        if (response.places() == null || response.places().isEmpty()) return List.of();
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("Authorization", "KakaoAK " + kakaoProperties.clientId());
-        headers.setAccept(List.of(MediaType.APPLICATION_JSON));
-        HttpEntity<Void> entity = new HttpEntity<>(headers);
-
-        try {
-            ResponseEntity<KakaoLocalSearchResponse> response =
-                    restTemplate.exchange(url, HttpMethod.GET, entity, KakaoLocalSearchResponse.class);
-
-            KakaoLocalSearchResponse body = response.getBody();
-            if (body == null || body.documents() == null) return List.of();
-
-            return body.documents().stream()
-                    .filter(doc -> doc.x() != null && doc.y() != null
-                            && !doc.x().isBlank() && !doc.y().isBlank())
-                    .map(this::toDestination)
-                    .toList();
-
-        } catch (HttpStatusCodeException ex) {
-            log.error("Kakao 검색 실패: {} {}", ex.getStatusCode(), ex.getResponseBodyAsString());
-            throw new ResponseStatusException(BAD_GATEWAY, "장소 검색에 실패했습니다.", ex);
-        }
+        return response.places().stream()
+                .filter(p -> p.location() != null && p.displayName() != null)
+                .map(this::toDestination)
+                .toList();
     }
 
-    private DestinationResponse toDestination(KakaoLocalSearchResponse.Document doc) {
-        double lat = Double.parseDouble(doc.y());
-        double lng = Double.parseDouble(doc.x());
+    private DestinationResponse toDestination(NearbySearchResponse.Place place) {
+        double lat = place.location().latitude();
+        double lng = place.location().longitude();
         boolean overseas = !isKorea(lat, lng);
-        String countryCode = overseas ? null : "KR";
+        String countryCode = extractCountryCode(place.addressComponents());
+        String country = extractCountry(place.addressComponents());
+        String thumbnailUrl = (place.photos() != null && !place.photos().isEmpty())
+                ? googlePlacesService.buildPhotoUrl(place.photos().get(0).name())
+                : null;
 
         return new DestinationResponse(
-                doc.placeName(),
-                overseas ? "" : "대한민국",
+                place.displayName().text(),
+                country,
                 countryCode,
-                lat,
-                lng,
+                lat, lng,
                 overseas,
-                overseas ? "해외" : "국내",
-                doc.addressName(),
-                null
+                resolveRegion(countryCode, overseas),
+                null,
+                thumbnailUrl
         );
+    }
+
+    private String extractCountryCode(List<NearbySearchResponse.AddressComponent> components) {
+        if (components == null) return null;
+        return components.stream()
+                .filter(c -> c.types() != null && c.types().contains("country"))
+                .map(NearbySearchResponse.AddressComponent::shortText)
+                .findFirst().orElse(null);
+    }
+
+    private String extractCountry(List<NearbySearchResponse.AddressComponent> components) {
+        if (components == null) return "";
+        return components.stream()
+                .filter(c -> c.types() != null && c.types().contains("country"))
+                .map(NearbySearchResponse.AddressComponent::longText)
+                .findFirst().orElse("");
+    }
+
+    private String resolveRegion(String countryCode, boolean overseas) {
+        if (!overseas) return "국내";
+        if (countryCode == null) return "해외";
+        return switch (countryCode) {
+            case "JP" -> "일본";
+            case "TH", "SG", "ID", "VN", "PH", "MY", "KH", "MM" -> "동남아시아";
+            case "FR", "GB", "ES", "IT", "NL", "DE", "AT", "CH", "PT", "GR" -> "유럽";
+            case "US", "CA", "AU", "NZ" -> "미주/오세아니아";
+            case "HK", "TW", "CN" -> "중화권";
+            default -> "해외";
+        };
     }
 
     private boolean isKorea(double lat, double lng) {

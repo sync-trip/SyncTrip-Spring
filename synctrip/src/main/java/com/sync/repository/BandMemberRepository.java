@@ -24,6 +24,14 @@ public interface BandMemberRepository extends JpaRepository<BandMember, Long> {
     List<BandMember> findByBandId(@Param("bandId") Long bandId);
 
     /**
+     * 특정 밴드에 속한 활성 멤버 + 유저 정보를 한 번에 조회 (N+1 방지)
+     * notifyAll() 처럼 루프에서 user를 접근할 때 반드시 이 메서드를 사용한다.
+     * JOIN FETCH로 BandMember.user를 즉시 로딩하여 추가 SELECT를 없앤다.
+     */
+    @Query("SELECT bm FROM BandMember bm JOIN FETCH bm.user WHERE bm.band.id = :bandId AND bm.isDeleted = false")
+    List<BandMember> findByBandIdWithUser(@Param("bandId") Long bandId);
+
+    /**
      * 사용자가 특정 밴드에 이미 가입되어 있는지 확인
      */
     @Query("SELECT CASE WHEN COUNT(bm) > 0 THEN true ELSE false END FROM BandMember bm WHERE bm.band = :band AND bm.user = :user AND bm.isDeleted = false")
@@ -66,4 +74,10 @@ public interface BandMemberRepository extends JpaRepository<BandMember, Long> {
      */
     @Query("SELECT bm FROM BandMember bm WHERE bm.user.id = :userId AND bm.isDeleted = false AND bm.band.isDeleted = false")
     List<BandMember> findByUserId(@Param("userId") Long userId);
+
+    /**
+     * 특정 밴드에 유저가 활성 멤버로 있는지 ID 기반 확인
+     */
+    @Query("SELECT CASE WHEN COUNT(bm) > 0 THEN true ELSE false END FROM BandMember bm WHERE bm.band.id = :bandId AND bm.user.id = :userId AND bm.isDeleted = false")
+    boolean existsByBandIdAndUserId(@Param("bandId") Long bandId, @Param("userId") Long userId);
 }

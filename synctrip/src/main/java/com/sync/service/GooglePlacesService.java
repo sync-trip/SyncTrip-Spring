@@ -38,6 +38,10 @@ public class GooglePlacesService {
     private static final String FIELD_MASK =
             "places.id,places.displayName,places.location,places.types," +
             "places.regularOpeningHours,places.rating,places.formattedAddress,places.photos";
+
+    private static final String DESTINATION_FIELD_MASK =
+            "places.id,places.displayName,places.location,places.formattedAddress," +
+            "places.addressComponents,places.photos";
     
     // API 1회 호출 시 최대 결과 개수 (구글 기본값 20)
     private static final int MAX_RESULT_COUNT = 20;
@@ -99,22 +103,20 @@ public class GooglePlacesService {
     /**
      * 키워드 기반 텍스트 검색 (해외 장소 검색 전용)
      * locationBias로 목적지 주변 결과를 우선하되, 엄격히 제한하지는 않는다.
+     * 카테고리 필터는 API 요청이 아닌 응답 결과에서 서버 측 필터링으로 처리한다.
+     * (includedTypes는 NearbySearch 전용 필드 — TextSearch 미지원)
      *
-     * @param lat           목적지 위도 (bias 중심)
-     * @param lng           목적지 경도 (bias 중심)
-     * @param textQuery     검색 키워드
-     * @param includedTypes 카테고리 필터 (null 허용)
+     * @param lat       목적지 위도 (bias 중심)
+     * @param lng       목적지 경도 (bias 중심)
+     * @param textQuery 검색 키워드
      */
-    public NearbySearchResponse searchText(double lat, double lng,
-                                            String textQuery,
-                                            List<String> includedTypes) {
+    public NearbySearchResponse searchText(double lat, double lng, String textQuery) {
         TextSearchRequest body = new TextSearchRequest(
                 textQuery,
                 new TextSearchRequest.LocationBias(
                         new TextSearchRequest.Circle(
                                 new TextSearchRequest.LatLng(lat, lng),
                                 TEXT_SEARCH_BIAS_RADIUS_METERS)),
-                (includedTypes == null || includedTypes.isEmpty()) ? null : includedTypes,
                 MAX_RESULT_COUNT,
                 "ko"
         );
@@ -135,6 +137,44 @@ public class GooglePlacesService {
             return result;
         } catch (HttpStatusCodeException ex) {
             log.error("Google Text Search API 오류. Status: {}, Body: {}",
+                    ex.getStatusCode(), ex.getResponseBodyAsString());
+            throw new ResponseStatusException(BAD_GATEWAY,
+                    "Google API 연동 실패: " + ex.getResponseBodyAsString(), ex);
+        }
+    }
+
+    /**
+     * 도시/여행지 이름으로 전 세계 검색 (밴드 생성 목적지 선택 전용)
+     * locationBias 없이 글로벌 검색, addressComponents로 국가 정보 포함
+     */
+    public NearbySearchResponse searchDestination(String textQuery) {
+        TextSearchRequest body = new TextSearchRequest(
+                textQuery,
+                null,
+                5,
+                "ko"
+        );
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+        headers.set("X-Goog-Api-Key", properties.apiKey());
+        headers.set("X-Goog-FieldMask", DESTINATION_FIELD_MASK);
+
+        HttpEntity<TextSearchRequest> request = new HttpEntity<>(body, headers);
+        String url = properties.placesBaseUrl() + TEXT_SEARCH_PATH;
+
+        try {
+            log.info("Google Destination Search: query={}", textQuery);
+            ResponseEntity<NearbySearchResponse> response = restTemplate.exchange(
+                    url, HttpMethod.POST, request, NearbySearchResponse.class);
+            NearbySearchResponse result = response.getBody();
+            if (result == null) {
+                throw new ResponseStatusException(BAD_GATEWAY, "Google API 응답이 비어 있습니다.");
+            }
+            return result;
+        } catch (HttpStatusCodeException ex) {
+            log.error("Google Destination Search 오류. Status: {}, Body: {}",
                     ex.getStatusCode(), ex.getResponseBodyAsString());
             throw new ResponseStatusException(BAD_GATEWAY,
                     "Google API 연동 실패: " + ex.getResponseBodyAsString(), ex);

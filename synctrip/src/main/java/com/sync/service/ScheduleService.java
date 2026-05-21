@@ -9,9 +9,15 @@ import com.sync.algorithm.step1.GroupInfo;
 import com.sync.algorithm.step1.MemberInfo;
 import com.sync.algorithm.step1.PlaceInfo;
 import com.sync.algorithm.step1.VoteInfo;
+import com.sync.algorithm.step2.AssignedPlace;
+import com.sync.algorithm.step2.DayGroup;
+import com.sync.algorithm.step2.Step2Result;
 import com.sync.algorithm.step3.DaySchedule;
 import com.sync.algorithm.step3.OpeningHours;
 import com.sync.algorithm.step3.ScheduledPlace;
+import com.sync.algorithm.step3.SimpleTsp;
+import com.sync.algorithm.step3.Step3Input;
+import com.sync.algorithm.step3.Step3Result;
 import com.sync.domain.band.Band;
 import com.sync.domain.band.BandMember;
 import com.sync.domain.band.BandStatus;
@@ -33,6 +39,8 @@ import com.sync.repository.PlaceRepository;
 import com.sync.repository.ScheduleAltRepository;
 import com.sync.repository.ScheduleRepository;
 import com.sync.repository.UserRepository;
+import com.sync.domain.notification.NotificationType;
+import com.sync.dto.ws.ScheduleUpdatedEvent;
 import com.sync.repository.VoteRepository;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -48,6 +56,7 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -57,17 +66,9 @@ import org.springframework.web.server.ResponseStatusException;
 public class ScheduleService {
 
     private static final Logger log = LoggerFactory.getLogger(ScheduleService.class);
-    /**
-     * Plan B 단계형 반경 확장 설정
-     * Stage 0: 1km (가장 가까운 후보 우선)
-     * Stage 1: 2km (1km 이상, 2km 이하)
-     * Stage 2: 3km (2km 초과, 3km 이하)
-     *
-     * 각 단계에서 후보가 많으면 그 단계에서만 뽑고,
-     * 부족하면 다음 단계로 확장한다 (최대 3개 추천)
-     */
+    // Plan B 3단계 반경 확장: 부족할 때만 다음 단계로 확장 (1→2→3km)
     private static final List<Double> PLAN_B_STAGE_RADII_KM = List.of(1.0, 2.0, 3.0);
-    /* Plan B 최대 추천 개수 (인수인계 문서 Line 136: 최대 후보 7개) */
+    // 단계별 후보를 합산해 최대 7개까지 추천 (인수인계 문서 §7.7)
     private static final int PLAN_B_MAX_RECOMMENDATIONS = 7;
     /* 추천 후보에 포함되기 위한 최소 우선순위 점수 (0.3 이상) */
     private static final double PLAN_B_MIN_PRIORITY_SCORE = 0.3;
@@ -81,6 +82,8 @@ public class ScheduleService {
     private final PlaceBookmarkRepository placeBookmarkRepository;
     private final VoteRepository voteRepository;
     private final ObjectMapper objectMapper;
+    private final SimpMessagingTemplate messagingTemplate;
+    private final NotificationService notificationService;
 
     public ScheduleService(ScheduleRepository scheduleRepository,
                            ScheduleAltRepository scheduleAltRepository,
@@ -90,7 +93,9 @@ public class ScheduleService {
                            PlaceRepository placeRepository,
                            PlaceBookmarkRepository placeBookmarkRepository,
                            VoteRepository voteRepository,
-                           ObjectMapper objectMapper) {
+                           ObjectMapper objectMapper,
+                           SimpMessagingTemplate messagingTemplate,
+                           NotificationService notificationService) {
         this.scheduleRepository = scheduleRepository;
         this.scheduleAltRepository = scheduleAltRepository;
         this.bandRepository = bandRepository;
@@ -100,6 +105,8 @@ public class ScheduleService {
         this.placeBookmarkRepository = placeBookmarkRepository;
         this.voteRepository = voteRepository;
         this.objectMapper = objectMapper;
+        this.messagingTemplate = messagingTemplate;
+        this.notificationService = notificationService;
     }
 
     /**
@@ -216,6 +223,9 @@ public class ScheduleService {
 
         saveSchedules(band, result, placeById);
         saveScheduleAlts(band, result, placeById);
+
+        notificationService.notifyAll(bandId, NotificationType.SCHEDULE_UPDATED,
+                band.getName() + " 여행 일정이 생성됐어요! 지금 확인해보세요 🗓️");
     }
 
     private void saveSchedules(Band band, AlgorithmResult result, Map<Long, Place> placeById) {
@@ -240,21 +250,35 @@ public class ScheduleService {
     }
 
     private void saveScheduleAlts(Band band, AlgorithmResult result, Map<Long, Place> placeById) {
-        List<ScheduleAlt> alts = result.step1Result().altPool().stream()
-                .filter(alt -> placeById.containsKey(alt.placeId()))
-                .map(alt -> ScheduleAlt.create(
-                        band,
-                        placeById.get(alt.placeId()),
-                        (float) alt.priorityScore()
-                ))
-                .toList();
+        Set<Long> savedIds = new HashSet<>();
+        List<ScheduleAlt> alts = new ArrayList<>();
+
+        // altPool 장소 저장
+        for (var alt : result.step1Result().altPool()) {
+            if (!placeById.containsKey(alt.placeId())) continue;
+            alts.add(ScheduleAlt.create(band, placeById.get(alt.placeId()), (float) alt.priorityScore()));
+            savedIds.add(alt.placeId());
+        }
+
+        // overflow 장소 저장 (스케줄에 못 들어간 mainPool — altPool과 중복 방지)
+        for (var op : result.step3Result().overflow()) {
+            if (!placeById.containsKey(op.placeId())) continue;
+            if (savedIds.contains(op.placeId())) continue;
+            alts.add(ScheduleAlt.create(band, placeById.get(op.placeId()), (float) op.priorityScore()));
+            savedIds.add(op.placeId());
+        }
+
         scheduleAltRepository.saveAll(alts);
     }
 
     private Map<Long, OpeningHours> buildOpeningHoursMap(List<PlaceBookmark> bookmarks) {
+        List<Place> places = bookmarks.stream().map(PlaceBookmark::getPlace).toList();
+        return buildOpeningHoursMapFromPlaces(places);
+    }
+
+    private Map<Long, OpeningHours> buildOpeningHoursMapFromPlaces(List<Place> places) {
         Map<Long, OpeningHours> result = new HashMap<>();
-        for (PlaceBookmark pb : bookmarks) {
-            Place p = pb.getPlace();
+        for (Place p : places) {
             if (p.getOpeningHoursJson() == null || result.containsKey(p.getId())) continue;
             try {
                 Map<String, List<Map<String, String>>> parsed = objectMapper.readValue(
@@ -322,18 +346,7 @@ public class ScheduleService {
 
     @Transactional(readOnly = true)
     public List<PlanBResponse> getPlanBRecommendations(Long userId, Long bandId, Long targetPlaceId) {
-        /**
-         * Plan B 추천 GPS 기준 정리 (인수인계 문서 Line 134: "닫힌 장소 DB 위경도")
-         *
-         * GPS 기준점 = targetPlace (사용자가 교체 대상으로 지정한 일정 슬롯의 장소)
-         *
-         * 거리 계산: |currentPlace ← targetPlace까지의 거리 (Haversine)|
-         *
-         * 주의사항:
-         * - 사용자의 "현재 실시간 GPS 위치"가 아님
-         * - 모바일 앱이 실시간 GPS를 보내면 그걸 사용 가능 (현재는 미지원)
-         * - 지금은 "교체할 장소 위치" 기준으로 근처 대체 장소 추천
-         */
+        // 기준점: targetPlace의 DB 위경도 (실시간 GPS 아님 — 인수인계 문서 §7.1)
         /* 1. 사용자 및 밴드 권한 검증 */
         loadActiveUser(userId);
         Band band = loadBand(bandId);
@@ -424,9 +437,9 @@ public class ScheduleService {
             /* 9. 현재 단계의 후보들을 추천점수 내림차순으로 정렬 */
             stageCandidates.sort((a, b) -> Double.compare(b.recommendScore(), a.recommendScore()));
 
-            /* 10. 현재 단계의 상위 후보들을 최종 추천 리스트에 추가 (최대 3개까지만) */
+            /* 10. 현재 단계의 상위 후보들을 최종 추천 리스트에 추가 (최대 7개까지만) */
             for (PlanBResponse candidate : stageCandidates) {
-                /* 이미 최대치(3개) 도달했으면 중단 */
+                /* 이미 최대치(7개) 도달했으면 중단 */
                 if (recommendations.size() >= PLAN_B_MAX_RECOMMENDATIONS) {
                     break;
                 }
@@ -497,17 +510,76 @@ public class ScheduleService {
         ScheduleAlt altEntry = scheduleAltRepository.findByBandIdAndPlaceId(bandId, newPlaceId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "예비 목록에 없는 장소는 교체할 수 없습니다."));
 
-        // 3. 상호 교체 수행 (Swap)
-        // 일정 슬롯 업데이트
+        // 3. Pool Swap: 일정 슬롯에 새 장소, altPool에 기존 장소 (되돌리기 가능)
+        int dayNumber = schedule.getDayNumber();
         schedule.updatePlace(newPlace);
-        scheduleRepository.save(schedule);
-
-        // 예비 목록 업데이트 (기존 장소를 예비 목록으로 보냄 -> 되돌리기 가능)
         altEntry.updatePlace(oldPlace);
         scheduleAltRepository.save(altEntry);
-        
-        log.info("일정 상호 교체 완료: band={}, slot={}, {} <-> {}", 
-                bandId, scheduleId, oldPlace.getName(), newPlace.getName());
+
+        // 4. 해당 Day TSP 재계산 — 새 장소로 교체 후 이동 순서·시간 재할당 (RESTRUCTURE 재활용)
+        List<Schedule> daySchedules =
+                scheduleRepository.findByBandIdAndDayNumberOrderBySlotOrderAsc(bandId, dayNumber);
+        recalculateDayTsp(band, dayNumber, daySchedules);
+
+        log.info("Plan B 교체 완료: band={}, slot={}, {} → {}", bandId, scheduleId,
+                oldPlace.getName(), newPlace.getName());
+
+        // 5. 그룹 전원에게 일정 변경 알림 브로드캐스트
+        messagingTemplate.convertAndSend(
+                "/topic/bands/" + bandId + "/schedule",
+                new ScheduleUpdatedEvent(bandId, userId));
+
+        notificationService.notifyAll(bandId, NotificationType.SCHEDULE_UPDATED,
+                band.getName() + " 여행 일정이 수정됐어요! 확인해보세요 🔄");
+    }
+
+    private void recalculateDayTsp(Band band, int dayNumber, List<Schedule> daySchedules) {
+        List<AssignedPlace> assignedPlaces = daySchedules.stream()
+                .filter(s -> s.getPlace() != null && !s.isFreeTime())
+                .map(s -> new AssignedPlace(
+                        s.getPlace().getId(),
+                        dayNumber,
+                        com.sync.algorithm.PlaceCategory.valueOf(s.getPlace().getCategory().name()),
+                        s.getPlace().getLatitude(),
+                        s.getPlace().getLongitude(),
+                        s.getPlace().getEstimatedDuration(),
+                        0.0,
+                        false
+                ))
+                .toList();
+
+        if (assignedPlaces.isEmpty()) return;
+
+        Step2Result step2 = new Step2Result(List.of(new DayGroup(dayNumber, assignedPlaces)), List.of());
+
+        List<Place> dayPlaces = daySchedules.stream()
+                .map(Schedule::getPlace)
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        Map<Long, OpeningHours> openingHours = band.isOverseas()
+                ? buildOpeningHoursMapFromPlaces(dayPlaces)
+                : Map.of();
+
+        Step3Result tspResult = SimpleTsp.schedule(
+                new Step3Input(step2, band.isOverseas(), SimpleTsp.DEFAULT_DAY_START, openingHours));
+
+        if (tspResult.daySchedules().isEmpty()) return;
+        List<ScheduledPlace> newSlots = tspResult.daySchedules().get(0).places();
+
+        Map<Long, Schedule> byPlaceId = daySchedules.stream()
+                .filter(s -> s.getPlace() != null)
+                .collect(Collectors.toMap(s -> s.getPlace().getId(), s -> s));
+
+        for (int i = 0; i < newSlots.size(); i++) {
+            ScheduledPlace sp = newSlots.get(i);
+            Schedule s = byPlaceId.get(sp.placeId());
+            if (s == null) continue;
+            Integer travelTime = i > 0
+                    ? (int) Duration.between(newSlots.get(i - 1).endTime(), sp.startTime()).toMinutes()
+                    : null;
+            s.updateTimes(i + 1, sp.startTime(), sp.estimatedDuration(), travelTime);
+        }
+        scheduleRepository.saveAll(daySchedules);
     }
 
     private void requireEditingLock(Band band, Long userId) {
@@ -517,6 +589,10 @@ public class ScheduleService {
         if (band.getCurrentlyEditingUserId() == null || !band.getCurrentlyEditingUserId().equals(userId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "편집 권한이 없습니다. 편집 시작 버튼을 눌러주세요.");
         }
+        
+        // 활동 중이므로 락 시간 갱신
+        band.refreshEditingLock();
+        bandRepository.save(band);
     }
 
     private static double haversine(double lat1, double lng1, double lat2, double lng2) {
