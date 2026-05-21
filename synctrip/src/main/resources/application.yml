@@ -116,3 +116,14 @@ management:
     health:
       probes:
         enabled: true
+
+# ════════════════════════════════════════════════════════════════
+# Gemini Vision API 설정
+# ════════════════════════════════════════════════════════════════
+# 용도: 영수증 OCR (USR-019)
+# 무료 티어: 분당 15회 (졸업 프로젝트 시연용으로 충분)
+# ════════════════════════════════════════════════════════════════
+gemini:
+  api-key: ${GEMINI_API_KEY}
+  base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
+  model: ${GEMINI_MODEL:gemini-3.5-flash}
