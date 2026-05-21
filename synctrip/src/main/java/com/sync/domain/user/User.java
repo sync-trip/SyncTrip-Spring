@@ -75,6 +75,10 @@ public class User {
         return new User(email, name, profileImageUrl, OauthProvider.KAKAO, oauthId);
     }
 
+    public static User googleUser(String email, String name, String profileImageUrl, String oauthId) {
+        return new User(email, name, profileImageUrl, OauthProvider.GOOGLE, oauthId);
+    }
+
     public Long getId() {
         return id;
     }

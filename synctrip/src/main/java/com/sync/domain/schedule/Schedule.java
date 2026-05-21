@@ -78,6 +78,14 @@ public class Schedule {
         this.durationMinutes = newPlace.getEstimatedDuration();
     }
 
+    public void updateTimes(int newSlotOrder, LocalTime newStartTime,
+                            int newDuration, Integer newTravelTimeFromPrev) {
+        this.slotOrder = newSlotOrder;
+        this.startTime = newStartTime;
+        this.durationMinutes = newDuration;
+        this.travelTimeFromPrev = newTravelTimeFromPrev;
+    }
+
     public Long getId() { return id; }
     public Band getBand() { return band; }
     public Place getPlace() { return place; }

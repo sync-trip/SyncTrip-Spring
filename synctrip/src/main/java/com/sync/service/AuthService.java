@@ -3,6 +3,7 @@ package com.sync.service;
 import com.sync.domain.user.OauthProvider;
 import com.sync.domain.user.User;
 import com.sync.dto.auth.LoginResponse;
+import com.sync.dto.google.GoogleUserResponse;
 import com.sync.dto.kakao.KakaoUserResponse;
 import com.sync.repository.UserRepository;
 import com.sync.service.jwt.JwtTokenProvider;
@@ -20,11 +21,13 @@ import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 public class AuthService {
 
     private final KakaoAuthService kakaoAuthService;
+    private final GoogleAuthService googleAuthService;
     private final UserRepository userRepository;
     private final JwtTokenProvider jwtTokenProvider;
 
-    public AuthService(KakaoAuthService kakaoAuthService, UserRepository userRepository, JwtTokenProvider jwtTokenProvider) {
+    public AuthService(KakaoAuthService kakaoAuthService, GoogleAuthService googleAuthService, UserRepository userRepository, JwtTokenProvider jwtTokenProvider) {
         this.kakaoAuthService = kakaoAuthService;
+        this.googleAuthService = googleAuthService;
         this.userRepository = userRepository;
         this.jwtTokenProvider = jwtTokenProvider;
     }
@@ -50,6 +53,41 @@ public class AuthService {
                     return found;
                 })
                 .orElseGet(() -> userRepository.save(User.kakaoUser(email, nickname, profileImageUrl, oauthId)));
+
+        JwtTokenProvider.TokenPair tokenPair = jwtTokenProvider.issueTokenPair(user);
+        return new LoginResponse(
+                user.getId(),
+                user.getEmail(),
+                user.getName(),
+                user.getProfileImageUrl(),
+                newUser,
+                tokenPair.accessToken(),
+                tokenPair.refreshToken(),
+                tokenPair.accessTokenExpiresIn(),
+                tokenPair.refreshTokenExpiresIn()
+        );
+    }
+
+    @Transactional
+    public LoginResponse loginWithGoogleIdToken(String idToken) {
+        // Google ID Token 검증 및 사용자 정보 추출
+        GoogleUserResponse googleUser = googleAuthService.validateAndGetUserInfo(idToken);
+        String oauthId = googleUser.sub();
+
+        String email = googleUser.email();
+        String nickname = StringUtils.hasText(googleUser.name()) ? googleUser.name() : ("google_" + oauthId);
+        String profileImageUrl = googleUser.picture();
+
+        Optional<User> existingUser = userRepository.findByOauthProviderAndOauthIdAndIsDeletedFalse(OauthProvider.GOOGLE, oauthId);
+        boolean newUser = existingUser.isEmpty();
+
+        // 기존 회원이면 프로필 갱신, 없으면 신규 회원으로 생성
+        User user = existingUser
+                .map(found -> {
+                    found.updateProfile(nickname, profileImageUrl, email);
+                    return found;
+                })
+                .orElseGet(() -> userRepository.save(User.googleUser(email, nickname, profileImageUrl, oauthId)));
 
         JwtTokenProvider.TokenPair tokenPair = jwtTokenProvider.issueTokenPair(user);
         return new LoginResponse(

@@ -7,4 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface ScheduleRepository extends JpaRepository<Schedule, Long> {
 
     List<Schedule> findByBandIdOrderByDayNumberAscSlotOrderAsc(Long bandId);
+
+    List<Schedule> findByBandIdAndDayNumberOrderBySlotOrderAsc(Long bandId, int dayNumber);
 }
