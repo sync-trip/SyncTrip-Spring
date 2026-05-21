@@ -66,4 +66,10 @@ public interface BandMemberRepository extends JpaRepository<BandMember, Long> {
      */
     @Query("SELECT bm FROM BandMember bm WHERE bm.user.id = :userId AND bm.isDeleted = false AND bm.band.isDeleted = false")
     List<BandMember> findByUserId(@Param("userId") Long userId);
+
+    /**
+     * 특정 밴드에 유저가 활성 멤버로 있는지 ID 기반 확인
+     */
+    @Query("SELECT CASE WHEN COUNT(bm) > 0 THEN true ELSE false END FROM BandMember bm WHERE bm.band.id = :bandId AND bm.user.id = :userId AND bm.isDeleted = false")
+    boolean existsByBandIdAndUserId(@Param("bandId") Long bandId, @Param("userId") Long userId);
 }

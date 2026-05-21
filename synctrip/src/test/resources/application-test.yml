@@ -38,3 +38,8 @@ kakao:
   redirect-uri: https://test.sync-trip.app/api/auth/kakao/callback
   scope: account_email,profile_nickname,profile_image
 
+gemini:
+  api-key: test-gemini-api-key
+  base-url: https://generativelanguage.googleapis.com
+  model: gemini-3.5-flash
+
