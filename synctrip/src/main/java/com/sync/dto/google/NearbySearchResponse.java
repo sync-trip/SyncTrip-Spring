@@ -16,7 +16,15 @@ public record NearbySearchResponse(List<Place> places) {
             Double rating,
             String formattedAddress,
             RegularOpeningHours regularOpeningHours,
-            List<Photo> photos
+            List<Photo> photos,
+            List<AddressComponent> addressComponents
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record AddressComponent(
+            String longText,
+            String shortText,
+            List<String> types
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)

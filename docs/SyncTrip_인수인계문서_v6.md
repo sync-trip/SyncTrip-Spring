@@ -283,24 +283,24 @@ DB 조회/저장은 서비스 레이어 책임. 의사코드 §11 참조.
 
 **총 17개 테이블 + 트리거 2개. v2.4 의사코드와 정합성 맞춤.**
 
-| # | 테이블 | 용도 | v6 변경 |
-|---|---|---|---|
-| 1 | users | 회원 + 알림 설정 통합 | — |
-| 2 | groups | 그룹 + travel_style + 숙소 | — |
-| 3 | group_vote_info | 투표 시작/종료 + 강제시작 여부 | — |
-| 4 | group_finance | 그룹 기준 통화 | — |
+| # | 테이블                  | 용도 | v6 변경 |
+|---|----------------------|---|---|
+| 1 | users                | 회원 + 알림 설정 통합 | — |
+| 2 | user_groups          | 그룹 + travel_style + 숙소 | — |
+| 3 | group_vote_info      | 투표 시작/종료 + 강제시작 여부 | — |
+| 4 | group_finance        | 그룹 기준 통화 | — |
 | 5 | group_exchange_rates | 다통화 환율 | — |
-| 6 | **group_members** | 멤버 + Ready + bookmark_count | **+ `joined_after_voting`** ⭐ |
-| 7 | **places** | 장소 + density_point + opening_hours | **opening_hours 코멘트 보강** |
-| 8 | place_bookmarks | 장바구니 (트리거 동기화) | — |
-| 9 | votes | 투표 (1/-1/0, UPDATE 금지) | — |
-| 10 | schedules | 일정 + day_number | — |
-| 11 | **schedule_alts** | altPool (Plan B 추천 풀) | **− `alt_rank` 제거** |
-| 12 | expenses | 지출 | — |
-| 13 | expense_members | 더치페이 분담자 | — |
-| 14 | notifications | 알림 (type ENUM 4종) | — |
-| 15 | album_photos | 공유 앨범 | — |
-| 16 | passport_stamps | 여권 스탬프 | — |
+| 6 | **group_members**    | 멤버 + Ready + bookmark_count | **+ `joined_after_voting`** ⭐ |
+| 7 | **places**           | 장소 + density_point + opening_hours | **opening_hours 코멘트 보강** |
+| 8 | place_bookmarks      | 장바구니 (트리거 동기화) | — |
+| 9 | votes                | 투표 (1/-1/0, UPDATE 금지) | — |
+| 10 | schedules            | 일정 + day_number | — |
+| 11 | **schedule_alts**    | altPool (Plan B 추천 풀) | **− `alt_rank` 제거** |
+| 12 | expenses             | 지출 | — |
+| 13 | expense_members      | 더치페이 분담자 | — |
+| 14 | notifications        | 알림 (type ENUM 4종) | — |
+| 15 | album_photos         | 공유 앨범 | — |
+| 16 | passport_stamps      | 여권 스탬프 | — |
 
 ### v5 → v6 변경사항 (의사코드 v2.4 정합성)
 
@@ -440,22 +440,7 @@ DB 조회/저장은 서비스 레이어 책임. 의사코드 §11 참조.
    - 미시 제약은 UI 경고 + 수동편집으로 위임
    - 단순화 / 결정론성 / 응답 속도 동시 달성
 
-### 엔지니어링 판단력 어필 (면접용)
 
-| 검토안 | 결정 | 인사이트 |
-|---|---|---|
-| Step 3 영업시간 자동 검증 | 폐지 | 데이터 불완전 + 사용자 자율 |
-| altPool 자동 대체 | 폐지 | "분 단위 최적화 강박" 인식 |
-| 여행 스케일 자동 차등화 | 미채택 | 자동 추측 = 사용자 모름 |
-| Plan B 5km → 1km | 재검증 | 도보 1시간은 "근처" 아님 |
-| USR-018, 031 분리 | 통합 | 단일 로직 우아함 |
-| Plan B 외부 API 자동 호출 | 명시적 진입만 | 비용 + 사용자 자율 |
-| 길찾기 인앱 표시 | 외부 앱 위임 | 비용 + 사용자 외부 앱 친숙 |
-| 다중 숙소 v1 | v2 확장 | DDL 부담 vs 빈도 낮음 |
-| 호텔 변경 시 전체 재계산 | 부분 재계산 | 시계열 보존 + 효율 |
-| 영업시간 자체 | 해외 전용 | 데이터 가용성 정직한 인정 |
-
-**"복잡도 vs 효과 trade-off"** 판단 사례 다수.
 
 ### Wanderlog 대비 차별점
 
