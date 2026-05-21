@@ -3,7 +3,8 @@
     "allow": [
       "WebFetch(domain:github.com)",
       "Read(//mnt/c/projects/SyncTrip-Spring/**)",
-      "Bash(./gradlew clean *)"
+      "Bash(./gradlew clean *)",
+      "Bash(grep *)"
     ]
   },
   "spinnerTipsEnabled": true
