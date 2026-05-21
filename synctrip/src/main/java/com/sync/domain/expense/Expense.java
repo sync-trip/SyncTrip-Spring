@@ -80,6 +80,15 @@ public class Expense {
         return new Expense(band, payer, itemName, amount, currency, receiptUrl, ocrRaw, paidAt);
     }
 
+    public void update(String itemName, BigDecimal amount, String currency, LocalDateTime paidAt) {
+        this.itemName = itemName;
+        this.amount = amount;
+        this.currency = currency;
+        if (paidAt != null) {
+            this.paidAt = paidAt;
+        }
+    }
+
     public void delete() {
         this.isDeleted = true;
         this.deletedAt = LocalDateTime.now();

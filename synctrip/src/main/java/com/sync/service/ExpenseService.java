@@ -6,6 +6,7 @@ import com.sync.domain.expense.ExpenseMember;
 import com.sync.domain.user.User;
 import com.sync.dto.expense.ExpenseCreateRequest;
 import com.sync.dto.expense.ExpenseResponse;
+import com.sync.dto.expense.ExpenseUpdateRequest;
 import com.sync.dto.expense.OcrReceiptResponse;
 import com.sync.repository.BandMemberRepository;
 import com.sync.repository.BandRepository;
@@ -89,6 +90,45 @@ public class ExpenseService {
                     return toResponse(e, memberIds);
                 })
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public ExpenseResponse getExpense(Long userId, Long bandId, Long expenseId) {
+        validateBandMember(bandId, userId);
+        Expense expense = expenseRepository.findByIdAndIsDeletedFalse(expenseId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "지출 내역을 찾을 수 없습니다."));
+        if (!expense.getBand().getId().equals(bandId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "해당 밴드의 지출이 아닙니다.");
+        }
+        List<Long> memberIds = expenseMemberRepository.findByExpenseId(expenseId)
+                .stream().map(m -> m.getUser().getId()).collect(Collectors.toList());
+        return toResponse(expense, memberIds);
+    }
+
+    public ExpenseResponse updateExpense(Long userId, Long bandId, Long expenseId, ExpenseUpdateRequest request) {
+        validateBandMember(bandId, userId);
+        Expense expense = expenseRepository.findByIdAndIsDeletedFalse(expenseId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "지출 내역을 찾을 수 없습니다."));
+        if (!expense.getBand().getId().equals(bandId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "해당 밴드의 지출이 아닙니다.");
+        }
+        if (!expense.getPayer().getId().equals(userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "본인이 등록한 지출만 수정할 수 있습니다.");
+        }
+
+        expense.update(request.itemName(), request.amount(), request.currency(), request.paidAt());
+        expenseRepository.save(expense);
+
+        expenseMemberRepository.deleteByExpenseId(expenseId);
+        List<Long> newMemberIds = request.memberIds() != null ? request.memberIds() : List.of();
+        for (Long memberId : newMemberIds) {
+            User member = userRepository.findByIdAndIsDeletedFalse(memberId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                            "멤버를 찾을 수 없습니다. id=" + memberId));
+            expenseMemberRepository.save(ExpenseMember.create(expense, member));
+        }
+
+        return toResponse(expense, newMemberIds);
     }
 
     public void deleteExpense(Long userId, Long bandId, Long expenseId) {

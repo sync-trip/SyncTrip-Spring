@@ -39,6 +39,7 @@ import com.sync.repository.PlaceRepository;
 import com.sync.repository.ScheduleAltRepository;
 import com.sync.repository.ScheduleRepository;
 import com.sync.repository.UserRepository;
+import com.sync.domain.notification.NotificationType;
 import com.sync.dto.ws.ScheduleUpdatedEvent;
 import com.sync.repository.VoteRepository;
 import java.time.Duration;
@@ -82,6 +83,7 @@ public class ScheduleService {
     private final VoteRepository voteRepository;
     private final ObjectMapper objectMapper;
     private final SimpMessagingTemplate messagingTemplate;
+    private final NotificationService notificationService;
 
     public ScheduleService(ScheduleRepository scheduleRepository,
                            ScheduleAltRepository scheduleAltRepository,
@@ -92,7 +94,8 @@ public class ScheduleService {
                            PlaceBookmarkRepository placeBookmarkRepository,
                            VoteRepository voteRepository,
                            ObjectMapper objectMapper,
-                           SimpMessagingTemplate messagingTemplate) {
+                           SimpMessagingTemplate messagingTemplate,
+                           NotificationService notificationService) {
         this.scheduleRepository = scheduleRepository;
         this.scheduleAltRepository = scheduleAltRepository;
         this.bandRepository = bandRepository;
@@ -103,6 +106,7 @@ public class ScheduleService {
         this.voteRepository = voteRepository;
         this.objectMapper = objectMapper;
         this.messagingTemplate = messagingTemplate;
+        this.notificationService = notificationService;
     }
 
     /**
@@ -219,6 +223,9 @@ public class ScheduleService {
 
         saveSchedules(band, result, placeById);
         saveScheduleAlts(band, result, placeById);
+
+        notificationService.notifyAll(bandId, NotificationType.SCHEDULE_UPDATED,
+                band.getName() + " 여행 일정이 생성됐어요! 지금 확인해보세요 🗓️");
     }
 
     private void saveSchedules(Band band, AlgorithmResult result, Map<Long, Place> placeById) {
@@ -521,6 +528,9 @@ public class ScheduleService {
         messagingTemplate.convertAndSend(
                 "/topic/bands/" + bandId + "/schedule",
                 new ScheduleUpdatedEvent(bandId, userId));
+
+        notificationService.notifyAll(bandId, NotificationType.SCHEDULE_UPDATED,
+                band.getName() + " 여행 일정이 수정됐어요! 확인해보세요 🔄");
     }
 
     private void recalculateDayTsp(Band band, int dayNumber, List<Schedule> daySchedules) {

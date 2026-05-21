@@ -6,6 +6,7 @@ import com.sync.domain.band.BandRole;
 import com.sync.domain.band.BandStatus;
 import com.sync.domain.user.User;
 import com.sync.config.BandInviteProperties;
+import com.sync.domain.notification.NotificationType;
 import com.sync.dto.band.BandCreateRequest;
 import com.sync.dto.band.BandInviteCodeResponse;
 import com.sync.dto.band.BandMemberResponse;
@@ -41,6 +42,7 @@ public class BandService {
     private final ScheduleService scheduleService;
     private final GroupVoteInfoRepository groupVoteInfoRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final NotificationService notificationService;
 
     public BandService(BandRepository bandRepository,
                        BandMemberRepository bandMemberRepository,
@@ -48,7 +50,8 @@ public class BandService {
                        BandInviteProperties bandInviteProperties,
                        ScheduleService scheduleService,
                        GroupVoteInfoRepository groupVoteInfoRepository,
-                       SimpMessagingTemplate messagingTemplate) {
+                       SimpMessagingTemplate messagingTemplate,
+                       NotificationService notificationService) {
         this.bandRepository = bandRepository;
         this.bandMemberRepository = bandMemberRepository;
         this.userRepository = userRepository;
@@ -56,6 +59,7 @@ public class BandService {
         this.scheduleService = scheduleService;
         this.groupVoteInfoRepository = groupVoteInfoRepository;
         this.messagingTemplate = messagingTemplate;
+        this.notificationService = notificationService;
     }
 
     /**
@@ -164,6 +168,8 @@ public class BandService {
 
         if (previousStatus == BandStatus.PLANNING) {
             groupVoteInfoRepository.save(GroupVoteInfo.start(band, true));
+            notificationService.notifyAll(band.getId(), NotificationType.VOTE_STARTED,
+                    band.getName() + " 여행 투표가 시작됐어요! 지금 바로 참여하세요 ✈️");
         } else if (previousStatus == BandStatus.VOTING) {
             groupVoteInfoRepository.findByBandId(band.getId()).ifPresent(info -> {
                 info.end();
@@ -239,6 +245,11 @@ public class BandService {
             groupVoteInfoRepository.save(GroupVoteInfo.start(band, false));
             messagingTemplate.convertAndSend("/topic/bands/" + bandId + "/status",
                     new StatusEvent(bandId, band.getStatus()));
+            notificationService.notifyAll(bandId, NotificationType.VOTE_STARTED,
+                    band.getName() + " 여행 투표가 시작됐어요! 지금 바로 참여하세요 ✈️");
+        } else if (ready) {
+            notificationService.notify(band.getOwner().getId(), bandId, NotificationType.MEMBER_READY,
+                    user.getName() + " 님이 준비 완료했어요!");
         }
 
         messagingTemplate.convertAndSend("/topic/bands/" + bandId + "/ready",
