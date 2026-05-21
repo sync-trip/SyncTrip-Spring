@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/synctrip.main.iml" filepath="$PROJECT_DIR$/.idea/modules/synctrip.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/synctrip.test.iml" filepath="$PROJECT_DIR$/.idea/modules/synctrip.test.iml" />
       <module fileurl="file://$PROJECT_DIR$/synctripspring.iml" filepath="$PROJECT_DIR$/synctripspring.iml" />
     </modules>
   </component>

@@ -5,6 +5,7 @@ import com.sync.dto.google.NearbySearchResponse;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -28,7 +29,7 @@ public class DestinationService {
         new DestinationResponse("도쿄", "일본", "JP",
                 35.6762, 139.6503, true, "일본",
                 "신주쿠, 시부야, 아키하바라",
-                IMG + "photo-1540959179-fd27c7e4b24d?w=400&q=80"),
+                IMG + "photo-1503899036084-c55cdd92da26?w=400&q=80"),
         new DestinationResponse("오사카", "일본", "JP",
                 34.6937, 135.5023, true, "일본",
                 "오사카, 교토, 고베, 나라",
@@ -72,7 +73,7 @@ public class DestinationService {
         new DestinationResponse("파리", "프랑스", "FR",
                 48.8566, 2.3522, true, "유럽",
                 "에펠탑, 루브르, 샹젤리제",
-                IMG + "photo-1502602439-6c4e8291cf6b?w=400&q=80"),
+                IMG + "photo-1502602898657-3e91760cbb34?w=400&q=80"),
         new DestinationResponse("런던", "영국", "GB",
                 51.5074, -0.1278, true, "유럽",
                 "빅벤, 타워브리지, 버킹엄궁전",
@@ -94,7 +95,7 @@ public class DestinationService {
         new DestinationResponse("뉴욕", "미국", "US",
                 40.7128, -74.0060, true, "미주/오세아니아",
                 "맨해튼, 센트럴파크, 자유의여신상",
-                IMG + "photo-1538970272646-f61fabb3bcc2?w=400&q=80"),
+                IMG + "photo-1534430480872-3498386e7856?w=400&q=80"),
         new DestinationResponse("하와이", "미국", "US",
                 21.3069, -157.8583, true, "미주/오세아니아",
                 "와이키키, 마우이, 빅아일랜드",
@@ -159,6 +160,7 @@ public class DestinationService {
         return POPULAR;
     }
 
+    @Cacheable(value = "destination-search", key = "#query.toLowerCase()")
     public List<DestinationResponse> search(String query) {
         NearbySearchResponse response = googlePlacesService.searchDestination(query);
         if (response.places() == null || response.places().isEmpty()) return List.of();
