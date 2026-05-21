@@ -1,8 +1,10 @@
 {
-  "spinnerTipsEnabled": true,
   "permissions": {
     "allow": [
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Read(//mnt/c/projects/SyncTrip-Spring/**)",
+      "Bash(./gradlew clean *)"
     ]
-  }
+  },
+  "spinnerTipsEnabled": true
 }

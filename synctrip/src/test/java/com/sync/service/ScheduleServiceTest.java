@@ -19,6 +19,7 @@ import com.sync.repository.ScheduleAltRepository;
 import com.sync.repository.ScheduleRepository;
 import com.sync.repository.UserRepository;
 import com.sync.repository.VoteRepository;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import java.lang.reflect.Field;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -53,6 +54,8 @@ class ScheduleServiceTest {
     private PlaceBookmarkRepository placeBookmarkRepository;
     @Mock
     private VoteRepository voteRepository;
+    @Mock
+    private SimpMessagingTemplate messagingTemplate;
 
     private ScheduleService scheduleService;
 
@@ -67,7 +70,8 @@ class ScheduleServiceTest {
                 placeRepository,
                 placeBookmarkRepository,
                 voteRepository,
-                new ObjectMapper()
+                new ObjectMapper(),
+                messagingTemplate
         );
     }
 
