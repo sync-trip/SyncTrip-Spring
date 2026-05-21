@@ -131,3 +131,13 @@ gemini:
   api-key: ${GEMINI_API_KEY}
   base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
   model: ${GEMINI_MODEL:gemini-3.5-flash}
+
+# ════════════════════════════════════════════════════════════════
+# FCM 설정 (Firebase Cloud Messaging, 푸시 알림)
+# ════════════════════════════════════════════════════════════════
+# Firebase 콘솔 → 프로젝트 설정 → 서비스 계정 → 새 비공개 키 생성
+# 다운로드한 JSON을 base64로 인코딩해서 FIREBASE_CREDENTIALS_JSON에 저장
+# base64 인코딩: base64 -w 0 firebase-service-account.json
+# ConditionalOnProperty로 값이 없으면 FCM 비활성화 (개발환경 용이)
+fcm:
+  credentials-json: ${FIREBASE_CREDENTIALS_JSON}

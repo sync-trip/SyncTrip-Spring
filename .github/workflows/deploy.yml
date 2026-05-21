@@ -47,6 +47,8 @@ jobs:
       EXCHANGE_RATE_API_KEY: ${{ secrets.EXCHANGE_RATE_API_KEY }}
       # Gemini Vision API 키 (영수증 OCR)
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      # Firebase 서비스 계정 JSON (base64 인코딩, FCM 푸시 알림)
+      FIREBASE_CREDENTIALS_JSON: ${{ secrets.FIREBASE_CREDENTIALS_JSON }}
       # ===== VARIABLES (GitHub Variables에 저장해야 함) =====
 
       # JWT 설정값 (공개 설정)
@@ -82,7 +84,8 @@ jobs:
             'APP_INVITE_DEEP_LINK_BASE_URL_MAIN', 'APP_INVITE_DEEP_LINK_BASE_URL_DEV',
             'GOOGLE_MAPS_API_KEY', 'GOOGLE_OAUTH_CLIENT_ID',
             'EXCHANGE_RATE_API_KEY',
-            'GEMINI_API_KEY'
+            'GEMINI_API_KEY',
+            'FIREBASE_CREDENTIALS_JSON'
           )
           foreach ($key in $required) {
             if ([string]::IsNullOrWhiteSpace((Get-Item -Path "Env:$key" -ErrorAction SilentlyContinue).Value)) {

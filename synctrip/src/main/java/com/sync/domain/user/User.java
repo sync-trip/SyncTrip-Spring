@@ -49,8 +49,14 @@ public class User {
     @Column(name = "noti_member_ready", nullable = false)
     private boolean notiMemberReady = true;
 
+    @Column(name = "fcm_token", length = 255)
+    private String fcmToken;
+
     @Column(name = "is_deleted", nullable = false)
     private boolean isDeleted = false;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -103,8 +109,16 @@ public class User {
         return oauthId;
     }
 
+    public String getFcmToken() {
+        return fcmToken;
+    }
+
     public boolean isDeleted() {
         return isDeleted;
+    }
+
+    public void updateFcmToken(String fcmToken) {
+        this.fcmToken = fcmToken;
     }
 
     public void updateProfile(String name, String profileImageUrl, String email) {
@@ -113,9 +127,14 @@ public class User {
         this.email = email;
     }
 
+    public LocalDateTime getDeletedAt() {
+        return deletedAt;
+    }
+
     // 회원탈퇴: Soft Delete (물리 삭제 대신 논리 삭제)
     public void withdraw() {
         this.isDeleted = true;
+        this.deletedAt = LocalDateTime.now();
     }
 }
 
