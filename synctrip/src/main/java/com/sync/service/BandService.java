@@ -111,6 +111,10 @@ public class BandService {
         }
         bandMemberRepository.save(member);
 
+        // 새 멤버 합류 시 기존 멤버 전원에게 알림
+        notificationService.notifyAll(band.getId(), NotificationType.MEMBER_JOINED,
+                user.getName() + "님이 " + band.getName() + "에 합류했어요! 👋");
+
         long memberCount = bandMemberRepository.countByBand(band);
         return toBandResponse(band, false, (int) memberCount);
     }

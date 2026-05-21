@@ -28,6 +28,7 @@ import org.springframework.web.server.ResponseStatusException;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -57,7 +58,7 @@ class NotificationServiceTest {
         user.updateFcmToken("test-fcm-token");
         Band band = makeBand(10L, user);
 
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
         when(bandRepository.findById(10L)).thenReturn(Optional.of(band));
         when(notificationRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
@@ -69,7 +70,7 @@ class NotificationServiceTest {
 
     @Test
     void notify_skipsIfUserNotFound() {
-        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+        when(userRepository.findByIdAndIsDeletedFalse(99L)).thenReturn(Optional.empty());
 
         notificationService.notify(99L, null, NotificationType.VOTE_STARTED, "내용");
 
@@ -81,7 +82,7 @@ class NotificationServiceTest {
     void notify_skipsFcmWhenTokenIsNull() {
         User user = makeUser(1L, "A"); // fcmToken = null
 
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
         when(bandRepository.findById(10L)).thenReturn(Optional.empty());
         when(notificationRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
@@ -100,10 +101,8 @@ class NotificationServiceTest {
         BandMember mA = BandMember.create(userA, band, BandRole.OWNER);
         BandMember mB = BandMember.create(userB, band, BandRole.MEMBER);
 
-        when(bandMemberRepository.findByBandId(10L)).thenReturn(List.of(mA, mB));
-        when(userRepository.findById(1L)).thenReturn(Optional.of(userA));
-        when(userRepository.findById(2L)).thenReturn(Optional.of(userB));
         when(bandRepository.findById(10L)).thenReturn(Optional.of(band));
+        when(bandMemberRepository.findByBandIdWithUser(10L)).thenReturn(List.of(mA, mB));
         when(notificationRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
         notificationService.notifyAll(10L, NotificationType.VOTE_STARTED, "투표 시작!");
@@ -123,9 +122,9 @@ class NotificationServiceTest {
         setId(n1, 1L);
         setId(n2, 2L);
 
-        when(notificationRepository.findByUserIdOrderByCreatedAtDesc(1L)).thenReturn(List.of(n2, n1));
+        when(notificationRepository.findByUserIdOrderByCreatedAtDesc(eq(1L), any())).thenReturn(List.of(n2, n1));
 
-        List<NotificationResponse> result = notificationService.getNotifications(1L);
+        List<NotificationResponse> result = notificationService.getNotifications(1L, 0, 20);
 
         assertThat(result).hasSize(2);
         assertThat(result.get(0).type()).isEqualTo(NotificationType.MEMBER_READY);

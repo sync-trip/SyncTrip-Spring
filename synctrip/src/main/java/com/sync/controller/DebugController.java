@@ -181,7 +181,7 @@ public class DebugController {
             @RequestParam(defaultValue = "테스트 알림입니다.") String content
     ) {
         notificationService.notify(userId, bandId, type, content);
-        List<NotificationResponse> notifications = notificationService.getNotifications(userId);
+        List<NotificationResponse> notifications = notificationService.getNotifications(userId, 0, 20);
         return ResponseEntity.ok(Map.of(
                 "sent", true,
                 "userId", userId,
