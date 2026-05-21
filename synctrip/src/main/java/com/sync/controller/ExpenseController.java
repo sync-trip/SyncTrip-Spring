@@ -3,6 +3,7 @@ package com.sync.controller;
 import com.sync.common.annotation.LoginUser;
 import com.sync.dto.expense.ExpenseCreateRequest;
 import com.sync.dto.expense.ExpenseResponse;
+import com.sync.dto.expense.ExpenseUpdateRequest;
 import com.sync.dto.expense.OcrReceiptResponse;
 import com.sync.service.ExpenseService;
 import jakarta.validation.Valid;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
@@ -53,6 +55,25 @@ public class ExpenseController {
             @PathVariable Long bandId
     ) {
         return ResponseEntity.ok(expenseService.getExpenses(userId, bandId));
+    }
+
+    @GetMapping("/{expenseId}")
+    public ResponseEntity<ExpenseResponse> getExpense(
+            @LoginUser Long userId,
+            @PathVariable Long bandId,
+            @PathVariable Long expenseId
+    ) {
+        return ResponseEntity.ok(expenseService.getExpense(userId, bandId, expenseId));
+    }
+
+    @PutMapping("/{expenseId}")
+    public ResponseEntity<ExpenseResponse> updateExpense(
+            @LoginUser Long userId,
+            @PathVariable Long bandId,
+            @PathVariable Long expenseId,
+            @Valid @RequestBody ExpenseUpdateRequest request
+    ) {
+        return ResponseEntity.ok(expenseService.updateExpense(userId, bandId, expenseId, request));
     }
 
     @DeleteMapping("/{expenseId}")

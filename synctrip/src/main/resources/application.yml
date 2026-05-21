@@ -123,6 +123,10 @@ management:
 # 용도: 영수증 OCR (USR-019)
 # 무료 티어: 분당 15회 (졸업 프로젝트 시연용으로 충분)
 # ════════════════════════════════════════════════════════════════
+exchangerate:
+  api-key: ${EXCHANGE_RATE_API_KEY}
+  base-url: ${EXCHANGE_RATE_BASE_URL:https://v6.exchangerate-api.com}
+
 gemini:
   api-key: ${GEMINI_API_KEY}
   base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}

@@ -38,6 +38,10 @@ kakao:
   redirect-uri: https://test.sync-trip.app/api/auth/kakao/callback
   scope: account_email,profile_nickname,profile_image
 
+exchangerate:
+  api-key: test-exchange-rate-api-key
+  base-url: https://v6.exchangerate-api.com
+
 gemini:
   api-key: test-gemini-api-key
   base-url: https://generativelanguage.googleapis.com
