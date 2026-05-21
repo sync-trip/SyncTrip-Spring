@@ -318,13 +318,13 @@ class KMeansClusteringTest {
         assertThat(result.dayGroups()).hasSize(1);
     }
 
-    // ── backfill: overflow → 빈 일차 재배정 ─────────────────────────────
+    // ── §2-5 density rebalancing + §2-7 load balancing ─────────────────
 
     @Test
-    void 동일좌표_쏠림_발생시_overflow가_빈_일차에_backfill됨() {
+    void 동일좌표_쏠림_발생시_density_리밸런싱으로_인접day에_분배됨() {
         // 4개 장소 모두 동일 좌표 → K-Means가 cluster-0에 전부 몰림
-        // densityLimit=2 → P1·P2 day1 배정, P3·P4 overflow
-        // backfill → P3·P4 가 빈 day2에 재배정
+        // densityLimit=2 → §2-5에서 P4(0.4)·P3(0.6) 가 day2로 이동 (haversine=0 <= allowDist)
+        // day2로 이동 후 density 한도 도달 → BREAK
         List<PlaceInfo> places = List.of(
                 place(1, PlaceCategory.CULTURE, 1, SEOUL_LAT, SEOUL_LNG),
                 place(2, PlaceCategory.NATURE,  1, SEOUL_LAT, SEOUL_LNG),
@@ -347,10 +347,12 @@ class KMeansClusteringTest {
     }
 
     @Test
-    void backfill_시_우선순위_높은_장소가_먼저_배정됨() {
+    void density_초과시_낮은_우선순위_장소가_먼저_인접day로_이동() {
         // K=2, densityLimit=1, 3개 장소 모두 동일 좌표
-        // P1(1.0) → day1, P2(0.8)·P3(0.6) overflow
-        // backfill: P2 먼저 day2 배정, P3는 densityLimit 초과 → 최종 overflow
+        // §2-5: priority ASC 순서로 처리
+        //   P3(0.6) → day2 이동 (haversine=0 <= allowDist, otherDensity=0+1=1 <= 1)
+        //   P2(0.8) → day2 density already=1, 이동 불가 → altPool
+        //   P1(1.0) → day1 density=1 <= 1, 남음
         List<PlaceInfo> places = List.of(
                 place(1, PlaceCategory.CULTURE, 1, SEOUL_LAT, SEOUL_LNG),
                 place(2, PlaceCategory.NATURE,  1, SEOUL_LAT, SEOUL_LNG),
@@ -367,16 +369,17 @@ class KMeansClusteringTest {
         assertThat(result.dayGroups().get(0).places()).extracting(p -> p.placeId())
                 .containsExactly(1L);
         assertThat(result.dayGroups().get(1).places()).extracting(p -> p.placeId())
-                .containsExactly(2L);
+                .containsExactly(3L); // P3 먼저 이동 (priority 낮은 순)
         assertThat(result.overflow()).hasSize(1);
-        assertThat(result.overflow().get(0).placeId()).isEqualTo(3L);
+        assertThat(result.overflow().get(0).placeId()).isEqualTo(2L); // P2 altPool
     }
 
     @Test
-    void backfill_시_일별_FOOD_쿼터_준수() {
+    void FOOD_쿼터_초과분은_altPool로_빈_클러스터는_그대로_남음() {
+        // FIX-24: 빈 클러스터는 사용자 수동편집으로 보충 (자동 backfill X)
         // K=2, foodPerDay=1, 모두 동일 좌표
-        // P1(FOOD) → day1 (quota=1), P2(FOOD) → overflow
-        // backfill: P2 → day2 (quota=1 허용), 최종 overflow=[]
+        // §2-4: P1 day1 (quota=1), P2 쿼터 초과 → altPool
+        // day2는 빈 클러스터로 유지 (FIX-24)
         List<PlaceInfo> places = List.of(
                 place(1, PlaceCategory.FOOD, 1, SEOUL_LAT, SEOUL_LNG),
                 place(2, PlaceCategory.FOOD, 1, SEOUL_LAT, SEOUL_LNG)
@@ -389,15 +392,16 @@ class KMeansClusteringTest {
         Step2Result result = run(pool, places, 2, 5, 1); // foodPerDay=1
 
         assertThat(result.dayGroups().get(0).places()).hasSize(1); // P1
-        assertThat(result.dayGroups().get(1).places()).hasSize(1); // P2 (backfill)
-        assertThat(result.overflow()).isEmpty();
+        assertThat(result.dayGroups().get(1).places()).isEmpty();  // 빈 클러스터 그대로 (FIX-24)
+        assertThat(result.overflow()).hasSize(1);
+        assertThat(result.overflow().get(0).placeId()).isEqualTo(2L);
     }
 
     @Test
-    void backfill_후에도_초과하는_overflow는_그대로_남음() {
+    void FOOD_쿼터_초과는_altPool에_누적됨() {
+        // FIX-24: 빈 클러스터 그대로, 초과 FOOD는 모두 altPool
         // K=2, foodPerDay=1, 3개 FOOD 장소
-        // P1 → day1 (quota), P2·P3 → overflow
-        // backfill day2: P2 → day2 (quota), P3 → 남음
+        // §2-4: P1 day1 (quota=1), P2·P3 쿼터 초과 → altPool
         List<PlaceInfo> places = List.of(
                 place(1, PlaceCategory.FOOD, 1, SEOUL_LAT, SEOUL_LNG),
                 place(2, PlaceCategory.FOOD, 1, SEOUL_LAT, SEOUL_LNG),
@@ -412,9 +416,10 @@ class KMeansClusteringTest {
         Step2Result result = run(pool, places, 2, 5, 1);
 
         assertThat(result.dayGroups().get(0).places()).hasSize(1); // P1
-        assertThat(result.dayGroups().get(1).places()).hasSize(1); // P2
-        assertThat(result.overflow()).hasSize(1);
-        assertThat(result.overflow().get(0).placeId()).isEqualTo(3L);
+        assertThat(result.dayGroups().get(1).places()).isEmpty();  // 빈 클러스터 그대로 (FIX-24)
+        assertThat(result.overflow()).hasSize(2);
+        assertThat(result.overflow()).extracting(p -> p.placeId())
+                .containsExactlyInAnyOrder(2L, 3L);
     }
 
     @Test

@@ -62,8 +62,8 @@ public final class KMeansClustering {
             centroids = updated;
         }
 
-        // ── 3. 일별 제약 적용 후 결과 구성 ─────────────────────────────
-        return buildResult(mainPool, placeById, assignments, effectiveK, K, meta);
+        // ── 3. §2-4/§2-5/§2-7 제약 적용 후 결과 구성 ──────────────────
+        return buildResult(mainPool, placeById, assignments, effectiveK, K, meta, centroids);
     }
 
     // ── 초기 센트로이드 선택 ─────────────────────────────────────────────
@@ -151,134 +151,207 @@ public final class KMeansClustering {
         return updated;
     }
 
-    // ── Phase 1: 일별 제약 적용 및 결과 구성 ─────────────────────────────
+    // ── §2-4 FOOD 쿼터 + §2-5 Density 리밸런싱 + §2-7 로드밸런싱 ───────
     //
-    // 클러스터 내 장소는 Step1에서 정렬된 순서(priority DESC → likeCount DESC
-    // → distanceKm ASC → placeId ASC)를 유지한다.
-    // 우선순위 높은 장소부터 제약을 충족하는 한 배정하고 나머지는 overflow로.
-    //
-    // Phase 2: overflow → 빈 일차 backfill
-    //
-    // 동일 좌표 쏠림(모든 장소가 cluster-0에 몰리는 현상) 등으로
-    // overflow + 빈 일차가 공존할 때 overflow를 우선순위 순서로 빈 일차에 재배정한다.
+    // §2-4: 클러스터별 FOOD 쿼터 초과분 → altPool
+    // §2-5: Density 초과 day → 저우선순위 비FOOD를 인접 day로 이동 or altPool
+    //        (allow_dist = maxDistKm × 0.3, 최대 K×2회 반복)
+    // §2-6: (폐지) [FIX-24] 빈 클러스터는 그대로
+    // §2-7: count 초과 day → 비FOOD를 count 부족 day로 이동
+    //        (FIX-44: 거리/density 조건 미충족 시 강제 이동 X)
 
     private static Step2Result buildResult(List<MainPoolPlace> mainPool,
                                             Map<Long, PlaceInfo> placeById,
                                             int[] assignments,
                                             int effectiveK,
                                             int K,
-                                            Step1Meta meta) {
-        // 클러스터별 장소 그룹화 (mainPool 순서 유지)
+                                            Step1Meta meta,
+                                            double[][] centroids) {
+        // 가변 클러스터 구성 (mainPool 순서 = priority DESC 유지)
         Map<Integer, List<MainPoolPlace>> clusters = new LinkedHashMap<>();
-        for (int k = 0; k < effectiveK; k++) clusters.put(k, new ArrayList<>());
+        for (int k = 0; k < K; k++) clusters.put(k, new ArrayList<>());
         for (int i = 0; i < mainPool.size(); i++) {
             clusters.get(assignments[i]).add(mainPool.get(i));
         }
 
-        List<DayGroup> dayGroups = new ArrayList<>(K);
-        List<MainPoolPlace> overflow = new ArrayList<>();
+        List<MainPoolPlace> altPool = new ArrayList<>();
 
-        // Phase 1: K-Means 클러스터 기반 초기 배정
-        for (int dayIdx = 0; dayIdx < K; dayIdx++) {
-            int day = dayIdx + 1;
-            if (dayIdx >= effectiveK) {
-                dayGroups.add(new DayGroup(day, List.of()));
-                continue;
-            }
-
-            List<MainPoolPlace> cluster = clusters.get(dayIdx);
-            List<AssignedPlace> dayPlaces = new ArrayList<>();
+        // §2-4: FOOD 쿼터 초과분 → altPool
+        // mainPool 순서(priority DESC)를 유지하므로 앞에서부터 quota개 FOOD를 우선 보호
+        for (int k = 0; k < effectiveK; k++) {
+            List<MainPoolPlace> cluster = clusters.get(k);
             int foodCount = 0;
-            int nonFoodDensity = 0;
-
+            List<MainPoolPlace> excess = new ArrayList<>();
             for (MainPoolPlace p : cluster) {
-                PlaceInfo pi = lookup(placeById, p.placeId());
-                if (pi.category() == PlaceCategory.FOOD) {
-                    if (foodCount >= meta.foodPerDayQuota()) {
-                        overflow.add(p);
-                    } else {
-                        dayPlaces.add(toAssigned(p, pi, day));
-                        foodCount++;
-                    }
-                } else {
-                    if (nonFoodDensity + pi.densityPoint() > meta.densityLimit()) {
-                        overflow.add(p);
-                    } else {
-                        dayPlaces.add(toAssigned(p, pi, day));
-                        nonFoodDensity += pi.densityPoint();
-                    }
+                if (lookup(placeById, p.placeId()).category() == PlaceCategory.FOOD) {
+                    if (foodCount >= meta.foodPerDayQuota()) excess.add(p);
+                    else foodCount++;
                 }
             }
-
-            dayGroups.add(new DayGroup(day, Collections.unmodifiableList(dayPlaces)));
+            cluster.removeAll(excess);
+            altPool.addAll(excess);
         }
 
-        // Phase 2: overflow → 빈 일차 backfill
-        backfillEmptyDays(dayGroups, overflow, placeById, meta);
+        // §2-5: Density 리밸런싱
+        altPool.addAll(rebalanceDensity(clusters, centroids, effectiveK, meta, placeById));
+
+        // §2-7: 로드밸런싱 (FIX-44: 조건 미충족 시 강제 이동 X)
+        rebalanceLoad(clusters, centroids, effectiveK, meta, placeById);
+
+        // DayGroup 구성 — 빈 클러스터는 그대로 (FIX-24)
+        List<DayGroup> dayGroups = new ArrayList<>(K);
+        for (int dayIdx = 0; dayIdx < K; dayIdx++) {
+            int day = dayIdx + 1;
+            List<MainPoolPlace> cluster = clusters.get(dayIdx);
+            if (cluster == null || cluster.isEmpty()) {
+                dayGroups.add(new DayGroup(day, List.of()));
+            } else {
+                List<AssignedPlace> dayPlaces = cluster.stream()
+                        .map(p -> toAssigned(p, lookup(placeById, p.placeId()), day))
+                        .collect(Collectors.toList());
+                dayGroups.add(new DayGroup(day, Collections.unmodifiableList(dayPlaces)));
+            }
+        }
 
         return new Step2Result(
                 Collections.unmodifiableList(dayGroups),
-                Collections.unmodifiableList(overflow)
+                Collections.unmodifiableList(altPool)
         );
     }
 
-    // ── Phase 2 backfill ──────────────────────────────────────────────────
+    // ── §2-5 Density 리밸런싱 ────────────────────────────────────────────
     //
-    // overflow를 우선순위 순서(priority DESC → likeCount DESC → distKm ASC → placeId ASC)로
-    // 정렬한 뒤, 비어있는 일차에 일별 제약(FOOD 쿼터 + density)을 지키며 채운다.
-    // 한 일차를 채우고 나면 남은 overflow로 다음 빈 일차를 채운다.
+    // density 초과 day에서 비FOOD를 우선순위 낮은 순으로 꺼내어:
+    //   1) 인접 day (haversine ≤ allow_dist) 중 density 여유 있으면 이동
+    //   2) 이동 불가 → altPool 강등
+    // 최대 effectiveK×2회 반복하여 수렴 확인.
 
-    private static void backfillEmptyDays(List<DayGroup> dayGroups,
-                                           List<MainPoolPlace> overflow,
-                                           Map<Long, PlaceInfo> placeById,
-                                           Step1Meta meta) {
-        if (overflow.isEmpty()) return;
+    private static List<MainPoolPlace> rebalanceDensity(
+            Map<Integer, List<MainPoolPlace>> clusters,
+            double[][] centroids,
+            int effectiveK,
+            Step1Meta meta,
+            Map<Long, PlaceInfo> placeById) {
 
-        overflow.sort((a, b) -> {
-            int c = Double.compare(b.priorityScore(), a.priorityScore());
-            if (c != 0) return c;
-            c = Integer.compare(b.likeCount(), a.likeCount());
-            if (c != 0) return c;
-            c = Double.compare(a.distanceKm(), b.distanceKm());
-            if (c != 0) return c;
-            return Long.compare(a.placeId(), b.placeId());
-        });
+        int maxIter = effectiveK * 2;
+        double allowDist = meta.maxDistKm() * 0.3;
+        List<MainPoolPlace> altPool = new ArrayList<>();
 
-        for (int i = 0; i < dayGroups.size(); i++) {
-            if (!dayGroups.get(i).places().isEmpty() || overflow.isEmpty()) continue;
-
-            int day = dayGroups.get(i).day();
-            List<AssignedPlace> newPlaces = new ArrayList<>();
-            List<MainPoolPlace> remaining = new ArrayList<>();
-            int foodCount = 0;
-            int nonFoodDensity = 0;
-
-            for (MainPoolPlace p : overflow) {
-                PlaceInfo pi = lookup(placeById, p.placeId());
-                if (pi.category() == PlaceCategory.FOOD) {
-                    if (foodCount >= meta.foodPerDayQuota()) {
-                        remaining.add(p);
-                    } else {
-                        newPlaces.add(toAssigned(p, pi, day));
-                        foodCount++;
-                    }
-                } else {
-                    if (nonFoodDensity + pi.densityPoint() > meta.densityLimit()) {
-                        remaining.add(p);
-                    } else {
-                        newPlaces.add(toAssigned(p, pi, day));
-                        nonFoodDensity += pi.densityPoint();
-                    }
+        for (int iter = 0; iter < maxIter; iter++) {
+            List<Integer> overDays = new ArrayList<>();
+            for (int k = 0; k < effectiveK; k++) {
+                if (calcNonFoodDensity(clusters.get(k), placeById) > meta.densityLimit()) {
+                    overDays.add(k);
                 }
             }
+            if (overDays.isEmpty()) break;
 
-            dayGroups.set(i, new DayGroup(day, Collections.unmodifiableList(newPlaces)));
-            overflow.clear();
-            overflow.addAll(remaining);
+            for (int dayK : overDays) {
+                List<MainPoolPlace> cluster = clusters.get(dayK);
+                // 우선순위 낮은(ASC) 비FOOD부터 이동 시도 (tie-break: placeId ASC → 결정론성)
+                List<MainPoolPlace> candidates = cluster.stream()
+                        .filter(p -> lookup(placeById, p.placeId()).category() != PlaceCategory.FOOD)
+                        .sorted(Comparator.comparingDouble(MainPoolPlace::priorityScore)
+                                .thenComparingLong(MainPoolPlace::placeId))
+                        .collect(Collectors.toList());
+
+                for (MainPoolPlace place : candidates) {
+                    PlaceInfo pi = lookup(placeById, place.placeId());
+                    boolean moved = false;
+
+                    // day ASC 순서로 탐색 → 결정론성 보장
+                    for (int otherK = 0; otherK < effectiveK; otherK++) {
+                        if (otherK == dayK) continue;
+                        double dist = haversine(pi.latitude(), pi.longitude(),
+                                centroids[otherK][0], centroids[otherK][1]);
+                        int otherDensity = calcNonFoodDensity(clusters.get(otherK), placeById);
+                        if (dist <= allowDist
+                                && otherDensity + pi.densityPoint() <= meta.densityLimit()) {
+                            cluster.remove(place);
+                            clusters.get(otherK).add(place);
+                            moved = true;
+                            break;
+                        }
+                    }
+
+                    if (!moved) {
+                        // 인접 day 없음 → altPool 강등
+                        cluster.remove(place);
+                        altPool.add(place);
+                    }
+
+                    // 현재 day density가 한도 이하면 중단
+                    if (calcNonFoodDensity(cluster, placeById) <= meta.densityLimit()) break;
+                }
+            }
+        }
+
+        return altPool;
+    }
+
+    // ── §2-7 로드밸런싱 ──────────────────────────────────────────────────
+    //
+    // count > avg_ceil 인 day에서 비FOOD를 count < avg_floor 인 day로 이동.
+    // FIX-44: 거리(allow_dist) 또는 density 조건 실패 시 강제 이동하지 않음.
+
+    private static void rebalanceLoad(
+            Map<Integer, List<MainPoolPlace>> clusters,
+            double[][] centroids,
+            int effectiveK,
+            Step1Meta meta,
+            Map<Long, PlaceInfo> placeById) {
+
+        int totalPlaces = 0;
+        for (int k = 0; k < effectiveK; k++) totalPlaces += clusters.get(k).size();
+        int avgCeil = (int) Math.ceil((double) totalPlaces / effectiveK);
+        int avgFloor = totalPlaces / effectiveK;
+        double allowDist = meta.maxDistKm() * 0.3;
+
+        for (int overK = 0; overK < effectiveK; overK++) {
+            List<MainPoolPlace> overCluster = clusters.get(overK);
+            if (overCluster.size() <= avgCeil) continue;
+
+            List<MainPoolPlace> candidates = overCluster.stream()
+                    .filter(p -> lookup(placeById, p.placeId()).category() != PlaceCategory.FOOD)
+                    .sorted(Comparator.comparingDouble(MainPoolPlace::priorityScore)
+                            .thenComparingLong(MainPoolPlace::placeId))
+                    .collect(Collectors.toList());
+
+            for (MainPoolPlace place : candidates) {
+                if (overCluster.size() <= avgCeil) break;
+
+                PlaceInfo pi = lookup(placeById, place.placeId());
+
+                for (int underK = 0; underK < effectiveK; underK++) {
+                    List<MainPoolPlace> underCluster = clusters.get(underK);
+                    if (underCluster.size() >= avgFloor) continue;
+
+                    double dist = haversine(pi.latitude(), pi.longitude(),
+                            centroids[underK][0], centroids[underK][1]);
+                    int underDensity = calcNonFoodDensity(underCluster, placeById);
+                    if (dist <= allowDist
+                            && underDensity + pi.densityPoint() <= meta.densityLimit()) {
+                        overCluster.remove(place);
+                        underCluster.add(place);
+                        break;
+                    }
+                    // FIX-44: 조건 미충족 시 강제 이동 X
+                }
+            }
         }
     }
 
     // ── 유틸 ─────────────────────────────────────────────────────────────
+
+    private static int calcNonFoodDensity(List<MainPoolPlace> cluster,
+                                           Map<Long, PlaceInfo> placeById) {
+        int sum = 0;
+        for (MainPoolPlace p : cluster) {
+            PlaceInfo pi = lookup(placeById, p.placeId());
+            if (pi.category() != PlaceCategory.FOOD) sum += pi.densityPoint();
+        }
+        return sum;
+    }
 
     private static AssignedPlace toAssigned(MainPoolPlace p, PlaceInfo pi, int day) {
         return new AssignedPlace(
@@ -314,10 +387,23 @@ public final class KMeansClustering {
         return pi;
     }
 
-    /** 위도·경도 2D 유클리드 거리 (같은 목적지 내 클러스터링용) */
+    /** 위도·경도 2D 유클리드 거리 (같은 목적지 내 K-Means 클러스터링용) */
     private static double euclidean(double lat1, double lng1, double lat2, double lng2) {
         double dLat = lat1 - lat2;
         double dLng = lng1 - lng2;
         return Math.sqrt(dLat * dLat + dLng * dLng);
+    }
+
+    /** Haversine 공식으로 두 좌표 간 실제 거리(km) 계산 — §2-5/§2-7 rebalancing 전용 */
+    private static double haversine(double lat1, double lng1, double lat2, double lng2) {
+        double R = AlgorithmConstants.EARTH_RADIUS_KM;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLng = Math.toRadians(lng2 - lng1);
+        double sinDLat = Math.sin(dLat / 2);
+        double sinDLng = Math.sin(dLng / 2);
+        double a = sinDLat * sinDLat
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * sinDLng * sinDLng;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 }

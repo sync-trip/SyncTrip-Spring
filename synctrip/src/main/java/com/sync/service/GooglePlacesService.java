@@ -103,22 +103,20 @@ public class GooglePlacesService {
     /**
      * 키워드 기반 텍스트 검색 (해외 장소 검색 전용)
      * locationBias로 목적지 주변 결과를 우선하되, 엄격히 제한하지는 않는다.
+     * 카테고리 필터는 API 요청이 아닌 응답 결과에서 서버 측 필터링으로 처리한다.
+     * (includedTypes는 NearbySearch 전용 필드 — TextSearch 미지원)
      *
-     * @param lat           목적지 위도 (bias 중심)
-     * @param lng           목적지 경도 (bias 중심)
-     * @param textQuery     검색 키워드
-     * @param includedTypes 카테고리 필터 (null 허용)
+     * @param lat       목적지 위도 (bias 중심)
+     * @param lng       목적지 경도 (bias 중심)
+     * @param textQuery 검색 키워드
      */
-    public NearbySearchResponse searchText(double lat, double lng,
-                                            String textQuery,
-                                            List<String> includedTypes) {
+    public NearbySearchResponse searchText(double lat, double lng, String textQuery) {
         TextSearchRequest body = new TextSearchRequest(
                 textQuery,
                 new TextSearchRequest.LocationBias(
                         new TextSearchRequest.Circle(
                                 new TextSearchRequest.LatLng(lat, lng),
                                 TEXT_SEARCH_BIAS_RADIUS_METERS)),
-                (includedTypes == null || includedTypes.isEmpty()) ? null : includedTypes,
                 MAX_RESULT_COUNT,
                 "ko"
         );
@@ -152,7 +150,6 @@ public class GooglePlacesService {
     public NearbySearchResponse searchDestination(String textQuery) {
         TextSearchRequest body = new TextSearchRequest(
                 textQuery,
-                null,
                 null,
                 5,
                 "ko"
