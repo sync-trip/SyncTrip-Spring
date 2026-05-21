@@ -140,4 +140,4 @@ gemini:
 # base64 인코딩: base64 -w 0 firebase-service-account.json
 # ConditionalOnProperty로 값이 없으면 FCM 비활성화 (개발환경 용이)
 fcm:
-  credentials-json: ${FIREBASE_CREDENTIALS_JSON}
+  credentials-json: ${FIREBASE_CREDENTIALS_JSON:}

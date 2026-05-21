@@ -15,7 +15,7 @@ public class FcmService {
     public void send(String token, String title, String body) {
         if (token == null || token.isBlank()) return;
         if (FirebaseApp.getApps().isEmpty()) {
-            log.debug("FCM 미초기화 - 푸시 알림 건너뜀 (개발/테스트 환경)");
+            log.error("FCM 미초기화 상태에서 발송 시도 - FIREBASE_CREDENTIALS_JSON 설정을 확인하세요. token={}", token);
             return;
         }
         try {
@@ -28,7 +28,7 @@ public class FcmService {
                     .build();
             FirebaseMessaging.getInstance().send(message);
         } catch (Exception e) {
-            log.warn("FCM 발송 실패: {}", e.getMessage());
+            log.error("FCM 발송 실패: token={}, error={}", token, e.getMessage());
         }
     }
 }
