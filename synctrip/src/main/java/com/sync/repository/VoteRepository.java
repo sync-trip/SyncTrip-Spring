@@ -10,6 +10,8 @@ public interface VoteRepository extends JpaRepository<Vote, Long> {
 
     long countByBandIdAndUserId(Long bandId, Long userId);
 
+    List<Vote> findByBandIdAndUserId(Long bandId, Long userId);
+
     // 알고리즘 입력 조립용 — 그룹 전체 투표 결과
     List<Vote> findByBandId(Long bandId);
 }

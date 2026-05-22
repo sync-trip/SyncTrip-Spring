@@ -172,7 +172,7 @@ public class BandService {
 
         if (previousStatus == BandStatus.PLANNING) {
             groupVoteInfoRepository.save(GroupVoteInfo.start(band, true));
-            notificationService.notifyAll(band.getId(), NotificationType.VOTE_STARTED,
+            notificationService.notifyAllExcept(band.getId(), userId, NotificationType.VOTE_STARTED,
                     band.getName() + " 여행 투표가 시작됐어요! 지금 바로 참여하세요 ✈️");
         } else if (previousStatus == BandStatus.VOTING) {
             groupVoteInfoRepository.findByBandId(band.getId()).ifPresent(info -> {
@@ -249,7 +249,7 @@ public class BandService {
             groupVoteInfoRepository.save(GroupVoteInfo.start(band, false));
             messagingTemplate.convertAndSend("/topic/bands/" + bandId + "/status",
                     new StatusEvent(bandId, band.getStatus()));
-            notificationService.notifyAll(bandId, NotificationType.VOTE_STARTED,
+            notificationService.notifyAllExcept(bandId, band.getOwner().getId(), NotificationType.VOTE_STARTED,
                     band.getName() + " 여행 투표가 시작됐어요! 지금 바로 참여하세요 ✈️");
         } else if (ready) {
             notificationService.notify(band.getOwner().getId(), bandId, NotificationType.MEMBER_READY,

@@ -13,5 +13,6 @@ public record VotePlaceResponse(
     String address,
     Float rating,
     String thumbnailUrl,
-    boolean myBookmark  // true이면 앱에서 자동 LIKE 처리
+    boolean myBookmark,
+    Integer myVoteResult  // null=미투표, 1=LIKE, -1=DISLIKE, 0=자동LIKE(내 북마크)
 ) {}

@@ -20,6 +20,7 @@ import com.sync.repository.PlaceRepository;
 import com.sync.repository.UserRepository;
 import com.sync.repository.VoteRepository;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
@@ -70,6 +71,10 @@ public class VoteService {
                 .map(pb -> pb.getPlace().getId())
                 .collect(Collectors.toSet());
 
+        Map<Long, Integer> myVoteResultMap = voteRepository.findByBandIdAndUserId(bandId, userId)
+                .stream()
+                .collect(Collectors.toMap(v -> v.getPlace().getId(), Vote::getResult));
+
         return places.stream()
                 .map(p -> new VotePlaceResponse(
                         p.getId(),
@@ -81,7 +86,8 @@ public class VoteService {
                         p.getAddress(),
                         p.getRating(),
                         p.getThumbnailUrl(),
-                        myBookmarkPlaceIds.contains(p.getId())
+                        myBookmarkPlaceIds.contains(p.getId()),
+                        myVoteResultMap.getOrDefault(p.getId(), null)
                 ))
                 .toList();
     }

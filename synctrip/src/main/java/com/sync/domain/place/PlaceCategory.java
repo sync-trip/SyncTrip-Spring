@@ -11,7 +11,8 @@ public enum PlaceCategory {
     ACTIVITY(3),
     SHOPPING(1),
     NATURE(2),
-    ETC(1);
+    ETC(1),
+    LODGING(1);
 
     private final int densityPoint;
 
