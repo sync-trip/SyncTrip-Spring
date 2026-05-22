@@ -49,6 +49,8 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       # Firebase 서비스 계정 JSON (base64 인코딩, FCM 푸시 알림)
       FIREBASE_CREDENTIALS_JSON: ${{ secrets.FIREBASE_CREDENTIALS_JSON }}
+      # Redis 비밀번호 (미설정 시 인증 없이 동작)
+      REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
       # ===== VARIABLES (GitHub Variables에 저장해야 함) =====
 
       # JWT 설정값 (공개 설정)
@@ -104,8 +106,10 @@ jobs:
             $appContainer = 'synctrip-backend'
             $appImage = 'synctrip-main'
             $mysqlContainer = 'synctrip-mysql'
+            $redisContainer = 'synctrip-redis'
             $appHostPort = '8080'
             $mysqlHostPort = '3306'
+            $redisHostPort = '6379'
             $composeProject = 'synctrip-main'
             $kakaoRedirectUri = $env:KAKAO_REDIRECT_URI_MAIN
             $inviteShareBaseUrl = $env:APP_INVITE_SHARE_BASE_URL_MAIN
@@ -116,8 +120,10 @@ jobs:
             $appContainer = 'synctrip-backend-dev'
             $appImage = 'synctrip-dev'
             $mysqlContainer = 'synctrip-mysql-dev'
+            $redisContainer = 'synctrip-redis-dev'
             $appHostPort = '8081'
             $mysqlHostPort = '3307'
+            $redisHostPort = '6380'
             $composeProject = 'synctrip-dev'
             $kakaoRedirectUri = $env:KAKAO_REDIRECT_URI_DEV
             $inviteShareBaseUrl = $env:APP_INVITE_SHARE_BASE_URL_DEV
@@ -138,8 +144,10 @@ jobs:
           "APP_CONTAINER_NAME=$appContainer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "APP_IMAGE_NAME=$appImage" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "MYSQL_CONTAINER_NAME=$mysqlContainer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "REDIS_CONTAINER_NAME=$redisContainer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "APP_HOST_PORT=$appHostPort" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "MYSQL_HOST_PORT=$mysqlHostPort" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "REDIS_HOST_PORT=$redisHostPort" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "COMPOSE_PROJECT=$composeProject" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           # main/dev 배포에 맞는 Redirect URI를 최종 확정해서 컨테이너로 주입
           "KAKAO_REDIRECT_URI=$kakaoRedirectUri" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
@@ -161,7 +169,7 @@ jobs:
       - name: Remove old containers if they exist
         shell: pwsh
         run: |
-          $names = @($env:APP_CONTAINER_NAME, $env:MYSQL_CONTAINER_NAME)
+          $names = @($env:APP_CONTAINER_NAME, $env:MYSQL_CONTAINER_NAME, $env:REDIS_CONTAINER_NAME)
           foreach ($name in $names) {
             $existing = docker ps -a --filter "name=^/$name$" --format "{{.Names}}"
             if ($existing -match "^$name$") {
@@ -206,6 +214,12 @@ jobs:
           $mysqlRunning = docker ps --filter "name=$env:MYSQL_CONTAINER_NAME" --filter "status=running" --format "{{.Names}}"
           if (-not ($mysqlRunning -match "^$env:MYSQL_CONTAINER_NAME$")) {
             throw "MySQL container is not running after deploy."
+          }
+          $redisRunning = docker ps --filter "name=$env:REDIS_CONTAINER_NAME" --filter "status=running" --format "{{.Names}}"
+          if (-not ($redisRunning -match "^$env:REDIS_CONTAINER_NAME$")) {
+            Write-Host "==================== [ Redis 로그 ] ===================="
+            docker logs $env:REDIS_CONTAINER_NAME
+            throw "Redis container is not running after deploy."
           }
           $portCheck = Test-NetConnection -ComputerName 127.0.0.1 -Port $env:APP_HOST_PORT
           if (-not $portCheck.TcpTestSucceeded) {

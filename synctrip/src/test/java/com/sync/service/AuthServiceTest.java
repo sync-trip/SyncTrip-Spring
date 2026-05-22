@@ -6,6 +6,7 @@ import com.sync.dto.kakao.KakaoUserResponse;
 import com.sync.repository.UserRepository;
 import com.sync.service.jwt.JwtTokenProvider;
 import com.sync.service.jwt.JwtTokenProvider.TokenPair;
+import com.sync.service.jwt.TokenBlacklistService;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,10 +26,16 @@ class AuthServiceTest {
     private KakaoAuthService kakaoAuthService;
 
     @Mock
+    private GoogleAuthService googleAuthService;
+
+    @Mock
     private UserRepository userRepository;
 
     @Mock
     private JwtTokenProvider jwtTokenProvider;
+
+    @Mock
+    private TokenBlacklistService tokenBlacklistService;
 
     @InjectMocks
     private AuthService authService;

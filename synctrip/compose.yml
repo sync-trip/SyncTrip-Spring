@@ -38,6 +38,27 @@ services:
       retries: 10
       start_period: 30s
 
+  # Redis 캐시 / 토큰 블랙리스트 컨테이너
+  redis:
+    image: redis:7-alpine
+    container_name: ${REDIS_CONTAINER_NAME:-synctrip-redis}
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    # REDIS_PASSWORD가 설정되면 --requirepass 옵션으로 시작, 없으면 인증 없이 시작
+    command: ["sh", "-c", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-server --requirepass \"$$REDIS_PASSWORD\"; else redis-server; fi"]
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - synctrip-redis-data:/data
+    healthcheck:
+      # 비밀번호 유무에 따라 인증 방식 분기
+      test: ["CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli --no-auth-warning -a \"$$REDIS_PASSWORD\" ping; else redis-cli ping; fi"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   # Spring Boot 백엔드 컨테이너
   app:
     build:
@@ -54,8 +75,10 @@ services:
     # 서버 재부팅/프로세스 종료 후 자동 재시작
     restart: unless-stopped
     depends_on:
-      # MySQL이 healthy 상태가 된 뒤 app 시작
+      # MySQL과 Redis가 healthy 상태가 된 뒤 app 시작
       mysql:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     environment:
       # 운영 프로파일 활성화 (배포 환경에 따라 dev 또는 prod)
@@ -88,11 +111,14 @@ services:
       FIREBASE_CREDENTIALS_JSON: ${FIREBASE_CREDENTIALS_JSON:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       EXCHANGE_RATE_API_KEY: ${EXCHANGE_RATE_API_KEY:-}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     ports:
       # 호스트 포트는 환경변수로 분리(main/dev 동시 구동 대비)
       - "${APP_HOST_PORT:-8080}:8080"
 
 volumes:
-  # MySQL 영구 저장 볼륨 이름
   synctrip-mysql-data:
+  synctrip-redis-data:
 

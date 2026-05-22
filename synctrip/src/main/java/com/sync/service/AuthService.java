@@ -7,8 +7,11 @@ import com.sync.dto.google.GoogleUserResponse;
 import com.sync.dto.kakao.KakaoUserResponse;
 import com.sync.repository.UserRepository;
 import com.sync.service.jwt.JwtTokenProvider;
+import com.sync.service.jwt.TokenBlacklistService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jws;
+import java.time.Instant;
+import java.util.Date;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,12 +27,16 @@ public class AuthService {
     private final GoogleAuthService googleAuthService;
     private final UserRepository userRepository;
     private final JwtTokenProvider jwtTokenProvider;
+    private final TokenBlacklistService tokenBlacklistService;
 
-    public AuthService(KakaoAuthService kakaoAuthService, GoogleAuthService googleAuthService, UserRepository userRepository, JwtTokenProvider jwtTokenProvider) {
+    public AuthService(KakaoAuthService kakaoAuthService, GoogleAuthService googleAuthService,
+                       UserRepository userRepository, JwtTokenProvider jwtTokenProvider,
+                       TokenBlacklistService tokenBlacklistService) {
         this.kakaoAuthService = kakaoAuthService;
         this.googleAuthService = googleAuthService;
         this.userRepository = userRepository;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.tokenBlacklistService = tokenBlacklistService;
     }
 
     @Transactional
@@ -105,6 +112,9 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public LoginResponse refresh(String refreshToken) {
+        if (tokenBlacklistService.isBlacklisted(refreshToken)) {
+            throw new ResponseStatusException(UNAUTHORIZED, "로그아웃된 토큰입니다.");
+        }
         // refresh token 서명/만료를 검증하고 클레임을 읽는다
         Jws<Claims> claimsJws = jwtTokenProvider.parse(refreshToken);
         Claims claims = claimsJws.getPayload();
@@ -154,16 +164,19 @@ public class AuthService {
         return response.kakaoAccount().profile().profileImageUrl();
     }
 
-    /**
-     * 로그아웃 처리
-     * JWT는 서버에서 관리하지 않는 Stateless 방식이므로,
-     * 백엔드에서는 특별한 처리가 없고 프론트엔드에서 로컬 토큰을 삭제하면 된다.
-     * (향후 토큰 블랙리스트 필요 시 확장)
-     */
-    public void logout(Long userId) {
-        // 현재: Stateless JWT이므로 백엔드에서 할 일 없음
-        // 향후: refresh token 블랙리스트 DB 저장 등 추가 가능
-        // → userId는 로그 기록이나 감시 목적으로 사용 가능
+    public void logout(String refreshToken) {
+        if (!StringUtils.hasText(refreshToken)) return;
+        try {
+            Jws<Claims> jws = jwtTokenProvider.parse(refreshToken);
+            if (!"refresh".equals(jws.getPayload().get("type", String.class))) return;
+            Date expiry = jws.getPayload().getExpiration();
+            long remainingSeconds = (expiry.getTime() - Instant.now().toEpochMilli()) / 1000;
+            if (remainingSeconds > 0) {
+                tokenBlacklistService.add(refreshToken, remainingSeconds);
+            }
+        } catch (Exception ignored) {
+            // 만료되었거나 유효하지 않은 토큰은 무시 (이미 무효)
+        }
     }
 
     /**

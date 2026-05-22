@@ -24,11 +24,8 @@
 | USR-001 | 회원가입/로그인 (카카오) | ✅ 구현 | 2026-05-12 | `KakaoAuthService` | JWT 발급 (access + refresh) |
 | USR-001 | 회원가입/로그인 (구글) | ✅ 구현 | 2026-05-20 | `GoogleAuthService` | 구글 OAuth 추가 |
 | USR-002 | 정보 수정 / 탈퇴 | ✅ 구현 | 2026-05-12 ~ 05-21 | `UserController`, `AuthService` | 프로필 조회·수정(05-21) / Soft Delete 탈퇴 / 로그아웃(05-12) |
-| USR-029 | 로그아웃 / 세션 만료 | ✅ 구현 | 2026-05-12 | `AuthService.logout()` | JWT 만료 기반 / Refresh Token 갱신 |
-| — | 토큰 갱신 | ➕ 추가 구현 | 2026-05-12 | `AuthService.refresh()` | Refresh Token으로 Access Token 재발급 |
-
-**보완할 점**
-- Refresh Token 블랙리스트 미구현: 로그아웃 시 서버 측 무효화 없음. 코드에 `// 향후 추가 가능` 주석 있음
+| USR-029 | 로그아웃 / 세션 만료 | ✅ 구현 | 2026-05-12 ~ 05-22 | `AuthService.logout()` | JWT 만료 기반 / Refresh Token Redis 블랙리스트 무효화 (05-22 추가) |
+| — | 토큰 갱신 | ➕ 추가 구현 | 2026-05-12 | `AuthService.refresh()` | Refresh Token으로 Access Token 재발급 / 블랙리스트 체크 포함 |
 
 ---
 
@@ -175,6 +172,7 @@
 |---|---|---|---|---|
 | WebSocket (STOMP) | ✅ 구현 | 2026-05-16 | `SimpMessagingTemplate` | Ready 이벤트(`/topic/.../ready`), 밴드 상태 전환(`/topic/.../status`), 투표 이벤트(`/topic/.../votes`), 일정 변경(`/topic/.../schedule`) |
 | Spring Cache (인메모리) | ➕ 추가 구현 | 2026-05-21 | `@EnableCaching` | 도시 검색 중복 호출 방지 (`destination-search` 캐시) |
+| Redis (토큰 블랙리스트) | ➕ 추가 구현 | 2026-05-22 | `RedisTokenBlacklistService` | 로그아웃 시 Refresh Token TTL 기반 자동 만료 블랙리스트 / `/auth/*/logout` Request Body `{"refreshToken":"..."}` |
 | DebugController | ➕ 추가 구현 | 2026-05-21 | `DebugController` | 알림·알고리즘 수동 테스트용 엔드포인트 / `app.security.enabled=false` 조건부 활성화 |
 | InviteController (딥링크 랜딩) | ➕ 추가 구현 | 2026-05-12 | `InviteController` | `GET /invite?code=...` → 딥링크 `synctrip://band/join?code=...` HTML 랜딩 페이지 / 800ms 후 자동 앱 열기 |
 
@@ -187,7 +185,6 @@
 | 🔴 높음 | 투표 자동 종료 | USR-014 | 1시간 타임아웃 또는 전원 투표 완료 시 자동 마감 스케줄러 |
 | 🔴 높음 | 여행 종료 알림·플로우 | USR-028 | DONE 전환 시 밴드 전원 알림 + 정산 유도 안내 |
 | 🟡 중간 | 공휴일 알림 | USR-030 | Nager.Date API 연동 + `@Scheduled` 스케줄러 |
-| 🟡 중간 | Refresh Token 블랙리스트 | — | 로그아웃 후 토큰 서버 측 무효화 |
 | 🟢 낮음 | 공유 앨범 | USR-023 | DDL 있음, 서비스·컨트롤러 없음 |
 | 🟢 낮음 | 여권 스탬프 | USR-024 | DDL 있음, 서비스·컨트롤러 없음 |
 | 🟢 낮음 | 과거 여행 아카이브 | USR-025 | DONE 상태 밴드 전용 뷰 없음 |
@@ -214,7 +211,8 @@
 | 2026-05-21 | 알림 보완 (페이지네이션, 삭제 API, 설정 조회, 정산 요청, 오래된 알림 삭제 스케줄러) |
 | 2026-05-21 | `MEMBER_JOINED` 알림 타입 추가, 멤버 합류 알림 연동, 오래된 알림 자동 삭제 스케줄러 추가 |
 | 2026-05-22 | 코드 3회 정독 후 누락 항목 반영: DestinationController/Service(인기 여행지·도시 검색), InviteController(딥링크 랜딩), 밴드 삭제 API, Plan B 최대 7개 오기재 수정, WebSocket 채널 전체 목록 보완, ScheduleService 편집 락 API 상세화, PlanBRecommender 실사용 여부 주석 |
+| 2026-05-22 | Redis Refresh Token 블랙리스트 구현: `RedisTokenBlacklistService`, `logout()` 무효화 로직, `refresh()` 블랙리스트 체크, compose.yml Redis 서비스 추가 |
 
 ---
 
-**마지막 수정:** 2026-05-22 | **최신 DDL:** `SyncTrip_DDL_v7.sql`
+**마지막 수정:** 2026-05-22 (Redis 블랙리스트 구현) | **최신 DDL:** `SyncTrip_DDL_v7.sql`
