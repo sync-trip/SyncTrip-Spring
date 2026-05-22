@@ -26,7 +26,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 @Entity
 @Table(name = "user_groups")
 public class Band {
-    private static final long INVITE_CODE_TTL_HOURS = 72;
+    private static final long INVITE_CODE_TTL_SECONDS = 30;
     private static final int EDIT_LOCK_TIMEOUT_MINUTES = 5;
 
     @Id
@@ -150,7 +150,7 @@ public class Band {
                 owner, name, destination, destinationLat, destinationLng,
                 countryCode, overseas, startDate, endDate,
                 generateInviteCode(),
-                LocalDateTime.now().plusHours(INVITE_CODE_TTL_HOURS),
+                LocalDateTime.now().plusSeconds(INVITE_CODE_TTL_SECONDS),
                 8, travelStyle, accommodationName, accommodationLat, accommodationLng,
                 BandStatus.PLANNING, null
         );
@@ -168,7 +168,7 @@ public class Band {
      */
     public void reissueInviteCode() {
         this.inviteCode = generateInviteCode();
-        this.inviteCodeExpiredAt = LocalDateTime.now().plusHours(INVITE_CODE_TTL_HOURS);
+        this.inviteCodeExpiredAt = LocalDateTime.now().plusSeconds(INVITE_CODE_TTL_SECONDS);
     }
 
     /**
