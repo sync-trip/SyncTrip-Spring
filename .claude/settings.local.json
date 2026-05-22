@@ -4,7 +4,9 @@
       "WebFetch(domain:github.com)",
       "Read(//mnt/c/projects/SyncTrip-Spring/**)",
       "Bash(./gradlew clean *)",
-      "Bash(grep *)"
+      "Bash(grep *)",
+      "Read(//c/Users/Min/StudioProjects/SyncTrip-Android/**)",
+      "Read(//mnt/c/Users/Min/StudioProjects/**)"
     ]
   },
   "spinnerTipsEnabled": true
