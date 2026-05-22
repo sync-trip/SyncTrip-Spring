@@ -40,9 +40,10 @@
 | USR-004 | 그룹 초대 / 참여 | ✅ 구현 | 2026-05-12 | `InviteController`, `BandService.joinBand()` | 초대 코드 기반 참여 |
 | USR-005 | 최대 인원 제한 (8명) | ✅ 구현 | 2026-05-12 | `BandService.joinBand()` | countByBand ≥ maxMembers 시 409 |
 | USR-006 | 초대 코드 재발급 | ✅ 구현 | 2026-05-12 | `BandService.getOrRefreshInviteCode()` | 만료 시 자동 재발급 |
-| USR-009 | Ready 상태 전환 | ✅ 구현 | 2026-05-16 | `BandService.markReady()` | 장바구니 1개 이상 필수 / 취소 불가 |
+| USR-009 | Ready 상태 전환 | ✅ 구현 | 2026-05-16 | `BandService.markReady()` | 장바구니 1개 이상 필수 / `DELETE /api/bands/{bandId}/ready` 존재하나 항상 403 반환 (취소 불가) |
 | USR-014 | 투표 강제 시작/마감 | ✅ 구현 | 2026-05-16 | `BandService.advanceBandStatus()` | 방장 전용 / PLANNING→VOTING→GENERATING→TRAVELLING→DONE |
 | USR-028 | 여행 종료 처리 | ⚠️ 부분 구현 | 2026-05-16 | `BandService.advanceBandStatus()` | DONE 상태 전환 가능. 종료 알림·정산 안내 플로우 없음 |
+| — | 밴드 삭제 (Soft Delete) | ➕ 추가 구현 | 2026-05-12 | `BandService.deleteBand()` | `DELETE /api/bands/{bandId}` / 방장 전용 / is_deleted 마킹 |
 
 **보완할 점**
 - USR-028: 여행 DONE 전환 시 밴드 전원 알림 + 정산 유도 안내 없음
@@ -54,8 +55,9 @@
 
 | USR | 기능명 | 상태 | 구현일 | 구현 위치 | 비고 |
 |---|---|---|---|---|---|
-| USR-007 | 지도 장소 검색 | ✅ 구현 | 2026-05-19 | `KakaoPlacesService`, `GooglePlacesService` | 국내=카카오(거리순/최대15), 해외=구글(최대20) |
+| USR-007 | 지도 장소 검색 | ✅ 구현 | 2026-05-19 | `KakaoPlacesService`, `GooglePlacesService` | 국내=카카오(거리순/최대15), 해외=구글(최대20) / `GET /api/bands/{bandId}/places/search` |
 | USR-008 | 블라인드 장바구니 담기 | ✅ 구현 | 2026-05-14 | `PlacePickController`, `PlacePickService` | 1인당 5개 제한 / bookmark_count 동기화 |
+| — | 여행지 탐색 (인기 목록 + 도시 검색) | ➕ 추가 구현 | 2026-05-19 | `DestinationController`, `DestinationService` | `GET /api/destinations/popular` (하드코딩 28개) / `GET /api/destinations/search?query=` (Google Places + Spring Cache) |
 
 ---
 
@@ -77,10 +79,11 @@
 | Step 1 | Weighted Cost Function | ✅ 구현 | 2026-05-17 | `algorithm/step1/WeightedCostFunction.java` |
 | Step 2 | K-Means Clustering | ✅ 구현 | 2026-05-17 | `algorithm/step2/KMeansClustering.java` |
 | Step 3 | Simple Order & Time TSP | ✅ 구현 | 2026-05-17 | `algorithm/step3/SimpleTsp.java` |
-| Plan B | 폭포수 반경 검색 (Stage0: 1km, Stage1: 2km, Stage2: 3km) | ✅ 구현 | 2026-05-19 ~ 05-21 | `algorithm/planb/PlanBRecommender.java` |
+| Plan B | 폭포수 반경 검색 (Stage0: 1km, Stage1: 2km, Stage2: 3km) | ✅ 구현 | 2026-05-19 ~ 05-21 | `algorithm/planb/PlanBRecommender.java` (순수 함수) + `ScheduleService.getPlanBRecommendations()` (서비스 인라인 구현) | 최대 7개 추천 / 카테고리 동일 교체 / 영업시간 체크(해외) |
 | 파이프라인 | Step1→2→3 통합 진입점 | ✅ 구현 | 2026-05-17 | `algorithm/AlgorithmService.java` |
 
 > 알고리즘 함수 전체가 순수 함수 (DB 접근 없음). 서비스 레이어(`ScheduleService`)에서 입력 조립 후 호출.
+> ⚠️ 주의: `PlanBRecommender.java`(알고리즘 패키지)는 단위 테스트에서만 사용됨. 실제 API는 `ScheduleService` 내부에 인라인 구현(`PLAN_B_MAX_RECOMMENDATIONS = 7`)으로 동작함.
 
 ---
 
@@ -91,9 +94,10 @@
 | USR-015 | 일자별 동선 초안 생성 | ✅ 구현 | 2026-05-17 | `ScheduleService.generateAutomated()` | 투표 종료 후 알고리즘 파이프라인 자동 실행 |
 | USR-016 | 이상치 감지 / 제외 | ✅ 구현 | 2026-05-17 | `AlgorithmService` (Step 2/3) | 거리 이상치 감지 + `OUTLIER_FULL_DAY` 배지 |
 | USR-017 | Drag & Drop 순서 변경 | ✅ 구현 | 2026-05-17 | `ScheduleService.reorderSchedule()` | REORDER 모드 (TSP 재계산) |
-| USR-018 | 수동 편집 시 대안 팝업 (Plan B) | ✅ 구현 | 2026-05-19 | `ScheduleService.swapSchedulePlace()` | RESTRUCTURE 트랜잭션 + altPool 복귀 |
-| USR-031 | 실시간 Plan B 추천 | ✅ 구현 | 2026-05-19 | `ScheduleService` + `PlanBRecommender` | USR-018과 통합 단일 로직 |
-| — | 편집 락 (5분 타임아웃 + 자동 갱신) | ➕ 추가 구현 | 2026-05-20 ~ 05-21 | `ScheduleService` | 그룹 동시 편집 방지 락 |
+| USR-018 | 수동 편집 시 대안 팝업 (Plan B) | ✅ 구현 | 2026-05-19 | `ScheduleService.swapSchedulePlace()` | RESTRUCTURE 트랜잭션 + altPool 복귀 / 교체 후 해당 Day TSP 재계산 |
+| USR-031 | 실시간 Plan B 추천 | ✅ 구현 | 2026-05-19 | `ScheduleService.getPlanBRecommendations()` | `POST /api/bands/{bandId}/schedule/plan-b` / 최대 7개 |
+| — | 편집 락 (5분 타임아웃 + 자동 갱신) | ➕ 추가 구현 | 2026-05-20 ~ 05-21 | `ScheduleService.startEditing()` / `finishEditing()` | `POST /api/bands/{bandId}/schedule/edit/start·finish` / 그룹 동시 편집 방지 |
+| — | 일정 변경 WebSocket 브로드캐스트 | ➕ 추가 구현 | 2026-05-19 | `ScheduleService` → `SimpMessagingTemplate` | 장소 교체 시 `/topic/bands/{bandId}/schedule` 채널로 `ScheduleUpdatedEvent` 발송 |
 
 **보완할 점**
 - 숙소 변경 시 current_date 이후 day만 재계산(Step 3 partial) 구현 여부 확인 필요
@@ -169,9 +173,10 @@
 
 | 기능 | 상태 | 구현일 | 구현 위치 | 비고 |
 |---|---|---|---|---|
-| WebSocket (STOMP) | ✅ 구현 | 2026-05-16 | `SimpMessagingTemplate` | Ready 이벤트, 밴드 상태 전환 실시간 브로드캐스트 |
-| Spring Cache (인메모리) | ➕ 추가 구현 | 2026-05-21 | `@EnableCaching` | 도시 검색 중복 호출 방지 |
-| DebugController | ➕ 추가 구현 | 2026-05-21 | `DebugController` | 알림·알고리즘 수동 테스트용 엔드포인트 (개발 전용) |
+| WebSocket (STOMP) | ✅ 구현 | 2026-05-16 | `SimpMessagingTemplate` | Ready 이벤트(`/topic/.../ready`), 밴드 상태 전환(`/topic/.../status`), 투표 이벤트(`/topic/.../votes`), 일정 변경(`/topic/.../schedule`) |
+| Spring Cache (인메모리) | ➕ 추가 구현 | 2026-05-21 | `@EnableCaching` | 도시 검색 중복 호출 방지 (`destination-search` 캐시) |
+| DebugController | ➕ 추가 구현 | 2026-05-21 | `DebugController` | 알림·알고리즘 수동 테스트용 엔드포인트 / `app.security.enabled=false` 조건부 활성화 |
+| InviteController (딥링크 랜딩) | ➕ 추가 구현 | 2026-05-12 | `InviteController` | `GET /invite?code=...` → 딥링크 `synctrip://band/join?code=...` HTML 랜딩 페이지 / 800ms 후 자동 앱 열기 |
 
 ---
 
@@ -197,6 +202,7 @@
 | Vision AI | "GPT-4o or Gemini Vision, 추후 결정" | **Gemini Vision 1.5 Flash 확정** | 2026-05-21 |
 | 알림 타입 수 | 4종 | **5종** (`MEMBER_JOINED` 추가) | 2026-05-21 |
 | 소셜 로그인 | 카카오 / 구글 (계획) | **카카오 + 구글 모두 구현 완료** | 2026-05-20 |
+| Plan B 최대 추천 수 | §7.7 인수인계 문서 기준 불명확 | **최대 7개** (`PLAN_B_MAX_RECOMMENDATIONS = 7`) — DebugController 주석의 "최대 3개"는 오기재 | 2026-05-19 |
 
 ---
 
@@ -207,7 +213,8 @@
 | 2026-05-21 | 문서 최초 작성. 전체 기능 현황 정리 |
 | 2026-05-21 | 알림 보완 (페이지네이션, 삭제 API, 설정 조회, 정산 요청, 오래된 알림 삭제 스케줄러) |
 | 2026-05-21 | `MEMBER_JOINED` 알림 타입 추가, 멤버 합류 알림 연동, 오래된 알림 자동 삭제 스케줄러 추가 |
+| 2026-05-22 | 코드 3회 정독 후 누락 항목 반영: DestinationController/Service(인기 여행지·도시 검색), InviteController(딥링크 랜딩), 밴드 삭제 API, Plan B 최대 7개 오기재 수정, WebSocket 채널 전체 목록 보완, ScheduleService 편집 락 API 상세화, PlanBRecommender 실사용 여부 주석 |
 
 ---
 
-**마지막 수정:** 2026-05-21 | **최신 DDL:** `SyncTrip_DDL_v7.sql`
+**마지막 수정:** 2026-05-22 | **최신 DDL:** `SyncTrip_DDL_v7.sql`
