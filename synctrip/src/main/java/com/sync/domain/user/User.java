@@ -162,5 +162,14 @@ public class User {
         this.isDeleted = true;
         this.deletedAt = LocalDateTime.now();
     }
+
+    // 탈퇴 후 재가입: 계정 재활성화 (동일 oauth_id 제약조건 우회)
+    public void reactivate(String name, String profileImageUrl, String email) {
+        this.isDeleted = false;
+        this.deletedAt = null;
+        this.name = name;
+        this.profileImageUrl = profileImageUrl;
+        this.email = email;
+    }
 }
 

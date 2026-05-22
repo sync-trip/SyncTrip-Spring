@@ -53,7 +53,7 @@ class AuthServiceTest {
         setId(savedUser, 1L);
 
         when(kakaoAuthService.getUserInfo("kakao-access-token")).thenReturn(kakaoUser);
-        when(userRepository.findByOauthProviderAndOauthIdAndIsDeletedFalse(any(), eq("555"))).thenReturn(Optional.empty());
+        when(userRepository.findByOauthProviderAndOauthId(any(), eq("555"))).thenReturn(Optional.empty());
         when(userRepository.save(any(User.class))).thenReturn(savedUser);
         when(jwtTokenProvider.issueTokenPair(savedUser)).thenReturn(new TokenPair("a-token", "r-token", 900L, 1209600L));
 

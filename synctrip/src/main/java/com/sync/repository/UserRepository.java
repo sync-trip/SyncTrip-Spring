@@ -9,6 +9,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByOauthProviderAndOauthIdAndIsDeletedFalse(OauthProvider oauthProvider, String oauthId);
 
+    // 탈퇴 계정 포함 조회 (재가입 시 재활성화용)
+    Optional<User> findByOauthProviderAndOauthId(OauthProvider oauthProvider, String oauthId);
+
     Optional<User> findByIdAndIsDeletedFalse(Long id);
 }
 
