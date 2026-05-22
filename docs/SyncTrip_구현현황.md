@@ -23,7 +23,7 @@
 |---|---|---|---|---|---|
 | USR-001 | 회원가입/로그인 (카카오) | ✅ 구현 | 2026-05-12 | `KakaoAuthService` | JWT 발급 (access + refresh) |
 | USR-001 | 회원가입/로그인 (구글) | ✅ 구현 | 2026-05-20 | `GoogleAuthService` | 구글 OAuth 추가 |
-| USR-002 | 정보 수정 / 탈퇴 | ✅ 구현 | 2026-05-12 ~ 05-21 | `UserController`, `AuthService` | 프로필 조회·수정(05-21) / Soft Delete 탈퇴 / 로그아웃(05-12) |
+| USR-002 | 정보 수정 / 탈퇴 | ✅ 구현 | 2026-05-12 ~ 05-22 | `UserController`, `AuthService` | 프로필 조회·수정(05-21) / Soft Delete 탈퇴 / 로그아웃(05-12) / 탈퇴 후 재가입 시 계정 재활성화(05-22) |
 | USR-029 | 로그아웃 / 세션 만료 | ✅ 구현 | 2026-05-12 ~ 05-22 | `AuthService.logout()` | JWT 만료 기반 / Refresh Token Redis 블랙리스트 무효화 (05-22 추가) |
 | — | 토큰 갱신 | ➕ 추가 구현 | 2026-05-12 | `AuthService.refresh()` | Refresh Token으로 Access Token 재발급 / 블랙리스트 체크 포함 |
 
@@ -212,7 +212,9 @@
 | 2026-05-21 | `MEMBER_JOINED` 알림 타입 추가, 멤버 합류 알림 연동, 오래된 알림 자동 삭제 스케줄러 추가 |
 | 2026-05-22 | 코드 3회 정독 후 누락 항목 반영: DestinationController/Service(인기 여행지·도시 검색), InviteController(딥링크 랜딩), 밴드 삭제 API, Plan B 최대 7개 오기재 수정, WebSocket 채널 전체 목록 보완, ScheduleService 편집 락 API 상세화, PlanBRecommender 실사용 여부 주석 |
 | 2026-05-22 | Redis Refresh Token 블랙리스트 구현: `RedisTokenBlacklistService`, `logout()` 무효화 로직, `refresh()` 블랙리스트 체크, compose.yml Redis 서비스 추가 |
+| 2026-05-22 | 탈퇴 후 재가입 버그 수정: soft delete 계정 재가입 시 DUPLICATE KEY 오류 → 계정 재활성화(`User.reactivate()`)로 처리 |
+| 2026-05-22 | 탈퇴 회원 하드 삭제 스케줄러 추가: `UserPurgeScheduler` / `APP_USER_PURGE_ENABLED=true` + `THRESHOLD_SECONDS=30` 설정 시 30초 뒤 완전 삭제 |
 
 ---
 
-**마지막 수정:** 2026-05-22 (Redis 블랙리스트 구현) | **최신 DDL:** `SyncTrip_DDL_v7.sql`
+**마지막 수정:** 2026-05-22 (탈퇴 재가입 버그 수정) | **최신 DDL:** `SyncTrip_DDL_v7.sql`

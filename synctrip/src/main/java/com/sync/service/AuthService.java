@@ -50,13 +50,17 @@ public class AuthService {
         String nickname = extractNickname(kakaoUser);
         String profileImageUrl = extractProfileImageUrl(kakaoUser);
 
-        Optional<User> existingUser = userRepository.findByOauthProviderAndOauthIdAndIsDeletedFalse(OauthProvider.KAKAO, oauthId);
-        boolean newUser = existingUser.isEmpty();
+        Optional<User> anyUser = userRepository.findByOauthProviderAndOauthId(OauthProvider.KAKAO, oauthId);
 
-        // 기존 회원이면 프로필 갱신, 없으면 신규 회원으로 생성
-        User user = existingUser
+        // 탈퇴 계정이면 재활성화, 활성 계정이면 프로필 갱신, 없으면 신규 생성
+        boolean newUser = anyUser.isEmpty();
+        User user = anyUser
                 .map(found -> {
-                    found.updateProfile(nickname, profileImageUrl, email);
+                    if (found.isDeleted()) {
+                        found.reactivate(nickname, profileImageUrl, email);
+                    } else {
+                        found.updateProfile(nickname, profileImageUrl, email);
+                    }
                     return found;
                 })
                 .orElseGet(() -> userRepository.save(User.kakaoUser(email, nickname, profileImageUrl, oauthId)));
@@ -85,13 +89,17 @@ public class AuthService {
         String nickname = StringUtils.hasText(googleUser.name()) ? googleUser.name() : ("google_" + oauthId);
         String profileImageUrl = googleUser.picture();
 
-        Optional<User> existingUser = userRepository.findByOauthProviderAndOauthIdAndIsDeletedFalse(OauthProvider.GOOGLE, oauthId);
-        boolean newUser = existingUser.isEmpty();
+        Optional<User> anyUser = userRepository.findByOauthProviderAndOauthId(OauthProvider.GOOGLE, oauthId);
 
-        // 기존 회원이면 프로필 갱신, 없으면 신규 회원으로 생성
-        User user = existingUser
+        // 탈퇴 계정이면 재활성화, 활성 계정이면 프로필 갱신, 없으면 신규 생성
+        boolean newUser = anyUser.isEmpty();
+        User user = anyUser
                 .map(found -> {
-                    found.updateProfile(nickname, profileImageUrl, email);
+                    if (found.isDeleted()) {
+                        found.reactivate(nickname, profileImageUrl, email);
+                    } else {
+                        found.updateProfile(nickname, profileImageUrl, email);
+                    }
                     return found;
                 })
                 .orElseGet(() -> userRepository.save(User.googleUser(email, nickname, profileImageUrl, oauthId)));

@@ -38,6 +38,13 @@ app:
       - /ws/**
       - /invite
       - /.well-known/**
+  user-purge:
+    # 탈퇴 회원 하드 삭제 스케줄러 (기본 비활성화)
+    enabled: ${APP_USER_PURGE_ENABLED:true}
+    # 탈퇴 후 몇 초 뒤에 하드 삭제할지 (기본 30일 = 2592000초, 테스트용: 30)
+    threshold-seconds: ${APP_USER_PURGE_THRESHOLD_SECONDS:30}
+    # 삭제 대상 체크 주기 (밀리초, 기본 10초)
+    check-interval-ms: ${APP_USER_PURGE_CHECK_INTERVAL_MS:10000}
   invite:
     # 밴드 초대 링크의 베이스 URL (프로필별로 override 가능)
     share-base-url: ${APP_INVITE_SHARE_BASE_URL:https://test.sync-trip.app/invite?code=}
