@@ -1,5 +1,5 @@
 # SyncTrip 구현 현황 문서
-**인수인계 문서 기준:** v6 | **최신 DDL:** `SyncTrip_DDL_v8.sql`
+**인수인계 문서 기준:** v6 | **최신 DDL:** `SyncTrip_DDL_v7.sql`
 
 > 이 문서는 기능이 구현되거나 수정될 때마다 업데이트합니다.
 > 기준: `SyncTrip_인수인계문서_v6.md` + 실제 Spring Boot 코드 (`com.sync.*`)
@@ -177,6 +177,7 @@
 |---|---|---|---|---|
 | WebSocket (STOMP) | ✅ 구현 | 2026-05-16 | `SimpMessagingTemplate` | Ready 이벤트(`/topic/.../ready`), 밴드 상태 전환(`/topic/.../status`), 투표 이벤트(`/topic/.../votes`), 일정 변경(`/topic/.../schedule`) |
 | Spring Cache (인메모리) | ➕ 추가 구현 | 2026-05-21 | `@EnableCaching` | 도시 검색 중복 호출 방지 (`destination-search` 캐시) |
+| Redis (토큰 블랙리스트) | ➕ 추가 구현 | 2026-05-22 | `RedisTokenBlacklistService` | 로그아웃 시 Refresh Token TTL 기반 자동 만료 블랙리스트 / `/auth/*/logout` Request Body `{"refreshToken":"..."}` |
 | DebugController | ➕ 추가 구현 | 2026-05-21 | `DebugController` | 알림·알고리즘 수동 테스트용 엔드포인트 / `app.security.enabled=false` 조건부 활성화 |
 | InviteController (딥링크 랜딩) | ➕ 추가 구현 | 2026-05-12 | `InviteController` | `GET /invite?code=...` → 딥링크 `synctrip://band/join?code=...` HTML 랜딩 페이지 / 800ms 후 자동 앱 열기 |
 
@@ -204,21 +205,43 @@
 
 ---
 
-## 13. Android 클라이언트 구현 현황 (2026-05-23 기준)
+## 13. Android 클라이언트 구현 현황
+
+> **2026-05-23: XML 기반 앱(SyncTrip-Android)에서 Jetpack Compose 앱(SyncTrip-kt)으로 프론트엔드 전면 재개발 시작**
+> UI 품질 개선 목적. 기존 XML 앱의 API 연동 로직을 Compose 아키텍처로 재구성.
+
+### 구 프론트 (SyncTrip-Android / XML) — 참고용
+
+| 기능 | 상태 | 비고 |
+|---|---|---|
+| 카카오 / 구글 로그인 | ✅ 완성 | JWT 저장·갱신·로그아웃 |
+| 밴드 목록 / 생성 / 참여 | ✅ 완성 | |
+| 장소 탐색 + 블라인드 장바구니 | ✅ 완성 | |
+| 스와이프 투표 (WebSocket) | ✅ 완성 | |
+| 일정 조회 / Plan B 교체 | ✅ 완성 | |
+| 가계부 / 정산 UI | ❌ 미구현 | |
+
+### 신 프론트 (SyncTrip-kt / Jetpack Compose) — 현재 개발 중
 
 | 기능 | 상태 | 구현일 | 비고 |
 |---|---|---|---|
-| 카카오 / 구글 로그인 | ✅ 구현 | 2026-05-22 | JWT 저장, 자동 토큰 갱신, 로그아웃·회원탈퇴 |
-| FCM 푸시 알림 수신 | ✅ 구현 | 2026-05-22 | `SyncTripFirebaseService`, 채널 생성, 토큰 서버 등록 |
-| 메인 화면 DrawerLayout 사이드 메뉴 | ✅ 구현 | 2026-05-23 | 내 프로필·알림·설정·로그아웃·회원탈퇴 / 프로필 이미지·이름 연동 |
-| 밴드 목록 조회 / 생성 / 참여 / 삭제 | ✅ 구현 | 2026-05-22 | 초대 딥링크, 초대코드 BottomSheet UI |
-| 장소 탐색 + 블라인드 장바구니 | ✅ 구현 | 2026-05-22 | 카카오(국내) / 구글(해외), 픽 목록 BottomSheet 조회·삭제 |
-| 스와이프 투표 (WebSocket) | ✅ 구현 | 2026-05-22 | 실시간 진행 현황, 투표 진행 칩 상단 고정 |
-| 일정 조회 / Plan B 교체 | ✅ 구현 | 2026-05-22 | 편집 락, WebSocket 실시간 반영 |
-| 가계부 / 정산 UI | ❌ 미구현 | — | 백엔드 API 완료, 프론트 미착수 |
-| 알림 목록 화면 | ❌ 미구현 | — | API 완료, 사이드 메뉴 "알림" 탭 연결 필요 |
-| 여권 스탬프 화면 | ❌ 미구현 | — | DDL·API 없음 |
-| 공유 앨범 화면 | ❌ 미구현 | — | DDL만 있음 |
+| 의존성 세팅 | ✅ 구현 | 2026-05-23 | Compose BOM, Retrofit, Navigation, Coil, Kakao/Google SDK, DataStore 등 |
+| 패키지 구조 | ✅ 구현 | 2026-05-23 | core / data/repository / ui/viewmodel 레이어 구성 |
+| 스플래시 화면 | ✅ 구현 | 2026-05-23 | 페이드인 + 로고 펄스 애니메이션 |
+| 로그인 화면 UI | ✅ 구현 | 2026-05-23 | 카카오 / 구글 / 이메일 버튼 |
+| 카카오 로그인 API 연동 | ✅ 구현 | 2026-05-23 | KakaoAuthManager → 서버 JWT 발급 · DataStore 저장 확인 |
+| 홈 화면 UI | ✅ 구현 | 2026-05-23 | 상단바 / 바텀 네비 / FAB / 밴드 카드 목록 |
+| NavGraph 라우팅 | ✅ 구현 | 2026-05-23 | splash→login→home→밴드/장소/투표/일정/여권/알림 |
+| ViewModel (Auth/Band/Vote) | ✅ 구현 | 2026-05-23 | StateFlow 기반 / Repository 패턴 |
+| 밴드 생성 / 참여 화면 UI | ✅ 구현 | 2026-05-23 | UI만, ViewModel 연결 미완 |
+| 장소 검색 화면 UI | ✅ 구현 | 2026-05-23 | UI만, ViewModel 연결 미완 |
+| 투표 화면 UI | ⚠️ 부분 구현 | 2026-05-23 | 카드 탭 방식 구현됨. 스와이프 제스처 미구현 |
+| 일정 화면 UI | ✅ 구현 | 2026-05-23 | UI만 |
+| 정산 화면 UI | ✅ 구현 | 2026-05-23 | UI만 |
+| NavGraph ↔ ViewModel 연결 | ❌ 미구현 | — | 현재 NavGraph가 더미 데이터 직접 전달 |
+| 스와이프 투표 제스처 | ❌ 미구현 | — | VoteViewModel.swipe() 준비됨, 화면 미구현 |
+| 앱 시작 시 자동 로그인 | ❌ 미구현 | — | DataStore 토큰 복구 로직 미연결 |
+| FCM 알림 | ❌ 미구현 | — | 구 앱에는 있음 |
 
 ---
 
@@ -229,11 +252,17 @@
 | 2026-05-21 | 문서 최초 작성. 전체 기능 현황 정리 |
 | 2026-05-21 | 알림 보완 (페이지네이션, 삭제 API, 설정 조회, 정산 요청, 오래된 알림 삭제 스케줄러) |
 | 2026-05-21 | `MEMBER_JOINED` 알림 타입 추가, 멤버 합류 알림 연동, 오래된 알림 자동 삭제 스케줄러 추가 |
-| 2026-05-22 | 코드 3회 정독 후 누락 항목 반영: DestinationController/Service, InviteController, 밴드 삭제 API, Plan B 오기재 수정, WebSocket 채널 보완 |
+| 2026-05-22 | 코드 3회 정독 후 누락 항목 반영: DestinationController/Service(인기 여행지·도시 검색), InviteController(딥링크 랜딩), 밴드 삭제 API, Plan B 최대 7개 오기재 수정, WebSocket 채널 전체 목록 보완, ScheduleService 편집 락 API 상세화, PlanBRecommender 실사용 여부 주석 |
+| 2026-05-22 | Redis Refresh Token 블랙리스트 구현: `RedisTokenBlacklistService`, `logout()` 무효화 로직, `refresh()` 블랙리스트 체크, compose.yml Redis 서비스 추가 |
+| 2026-05-22 | 탈퇴 후 재가입 버그 수정: soft delete 계정 재가입 시 DUPLICATE KEY 오류 → 계정 재활성화(`User.reactivate()`)로 처리 |
+| 2026-05-22 | 탈퇴 회원 하드 삭제 스케줄러 추가: `UserPurgeScheduler` / `APP_USER_PURGE_ENABLED=true` + `THRESHOLD_SECONDS=30` 설정 시 30초 뒤 완전 삭제 |
+| 2026-05-23 | `PlaceCategory`에서 잘못 추가된 `LODGING` 값 제거 |
+| 2026-05-23 | `UserPurgeScheduler` 버그 수정: 소프트 삭제된 그룹의 `owner_id` 참조가 남아 `users` 삭제 시 FK 제약 오류 발생 → 하드 삭제 전 소프트 삭제 그룹 레코드 정리 추가 |
+| 2026-05-23 | Android 클라이언트 Jetpack Compose(SyncTrip-kt)로 전면 재개발 시작. 의존성·패키지구조·화면 UI·카카오 로그인 연동 완료 |
 | 2026-05-23 | Android 클라이언트 구현 현황 섹션 추가, VOTE_STARTED 알림 방장 제외(`notifyAllExcept`) 반영 |
 | 2026-05-23 | USR-028 DONE 전환 알림 구현, 투표 자동 종료(전원 완료 즉시 + 1시간 타임아웃), VOTE_STARTED 강제시작 시 방장 제외, TRIP_ENDED 알림 타입 추가, Refresh Token 블랙리스트 구현 현황 반영 |
 | 2026-05-23 | USR-030 공휴일 알림 구현: HolidayService(Nager.Date API+캐싱), 달력 조회 API, 밴드 공휴일 조회 API, 합류/일정 생성 시 알림, D-7 스케줄러, DDL v8(notifications ENUM 확장) |
 
 ---
 
-**마지막 수정:** 2026-05-23 | **최신 DDL:** `SyncTrip_DDL_v8.sql`
+**마지막 수정:** 2026-05-23 (PlaceCategory LODGING 제거 / UserPurgeScheduler FK 버그 수정 / Compose 프론트 재개발 현황 반영) | **최신 DDL:** `SyncTrip_DDL_v7.sql`
