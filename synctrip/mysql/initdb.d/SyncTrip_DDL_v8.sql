@@ -1,7 +1,12 @@
 -- ════════════════════════════════════════
--- SyncTrip DDL v7
--- 작성일: 2026-05-18
+-- SyncTrip DDL v8
+-- 작성일: 2026-05-23
 -- 총 테이블: 17개 + 트리거 2개
+-- ════════════════════════════════════════
+-- v7 → v8 변경사항: 2026-05-23
+--   1. notifications.type ENUM 확장
+--      → 'TRIP_ENDED' 추가 (코드에 이미 존재했으나 ENUM 누락 상태였음)
+--      → 'HOLIDAY_WARNING' 추가 (USR-030 공휴일 알림 구현)
 -- ════════════════════════════════════════
 -- v6 → v7 변경사항:
 --   1. 테이블명 `groups` → `user_groups` 변경
@@ -281,8 +286,8 @@ CREATE TABLE `expense_members` (
 
 
 -- 14. notifications
--- [v5 수정 1] type 컬럼 VARCHAR(50) → ENUM(4종) 전환
--- 알림 종류 추가 필요 시 ALTER TABLE ... MODIFY COLUMN으로 ENUM 확장
+-- [v5 수정 1] type 컬럼 VARCHAR(50) → ENUM 전환
+-- [v8 수정] ENUM에 TRIP_ENDED, HOLIDAY_WARNING 추가
 CREATE TABLE `notifications` (
                                  `notification_id` BIGINT       NOT NULL AUTO_INCREMENT COMMENT '알림 고유 ID',
                                  `user_id`         BIGINT       NOT NULL                COMMENT '수신 회원 ID (FK → users)',
@@ -292,7 +297,9 @@ CREATE TABLE `notifications` (
                       'MEMBER_JOINED',
                       'VOTE_STARTED',
                       'SCHEDULE_UPDATED',
-                      'SETTLEMENT_REQUEST'
+                      'SETTLEMENT_REQUEST',
+                      'TRIP_ENDED',
+                      'HOLIDAY_WARNING'
                     ) NOT NULL COMMENT '알림 종류',
                                  `content`         VARCHAR(255) NOT NULL                COMMENT '알림 내용',
                                  `is_read`         BOOLEAN      NOT NULL DEFAULT FALSE  COMMENT '읽음 여부',

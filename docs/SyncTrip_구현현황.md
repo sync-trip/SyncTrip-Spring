@@ -1,5 +1,5 @@
 # SyncTrip 구현 현황 문서
-**인수인계 문서 기준:** v6 | **최신 DDL:** `SyncTrip_DDL_v7.sql`
+**인수인계 문서 기준:** v6 | **최신 DDL:** `SyncTrip_DDL_v8.sql`
 
 > 이 문서는 기능이 구현되거나 수정될 때마다 업데이트합니다.
 > 기준: `SyncTrip_인수인계문서_v6.md` + 실제 Spring Boot 코드 (`com.sync.*`)
@@ -123,7 +123,7 @@
 |---|---|---|---|---|---|
 | USR-026 | 주요 이벤트 알림 | ✅ 구현 | 2026-05-21 | `NotificationService`, `FcmService` | In-App + FCM 푸시 동시 발송 |
 | USR-027 | 알림 토글 (수신 설정) | ✅ 구현 | 2026-05-21 | `NotificationService`, `NotificationController` | 타입별 FCM on/off / 조회(GET)·변경(PATCH) API |
-| USR-030 | 공휴일 알림 (Nager.Date) | ❌ 미구현 | — | — | Nager.Date API 연동 없음 |
+| USR-030 | 공휴일 알림 (Nager.Date) | ✅ 구현 | 2026-05-23 | `HolidayService`, `HolidayController`, `HolidayWarningScheduler` | 해외 밴드 전용 / 달력 조회·합류 알림·일정 생성 후 알림·D-7 스케줄러 |
 
 ### 알림 타입별 트리거
 
@@ -135,6 +135,7 @@
 | `TRIP_ENDED` | 여행 종료 | `BandService.advanceBandStatus()` (TRAVELLING→DONE) | ➕ 추가 구현 | 2026-05-23 |
 | `SCHEDULE_UPDATED` | 일정 변경 | `ScheduleService.generateInternal()` / `swapSchedulePlace()` | ✅ 구현 | 2026-05-21 |
 | `SETTLEMENT_REQUEST` | 정산 요청 | `SettlementController` → `NotificationService.requestSettlement()` | ➕ 추가 구현 | 2026-05-21 |
+| `HOLIDAY_WARNING` | 현지 공휴일 안내 | `BandService.joinBand()` / `ScheduleService.generateInternal()` / `HolidayWarningScheduler` | ➕ 추가 구현 | 2026-05-23 |
 
 ### 추가 구현된 알림 API (인수인계 문서에 없음)
 
@@ -151,9 +152,9 @@
 | `DELETE /api/notifications` | 알림 전체 삭제 | 2026-05-21 |
 | `POST /api/bands/{bandId}/settlement/request` | 정산 요청 알림 발송 | 2026-05-21 |
 | 오래된 알림 자동 삭제 스케줄러 | 매일 새벽 3시, 30일 이전 알림 일괄 삭제 | 2026-05-21 |
-
-**보완할 점**
-- USR-030 공휴일 알림: Nager.Date API 연동 + `@Scheduled` 스케줄러 미구현
+| `GET /api/holidays?countryCode=JP&year=2026` | 국가+연도별 공휴일 목록 조회 (달력 표시용) | 2026-05-23 |
+| `GET /api/bands/{bandId}/holidays` | 밴드 여행 기간 내 공휴일 목록 조회 | 2026-05-23 |
+| D-7 공휴일 알림 스케줄러 | 매일 새벽 3시 10분, 7일 뒤 시작 해외 밴드에 공휴일 알림 | 2026-05-23 |
 
 ---
 
@@ -185,8 +186,6 @@
 
 | 우선순위 | 기능 | 관련 USR | 설명 |
 |---|---|---|---|
-| 🟡 중간 | 공휴일 알림 | USR-030 | Nager.Date API 연동 + `@Scheduled` 스케줄러 |
-
 | 🟢 낮음 | 공유 앨범 | USR-023 | DDL 있음, 서비스·컨트롤러 없음 |
 | 🟢 낮음 | 여권 스탬프 | USR-024 | DDL 있음, 서비스·컨트롤러 없음 |
 | 🟢 낮음 | 과거 여행 아카이브 | USR-025 | DONE 상태 밴드 전용 뷰 없음 |
@@ -199,7 +198,7 @@
 |---|---|---|---|
 | FCM 알림 | "In-App 알림만 (FCM 미사용)" | **FCM 푸시 알림 구현** (Firebase Admin SDK 9.2.0) | 2026-05-21 |
 | Vision AI | "GPT-4o or Gemini Vision, 추후 결정" | **Gemini Vision 1.5 Flash 확정** | 2026-05-21 |
-| 알림 타입 수 | 4종 | **5종** (`MEMBER_JOINED` 추가) | 2026-05-21 |
+| 알림 타입 수 | 4종 | **7종** (`MEMBER_JOINED`, `TRIP_ENDED`, `HOLIDAY_WARNING` 추가) | 2026-05-21 ~ 05-23 |
 | 소셜 로그인 | 카카오 / 구글 (계획) | **카카오 + 구글 모두 구현 완료** | 2026-05-20 |
 | Plan B 최대 추천 수 | §7.7 인수인계 문서 기준 불명확 | **최대 7개** (`PLAN_B_MAX_RECOMMENDATIONS = 7`) — DebugController 주석의 "최대 3개"는 오기재 | 2026-05-19 |
 
@@ -233,7 +232,8 @@
 | 2026-05-22 | 코드 3회 정독 후 누락 항목 반영: DestinationController/Service, InviteController, 밴드 삭제 API, Plan B 오기재 수정, WebSocket 채널 보완 |
 | 2026-05-23 | Android 클라이언트 구현 현황 섹션 추가, VOTE_STARTED 알림 방장 제외(`notifyAllExcept`) 반영 |
 | 2026-05-23 | USR-028 DONE 전환 알림 구현, 투표 자동 종료(전원 완료 즉시 + 1시간 타임아웃), VOTE_STARTED 강제시작 시 방장 제외, TRIP_ENDED 알림 타입 추가, Refresh Token 블랙리스트 구현 현황 반영 |
+| 2026-05-23 | USR-030 공휴일 알림 구현: HolidayService(Nager.Date API+캐싱), 달력 조회 API, 밴드 공휴일 조회 API, 합류/일정 생성 시 알림, D-7 스케줄러, DDL v8(notifications ENUM 확장) |
 
 ---
 
-**마지막 수정:** 2026-05-23 | **최신 DDL:** `SyncTrip_DDL_v7.sql`
+**마지막 수정:** 2026-05-23 | **최신 DDL:** `SyncTrip_DDL_v8.sql`

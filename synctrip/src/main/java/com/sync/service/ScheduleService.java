@@ -40,6 +40,7 @@ import com.sync.repository.ScheduleAltRepository;
 import com.sync.repository.ScheduleRepository;
 import com.sync.repository.UserRepository;
 import com.sync.domain.notification.NotificationType;
+import com.sync.dto.holiday.HolidayInfo;
 import com.sync.dto.ws.ScheduleUpdatedEvent;
 import com.sync.repository.VoteRepository;
 import java.time.Duration;
@@ -84,6 +85,7 @@ public class ScheduleService {
     private final ObjectMapper objectMapper;
     private final SimpMessagingTemplate messagingTemplate;
     private final NotificationService notificationService;
+    private final HolidayService holidayService;
 
     public ScheduleService(ScheduleRepository scheduleRepository,
                            ScheduleAltRepository scheduleAltRepository,
@@ -95,7 +97,8 @@ public class ScheduleService {
                            VoteRepository voteRepository,
                            ObjectMapper objectMapper,
                            SimpMessagingTemplate messagingTemplate,
-                           NotificationService notificationService) {
+                           NotificationService notificationService,
+                           HolidayService holidayService) {
         this.scheduleRepository = scheduleRepository;
         this.scheduleAltRepository = scheduleAltRepository;
         this.bandRepository = bandRepository;
@@ -107,6 +110,7 @@ public class ScheduleService {
         this.objectMapper = objectMapper;
         this.messagingTemplate = messagingTemplate;
         this.notificationService = notificationService;
+        this.holidayService = holidayService;
     }
 
     /**
@@ -226,6 +230,16 @@ public class ScheduleService {
 
         notificationService.notifyAll(bandId, NotificationType.SCHEDULE_UPDATED,
                 band.getName() + " 여행 일정이 생성됐어요! 지금 확인해보세요 🗓️");
+
+        // 해외 밴드이면 여행 기간 내 공휴일 유무 체크 후 전원 알림
+        if (band.isOverseas()) {
+            List<HolidayInfo> holidays = holidayService.getHolidaysInRange(
+                    band.getCountryCode(), band.getStartDate(), band.getEndDate());
+            if (!holidays.isEmpty()) {
+                notificationService.notifyAll(bandId, NotificationType.HOLIDAY_WARNING,
+                        holidayService.buildHolidayMessage(band, holidays));
+            }
+        }
     }
 
     private void saveSchedules(Band band, AlgorithmResult result, Map<Long, Place> placeById) {

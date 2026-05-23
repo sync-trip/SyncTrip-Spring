@@ -15,6 +15,7 @@ import com.sync.dto.band.BandResponse;
 import com.sync.dto.band.BandStatusTransitionResponse;
 import com.sync.dto.band.BandUpdateRequest;
 import com.sync.domain.vote.GroupVoteInfo;
+import com.sync.dto.holiday.HolidayInfo;
 import com.sync.dto.ws.ReadyEvent;
 import com.sync.dto.ws.StatusEvent;
 import com.sync.repository.BandMemberRepository;
@@ -43,6 +44,7 @@ public class BandService {
     private final GroupVoteInfoRepository groupVoteInfoRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final NotificationService notificationService;
+    private final HolidayService holidayService;
 
     public BandService(BandRepository bandRepository,
                        BandMemberRepository bandMemberRepository,
@@ -51,7 +53,8 @@ public class BandService {
                        ScheduleService scheduleService,
                        GroupVoteInfoRepository groupVoteInfoRepository,
                        SimpMessagingTemplate messagingTemplate,
-                       NotificationService notificationService) {
+                       NotificationService notificationService,
+                       HolidayService holidayService) {
         this.bandRepository = bandRepository;
         this.bandMemberRepository = bandMemberRepository;
         this.userRepository = userRepository;
@@ -60,6 +63,7 @@ public class BandService {
         this.groupVoteInfoRepository = groupVoteInfoRepository;
         this.messagingTemplate = messagingTemplate;
         this.notificationService = notificationService;
+        this.holidayService = holidayService;
     }
 
     /**
@@ -114,6 +118,16 @@ public class BandService {
         // 새 멤버 합류 시 기존 멤버 전원에게 알림
         notificationService.notifyAll(band.getId(), NotificationType.MEMBER_JOINED,
                 user.getName() + "님이 " + band.getName() + "에 합류했어요! 👋");
+
+        // 해외 밴드이면 합류한 멤버 본인에게 공휴일 안내 알림
+        if (band.isOverseas()) {
+            List<HolidayInfo> holidays = holidayService.getHolidaysInRange(
+                    band.getCountryCode(), band.getStartDate(), band.getEndDate());
+            if (!holidays.isEmpty()) {
+                notificationService.notify(user.getId(), band.getId(), NotificationType.HOLIDAY_WARNING,
+                        holidayService.buildHolidayMessage(band, holidays));
+            }
+        }
 
         long memberCount = bandMemberRepository.countByBand(band);
         return toBandResponse(band, false, (int) memberCount);
@@ -319,6 +333,18 @@ public class BandService {
                         m.getUser().getProfileImageUrl(), m.getRole(), m.isReady(),
                         m.getJoinedAt(), m.getBookmarkCount()
                 )).collect(Collectors.toList());
+    }
+
+    /**
+     * 밴드 여행 기간 내 공휴일 목록 조회 (방장/멤버 공통)
+     * - 국내 밴드(is_overseas=FALSE)는 빈 목록 반환
+     */
+    @Transactional(readOnly = true)
+    public List<HolidayInfo> getBandHolidays(Long bandId) {
+        Band band = bandRepository.findByIdAndIsDeletedFalse(bandId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "밴드를 찾을 수 없습니다."));
+        if (!band.isOverseas()) return List.of();
+        return holidayService.getHolidaysInRange(band.getCountryCode(), band.getStartDate(), band.getEndDate());
     }
 
     /**

@@ -9,6 +9,7 @@ import com.sync.dto.band.BandReadyResponse;
 import com.sync.dto.band.BandResponse;
 import com.sync.dto.band.BandStatusTransitionResponse;
 import com.sync.dto.band.BandUpdateRequest;
+import com.sync.dto.holiday.HolidayInfo;
 import com.sync.service.BandService;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
@@ -119,6 +120,12 @@ public class BandController {
             @PathVariable Long bandId
     ) {
         return ResponseEntity.ok(bandService.advanceBandStatus(userId, bandId));
+    }
+
+    // 밴드 여행 기간 내 현지 공휴일 목록 조회 (방장/멤버 공통, 국내 밴드는 빈 목록)
+    @GetMapping("/{bandId}/holidays")
+    public ResponseEntity<List<HolidayInfo>> getBandHolidays(@PathVariable Long bandId) {
+        return ResponseEntity.ok(bandService.getBandHolidays(bandId));
     }
 
 }
