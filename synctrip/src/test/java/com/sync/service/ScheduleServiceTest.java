@@ -19,6 +19,7 @@ import com.sync.repository.ScheduleAltRepository;
 import com.sync.repository.ScheduleRepository;
 import com.sync.repository.UserRepository;
 import com.sync.repository.VoteRepository;
+import com.sync.service.HolidayService;
 import com.sync.service.NotificationService;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import java.lang.reflect.Field;
@@ -34,6 +35,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -75,7 +77,8 @@ class ScheduleServiceTest {
                 voteRepository,
                 new ObjectMapper(),
                 messagingTemplate,
-                notificationService
+                notificationService,
+                mock(HolidayService.class)
         );
     }
 
