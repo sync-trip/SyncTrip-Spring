@@ -39,9 +39,10 @@ public class GooglePlacesService {
             "places.id,places.displayName,places.location,places.types," +
             "places.regularOpeningHours,places.rating,places.formattedAddress,places.photos";
 
+    // places.types 포함 — 도시/행정구역 타입 필터링에 사용 (기업·상점 등 제외)
     private static final String DESTINATION_FIELD_MASK =
             "places.id,places.displayName,places.location,places.formattedAddress," +
-            "places.addressComponents,places.photos";
+            "places.addressComponents,places.photos,places.types";
     
     // API 1회 호출 시 최대 결과 개수 (구글 기본값 20)
     private static final int MAX_RESULT_COUNT = 20;
