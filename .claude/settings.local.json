@@ -7,6 +7,8 @@
       "Bash(grep *)",
       "Read(//c/Users/Min/StudioProjects/SyncTrip-Android/**)",
       "Read(//mnt/c/Users/Min/StudioProjects/**)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Min\\\\StudioProjects\\\\SyncTrip-kt\" -Recurse -Directory)",
+      "Bash(Select-Object -First 50 FullName)",
       "Read(//mnt/c/IntelliJprojects/SyncTrip-Spring/**)",
       "Bash(./gradlew.bat clean *)"
     ]
