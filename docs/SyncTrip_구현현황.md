@@ -1,5 +1,5 @@
 # SyncTrip 구현 현황 문서
-**인수인계 문서 기준:** v6 | **최신 DDL:** `SyncTrip_DDL_v8.sql`
+**인수인계 문서 기준:** v6 | **최신 DDL:** `SyncTrip_DDL_v10.sql`
 
 > 이 문서는 기능이 구현되거나 수정될 때마다 업데이트합니다.
 > 기준: `SyncTrip_인수인계문서_v6.md` + 실제 Spring Boot 코드 (`com.sync.*`)
@@ -162,12 +162,12 @@
 
 | USR | 기능명 | 상태 | 구현일 | 구현 위치 | 비고 |
 |---|---|---|---|---|---|
-| USR-023 | 공유 앨범 | ❌ 미구현 | — | — | DDL(`album_photos` 테이블)은 있음 |
-| USR-024 | 여권 스탬프 | ❌ 미구현 | — | — | DDL(`passport_stamps` 테이블)은 있음 |
+| USR-023 | 공유 앨범 | ✅ 구현 | 2026-05-23 | `AlbumService`, `AlbumController`, `AlbumPhoto` 엔티티 | 피드(사진+글)+지도 핀 지원, 업로드/목록/지도/상세/수정/삭제 API |
+| USR-024 | 여권 스탬프 | ✅ 구현 | 2026-05-23 | `PassportStampService`, `PassportStamp` 엔티티, `UserController` | 밴드 DONE 시 멤버 전원 자동 스탬프, `GET /api/users/me/stamps` |
 | USR-025 | 과거 여행 기록 | ❌ 미구현 | — | — | `getMyBands`는 있으나 DONE 아카이브 전용 뷰 없음 |
 
 **보완할 점**
-- 3개 기능 모두 DDL만 있고 서비스/컨트롤러 없음. 졸업 프로젝트 시연 범위 확인 필요
+- USR-025는 프론트에서 날짜/상태 기준 분류로 처리 (백엔드 추가 작업 없음)
 
 ---
 
@@ -186,9 +186,7 @@
 
 | 우선순위 | 기능 | 관련 USR | 설명 |
 |---|---|---|---|
-| 🟢 낮음 | 공유 앨범 | USR-023 | DDL 있음, 서비스·컨트롤러 없음 |
-| 🟢 낮음 | 여권 스탬프 | USR-024 | DDL 있음, 서비스·컨트롤러 없음 |
-| 🟢 낮음 | 과거 여행 아카이브 | USR-025 | DONE 상태 밴드 전용 뷰 없음 |
+| 🟢 낮음 | 과거 여행 아카이브 | USR-025 | 프론트 날짜/상태 필터링으로 처리 예정, 백엔드 추가 없음 |
 
 ---
 
@@ -217,8 +215,8 @@
 | 일정 조회 / Plan B 교체 | ✅ 구현 | 2026-05-22 | 편집 락, WebSocket 실시간 반영 |
 | 가계부 / 정산 UI | ❌ 미구현 | — | 백엔드 API 완료, 프론트 미착수 |
 | 알림 목록 화면 | ❌ 미구현 | — | API 완료, 사이드 메뉴 "알림" 탭 연결 필요 |
-| 여권 스탬프 화면 | ❌ 미구현 | — | DDL·API 없음 |
-| 공유 앨범 화면 | ❌ 미구현 | — | DDL만 있음 |
+| 공유 앨범 화면 | ❌ 미구현 | — | 백엔드 API 완료(피드+지도), 프론트 미착수 |
+| 여권 스탬프 화면 | ❌ 미구현 | — | 백엔드 API 완료, 프론트 미착수 |
 
 ---
 
@@ -233,7 +231,10 @@
 | 2026-05-23 | Android 클라이언트 구현 현황 섹션 추가, VOTE_STARTED 알림 방장 제외(`notifyAllExcept`) 반영 |
 | 2026-05-23 | USR-028 DONE 전환 알림 구현, 투표 자동 종료(전원 완료 즉시 + 1시간 타임아웃), VOTE_STARTED 강제시작 시 방장 제외, TRIP_ENDED 알림 타입 추가, Refresh Token 블랙리스트 구현 현황 반영 |
 | 2026-05-23 | USR-030 공휴일 알림 구현: HolidayService(Nager.Date API+캐싱), 달력 조회 API, 밴드 공휴일 조회 API, 합류/일정 생성 시 알림, D-7 스케줄러, DDL v8(notifications ENUM 확장) |
+| 2026-05-23 | USR-023 공유 앨범 구현: AlbumPhoto 엔티티, AlbumService(업로드/목록/삭제), AlbumController, DDL v9(photo_url→photo_data LONGTEXT) |
+| 2026-05-23 | USR-023 앨범 확장: caption+latitude+longitude 추가, 지도 핀 API(/map), 상세 조회, 글 수정(PATCH), DDL v10 |
+| 2026-05-23 | USR-024 여권 스탬프 구현: PassportStamp 엔티티, PassportStampService, BandService DONE 훅, GET /api/users/me/stamps |
 
 ---
 
-**마지막 수정:** 2026-05-23 | **최신 DDL:** `SyncTrip_DDL_v8.sql`
+**마지막 수정:** 2026-05-23 | **최신 DDL:** `SyncTrip_DDL_v10.sql`

@@ -45,6 +45,7 @@ public class BandService {
     private final SimpMessagingTemplate messagingTemplate;
     private final NotificationService notificationService;
     private final HolidayService holidayService;
+    private final PassportStampService passportStampService;
 
     public BandService(BandRepository bandRepository,
                        BandMemberRepository bandMemberRepository,
@@ -54,7 +55,8 @@ public class BandService {
                        GroupVoteInfoRepository groupVoteInfoRepository,
                        SimpMessagingTemplate messagingTemplate,
                        NotificationService notificationService,
-                       HolidayService holidayService) {
+                       HolidayService holidayService,
+                       PassportStampService passportStampService) {
         this.bandRepository = bandRepository;
         this.bandMemberRepository = bandMemberRepository;
         this.userRepository = userRepository;
@@ -64,6 +66,7 @@ public class BandService {
         this.messagingTemplate = messagingTemplate;
         this.notificationService = notificationService;
         this.holidayService = holidayService;
+        this.passportStampService = passportStampService;
     }
 
     /**
@@ -193,9 +196,10 @@ public class BandService {
             finishVotingInternal(band);
             return new BandStatusTransitionResponse(band.getId(), previousStatus, band.getStatus());
         } else if (previousStatus == BandStatus.TRAVELLING) {
-            // 여행 종료 — 전원에게 정산 유도 알림
+            // 여행 종료 — 전원에게 정산 유도 알림 + 여권 스탬프 자동 부여
             notificationService.notifyAll(band.getId(), NotificationType.TRIP_ENDED,
                     band.getName() + " 여행이 종료됐어요! 정산을 완료해보세요 💰");
+            passportStampService.stampForAllMembers(band);
         }
 
         messagingTemplate.convertAndSend("/topic/bands/" + band.getId() + "/status",

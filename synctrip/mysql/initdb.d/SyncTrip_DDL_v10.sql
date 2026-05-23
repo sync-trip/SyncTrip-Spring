@@ -1,7 +1,16 @@
 -- ════════════════════════════════════════
--- SyncTrip DDL v8
+-- SyncTrip DDL v10
 -- 작성일: 2026-05-23
 -- 총 테이블: 17개 + 트리거 2개
+-- ════════════════════════════════════════
+-- v9 → v10 변경사항: 2026-05-23
+--   1. album_photos에 caption, latitude, longitude 추가
+--      → 사진 + 글 피드 지원 (caption)
+--      → 지도 핀 기능 지원 (latitude, longitude, NULL 허용)
+-- ════════════════════════════════════════
+-- v8 → v9 변경사항: 2026-05-23
+--   1. album_photos.photo_url VARCHAR(500) → photo_data LONGTEXT
+--      → 사진을 Base64로 DB에 직접 저장 (외부 스토리지 불필요)
 -- ════════════════════════════════════════
 -- v7 → v8 변경사항: 2026-05-23
 --   1. notifications.type ENUM 확장
@@ -314,11 +323,15 @@ CREATE TABLE `notifications` (
 
 -- 15. album_photos
 -- [v7 수정] 소프트 삭제 컬럼 추가 (휴지통 패턴 — 실수 복구)
+-- [v9 수정] photo_url VARCHAR(500) → photo_data LONGTEXT (Base64 DB 직접 저장)
 CREATE TABLE `album_photos` (
                                 `album_photo_id` BIGINT       NOT NULL AUTO_INCREMENT COMMENT '앨범 사진 고유 ID',
                                 `group_id`       BIGINT       NOT NULL                COMMENT '그룹 ID (FK → user_groups)',
                                 `uploader_id`    BIGINT       NOT NULL                COMMENT '업로드한 회원 ID (FK → users)',
-                                `photo_url`      VARCHAR(500) NOT NULL                COMMENT '사진 저장 URL',
+                                `photo_data`     LONGTEXT     NOT NULL                COMMENT '사진 데이터 (Base64 인코딩)',
+                                `caption`        TEXT         NULL                    COMMENT '사진 설명 글 (선택)',
+                                `latitude`       DOUBLE       NULL                    COMMENT '촬영 위치 위도 (GPS 메타데이터, NULL=위치 없음)',
+                                `longitude`      DOUBLE       NULL                    COMMENT '촬영 위치 경도 (GPS 메타데이터, NULL=위치 없음)',
                                 `taken_at`       TIMESTAMP    NULL                    COMMENT '촬영 시각',
                                 `is_deleted`     BOOLEAN      NOT NULL DEFAULT FALSE  COMMENT '삭제 여부 (Soft Delete) — 휴지통 30일 보관 후 자동삭제 정책 대응',
                                 `deleted_at`     TIMESTAMP    NULL                    COMMENT '삭제 시각 (NULL=활성 사진)',
