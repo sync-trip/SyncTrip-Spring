@@ -1,5 +1,5 @@
 # SyncTrip 구현 현황 문서
-**인수인계 문서 기준:** v6 | **최신 DDL:** `SyncTrip_DDL_v7.sql`
+**인수인계 문서 기준:** v6 | **최신 DDL:** `SyncTrip_DDL_v10.sql`
 
 > 이 문서는 기능이 구현되거나 수정될 때마다 업데이트합니다.
 > 기준: `SyncTrip_인수인계문서_v6.md` + 실제 Spring Boot 코드 (`com.sync.*`)
@@ -43,7 +43,7 @@
 | USR-006 | 초대 코드 재발급 | ✅ 구현 | 2026-05-12 | `BandService.getOrRefreshInviteCode()` | 만료 시 자동 재발급 |
 | USR-009 | Ready 상태 전환 | ✅ 구현 | 2026-05-16 | `BandService.markReady()` | 장바구니 1개 이상 필수 / `DELETE /api/bands/{bandId}/ready` 존재하나 항상 403 반환 (취소 불가) |
 | USR-014 | 투표 강제 시작/마감 | ✅ 구현 | 2026-05-16 ~ 05-23 | `BandService.advanceBandStatus()`, `VoteScheduler` | 방장 전용 강제 마감 / 전원 투표 완료 시 즉시 자동 마감 / 1시간 타임아웃 자동 마감 |
-| USR-028 | 여행 종료 처리 | ✅ 구현 | 2026-05-16 ~ 05-23 | `BandService.advanceBandStatus()` | DONE 전환 시 밴드 전원에게 `TRIP_ENDED` 알림 + 정산 유도 메시지 발송 |
+| USR-028 | 여행 종료 처리 | ✅ 구현 | 2026-05-16 ~ 05-23 | `BandService.advanceBandStatus()` | DONE 전환 시 밴드 전원에게 `TRIP_ENDED` 알림 + 정산 유도 메시지 발송 + 여권 스탬프 자동 부여 |
 | — | 밴드 삭제 (Soft Delete) | ➕ 추가 구현 | 2026-05-12 | `BandService.deleteBand()` | `DELETE /api/bands/{bandId}` / 방장 전용 / is_deleted 마킹 |
 
 **보완할 점**
@@ -162,12 +162,12 @@
 
 | USR | 기능명 | 상태 | 구현일 | 구현 위치 | 비고 |
 |---|---|---|---|---|---|
-| USR-023 | 공유 앨범 | ❌ 미구현 | — | — | DDL(`album_photos` 테이블)은 있음 |
-| USR-024 | 여권 스탬프 | ❌ 미구현 | — | — | DDL(`passport_stamps` 테이블)은 있음 |
-| USR-025 | 과거 여행 기록 | ❌ 미구현 | — | — | `getMyBands`는 있으나 DONE 아카이브 전용 뷰 없음 |
+| USR-023 | 공유 앨범 | ✅ 구현 | 2026-05-23 | `AlbumService`, `AlbumController`, `AlbumPhoto` | 피드(사진+글)+지도 핀 / 6개 API / Base64 MySQL 저장 / 소프트 삭제 |
+| USR-024 | 여권 스탬프 | ✅ 구현 | 2026-05-23 | `PassportStampService`, `PassportStamp`, `UserController` | DONE 전환 시 멤버 전원 자동 부여 / `GET /api/users/me/stamps` |
+| USR-025 | 과거 여행 기록 | ✅ 구현 | — | 프론트 클라이언트 | `getMyBands` 응답의 `status`/`startDate`/`endDate` 기준 프론트에서 다가오는/지난 여행 분류 / 별도 백엔드 불필요 |
 
 **보완할 점**
-- 3개 기능 모두 DDL만 있고 서비스/컨트롤러 없음. 졸업 프로젝트 시연 범위 확인 필요
+- 소프트 삭제된 앨범 사진 영구 정리 스케줄러 미구현 (is_deleted=true 레코드 누적) — 필요 시 `NotificationCleanupScheduler` 패턴으로 추가 가능
 
 ---
 
@@ -187,9 +187,7 @@
 
 | 우선순위 | 기능 | 관련 USR | 설명 |
 |---|---|---|---|
-| 🟢 낮음 | 공유 앨범 | USR-023 | DDL 있음, 서비스·컨트롤러 없음 |
-| 🟢 낮음 | 여권 스탬프 | USR-024 | DDL 있음, 서비스·컨트롤러 없음 |
-| 🟢 낮음 | 과거 여행 아카이브 | USR-025 | DONE 상태 밴드 전용 뷰 없음 |
+| — | (미구현 기능 없음) | — | USR-023/024/025 포함 전체 기능 구현 완료 |
 
 ---
 
@@ -202,6 +200,8 @@
 | 알림 타입 수 | 4종 | **7종** (`MEMBER_JOINED`, `TRIP_ENDED`, `HOLIDAY_WARNING` 추가) | 2026-05-21 ~ 05-23 |
 | 소셜 로그인 | 카카오 / 구글 (계획) | **카카오 + 구글 모두 구현 완료** | 2026-05-20 |
 | Plan B 최대 추천 수 | §7.7 인수인계 문서 기준 불명확 | **최대 7개** (`PLAN_B_MAX_RECOMMENDATIONS = 7`) — DebugController 주석의 "최대 3개"는 오기재 | 2026-05-19 |
+| 공유 앨범 사진 저장 방식 | "사진 저장 방식 미정" | **Base64 LONGTEXT MySQL 저장** — 외부 스토리지(S3 등) 없이 DB에 직접 저장 / 졸업 프로젝트 범위 고려 | 2026-05-23 |
+| 과거 여행 기록(USR-025) | 별도 아카이브 뷰 API 필요 | **프론트 클라이언트에서 처리** — 기존 `GET /api/bands` 응답의 `status`/날짜 기준으로 다가오는/지난 여행 분류 / 백엔드 추가 불필요 | 2026-05-23 |
 
 ---
 
@@ -262,7 +262,10 @@
 | 2026-05-23 | Android 클라이언트 구현 현황 섹션 추가, VOTE_STARTED 알림 방장 제외(`notifyAllExcept`) 반영 |
 | 2026-05-23 | USR-028 DONE 전환 알림 구현, 투표 자동 종료(전원 완료 즉시 + 1시간 타임아웃), VOTE_STARTED 강제시작 시 방장 제외, TRIP_ENDED 알림 타입 추가, Refresh Token 블랙리스트 구현 현황 반영 |
 | 2026-05-23 | USR-030 공휴일 알림 구현: HolidayService(Nager.Date API+캐싱), 달력 조회 API, 밴드 공휴일 조회 API, 합류/일정 생성 시 알림, D-7 스케줄러, DDL v8(notifications ENUM 확장) |
+| 2026-05-23 | USR-023 공유 앨범 구현: AlbumPhoto 엔티티, AlbumService(6개 메서드), AlbumController(6개 API), DDL v9(photo_url→photo_data LONGTEXT), DDL v10(caption/latitude/longitude 추가) |
+| 2026-05-23 | USR-024 여권 스탬프 구현: PassportStamp 엔티티, PassportStampService, GET /api/users/me/stamps, BandService DONE 전환 시 stampForAllMembers() 자동 호출 |
+| 2026-05-23 | 구현현황 문서 전면 재검증 및 갱신: 아카이빙 섹션 ❌→✅, 미구현 요약 갱신, 결정사항 추가, DDL v10 반영 |
 
 ---
 
-**마지막 수정:** 2026-05-23 (PlaceCategory LODGING 제거 / UserPurgeScheduler FK 버그 수정 / Compose 프론트 재개발 현황 반영) | **최신 DDL:** `SyncTrip_DDL_v7.sql`
+**마지막 수정:** 2026-05-23 (USR-023 공유 앨범 구현 / USR-024 여권 스탬프 구현 / 문서 전면 재검증) | **최신 DDL:** `SyncTrip_DDL_v10.sql`
