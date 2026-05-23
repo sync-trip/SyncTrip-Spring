@@ -172,20 +172,45 @@ public class BandService {
 
         if (previousStatus == BandStatus.PLANNING) {
             groupVoteInfoRepository.save(GroupVoteInfo.start(band, true));
+            // 방장이 직접 강제 시작한 경우 — 방장 본인은 제외
             notificationService.notifyAllExcept(band.getId(), userId, NotificationType.VOTE_STARTED,
                     band.getName() + " 여행 투표가 시작됐어요! 지금 바로 참여하세요 ✈️");
         } else if (previousStatus == BandStatus.VOTING) {
-            groupVoteInfoRepository.findByBandId(band.getId()).ifPresent(info -> {
-                info.end();
-                groupVoteInfoRepository.save(info);
-            });
-            scheduleService.generateAutomated(band);
+            finishVotingInternal(band);
+            return new BandStatusTransitionResponse(band.getId(), previousStatus, band.getStatus());
+        } else if (previousStatus == BandStatus.TRAVELLING) {
+            // 여행 종료 — 전원에게 정산 유도 알림
+            notificationService.notifyAll(band.getId(), NotificationType.TRIP_ENDED,
+                    band.getName() + " 여행이 종료됐어요! 정산을 완료해보세요 💰");
         }
 
         messagingTemplate.convertAndSend("/topic/bands/" + band.getId() + "/status",
                 new StatusEvent(band.getId(), band.getStatus()));
 
         return new BandStatusTransitionResponse(band.getId(), previousStatus, band.getStatus());
+    }
+
+    /**
+     * 투표 마감 처리 — VoteService(전원 완료 감지), VoteScheduler(타임아웃)에서도 호출
+     * 이미 VOTING이 아니면 조용히 무시하여 멱등성을 보장한다.
+     */
+    public void finishVoting(Long bandId) {
+        Band band = bandRepository.findByIdAndIsDeletedFalse(bandId).orElse(null);
+        if (band == null || band.getStatus() != BandStatus.VOTING) return;
+        band.advanceStatus();
+        bandRepository.save(band);
+        finishVotingInternal(band);
+    }
+
+    // VOTING → GENERATING 전환 공통 처리 (GroupVoteInfo 마감 + 일정 생성 + WebSocket)
+    private void finishVotingInternal(Band band) {
+        groupVoteInfoRepository.findByBandId(band.getId()).ifPresent(info -> {
+            info.end();
+            groupVoteInfoRepository.save(info);
+        });
+        scheduleService.generateAutomated(band);
+        messagingTemplate.convertAndSend("/topic/bands/" + band.getId() + "/status",
+                new StatusEvent(band.getId(), band.getStatus()));
     }
 
     /**
@@ -249,7 +274,8 @@ public class BandService {
             groupVoteInfoRepository.save(GroupVoteInfo.start(band, false));
             messagingTemplate.convertAndSend("/topic/bands/" + bandId + "/status",
                     new StatusEvent(bandId, band.getStatus()));
-            notificationService.notifyAllExcept(bandId, band.getOwner().getId(), NotificationType.VOTE_STARTED,
+            // 방장 포함 전원에게 투표 시작 알림
+            notificationService.notifyAll(bandId, NotificationType.VOTE_STARTED,
                     band.getName() + " 여행 투표가 시작됐어요! 지금 바로 참여하세요 ✈️");
         } else if (ready) {
             notificationService.notify(band.getOwner().getId(), bandId, NotificationType.MEMBER_READY,

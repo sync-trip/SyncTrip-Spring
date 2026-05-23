@@ -80,4 +80,11 @@ public interface BandMemberRepository extends JpaRepository<BandMember, Long> {
      */
     @Query("SELECT CASE WHEN COUNT(bm) > 0 THEN true ELSE false END FROM BandMember bm WHERE bm.band.id = :bandId AND bm.user.id = :userId AND bm.isDeleted = false")
     boolean existsByBandIdAndUserId(@Param("bandId") Long bandId, @Param("userId") Long userId);
+
+    /**
+     * 투표 자격이 있는 멤버 수 (투표 시작 전 합류한 활성 멤버)
+     * 전원 투표 완료 감지 시 분모로 사용한다.
+     */
+    @Query("SELECT COUNT(bm) FROM BandMember bm WHERE bm.band.id = :bandId AND bm.joinedAfterVoting = false AND bm.isDeleted = false")
+    long countEligibleVoters(@Param("bandId") Long bandId);
 }

@@ -60,6 +60,8 @@ class VoteServiceTest {
     private UserRepository userRepository;
     @Mock
     private SimpMessagingTemplate messagingTemplate;
+    @Mock
+    private BandService bandService;
 
     private VoteService voteService;
 
@@ -72,7 +74,8 @@ class VoteServiceTest {
                 placeBookmarkRepository,
                 voteRepository,
                 userRepository,
-                messagingTemplate
+                messagingTemplate,
+                bandService
         );
     }
 

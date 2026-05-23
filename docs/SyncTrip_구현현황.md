@@ -41,13 +41,12 @@
 | USR-005 | 최대 인원 제한 (8명) | ✅ 구현 | 2026-05-12 | `BandService.joinBand()` | countByBand ≥ maxMembers 시 409 |
 | USR-006 | 초대 코드 재발급 | ✅ 구현 | 2026-05-12 | `BandService.getOrRefreshInviteCode()` | 만료 시 자동 재발급 |
 | USR-009 | Ready 상태 전환 | ✅ 구현 | 2026-05-16 | `BandService.markReady()` | 장바구니 1개 이상 필수 / `DELETE /api/bands/{bandId}/ready` 존재하나 항상 403 반환 (취소 불가) |
-| USR-014 | 투표 강제 시작/마감 | ✅ 구현 | 2026-05-16 | `BandService.advanceBandStatus()` | 방장 전용 / PLANNING→VOTING→GENERATING→TRAVELLING→DONE |
-| USR-028 | 여행 종료 처리 | ⚠️ 부분 구현 | 2026-05-16 | `BandService.advanceBandStatus()` | DONE 상태 전환 가능. 종료 알림·정산 안내 플로우 없음 |
+| USR-014 | 투표 강제 시작/마감 | ✅ 구현 | 2026-05-16 ~ 05-23 | `BandService.advanceBandStatus()`, `VoteScheduler` | 방장 전용 강제 마감 / 전원 투표 완료 시 즉시 자동 마감 / 1시간 타임아웃 자동 마감 |
+| USR-028 | 여행 종료 처리 | ✅ 구현 | 2026-05-16 ~ 05-23 | `BandService.advanceBandStatus()` | DONE 전환 시 밴드 전원에게 `TRIP_ENDED` 알림 + 정산 유도 메시지 발송 |
 | — | 밴드 삭제 (Soft Delete) | ➕ 추가 구현 | 2026-05-12 | `BandService.deleteBand()` | `DELETE /api/bands/{bandId}` / 방장 전용 / is_deleted 마킹 |
 
 **보완할 점**
-- USR-028: 여행 DONE 전환 시 밴드 전원 알림 + 정산 유도 안내 없음
-- 투표 자동 종료 (1시간 타임아웃, 전원 투표 완료 감지) 미구현 — 방장 수동 마감만 가능
+- (없음)
 
 ---
 
@@ -131,7 +130,8 @@
 |---|---|---|---|---|
 | `MEMBER_READY` | 멤버 준비완료 | `BandService.markReady()` | ✅ 구현 | 2026-05-21 |
 | `MEMBER_JOINED` | 새 멤버 합류 | `BandService.joinBand()` | ➕ 추가 구현 | 2026-05-21 |
-| `VOTE_STARTED` | 투표 시작 | `BandService.markReady()` / `advanceBandStatus()` | ✅ 구현 | 2026-05-21 |
+| `VOTE_STARTED` | 투표 시작 | `BandService.markReady()` / `advanceBandStatus()` | ✅ 구현 | 2026-05-21 ~ 05-23 |
+| `TRIP_ENDED` | 여행 종료 | `BandService.advanceBandStatus()` (TRAVELLING→DONE) | ➕ 추가 구현 | 2026-05-23 |
 | `SCHEDULE_UPDATED` | 일정 변경 | `ScheduleService.generateInternal()` / `swapSchedulePlace()` | ✅ 구현 | 2026-05-21 |
 | `SETTLEMENT_REQUEST` | 정산 요청 | `SettlementController` → `NotificationService.requestSettlement()` | ➕ 추가 구현 | 2026-05-21 |
 
@@ -184,10 +184,7 @@
 
 | 우선순위 | 기능 | 관련 USR | 설명 |
 |---|---|---|---|
-| 🔴 높음 | 투표 자동 종료 | USR-014 | 1시간 타임아웃 또는 전원 투표 완료 시 자동 마감 스케줄러 |
-| 🔴 높음 | 여행 종료 알림·플로우 | USR-028 | DONE 전환 시 밴드 전원 알림 + 정산 유도 안내 |
 | 🟡 중간 | 공휴일 알림 | USR-030 | Nager.Date API 연동 + `@Scheduled` 스케줄러 |
-| 🟡 중간 | Refresh Token 블랙리스트 | — | 로그아웃 후 토큰 서버 측 무효화 |
 | 🟢 낮음 | 공유 앨범 | USR-023 | DDL 있음, 서비스·컨트롤러 없음 |
 | 🟢 낮음 | 여권 스탬프 | USR-024 | DDL 있음, 서비스·컨트롤러 없음 |
 | 🟢 낮음 | 과거 여행 아카이브 | USR-025 | DONE 상태 밴드 전용 뷰 없음 |
@@ -233,7 +230,8 @@
 | 2026-05-21 | `MEMBER_JOINED` 알림 타입 추가, 멤버 합류 알림 연동, 오래된 알림 자동 삭제 스케줄러 추가 |
 | 2026-05-22 | 코드 3회 정독 후 누락 항목 반영: DestinationController/Service, InviteController, 밴드 삭제 API, Plan B 오기재 수정, WebSocket 채널 보완 |
 | 2026-05-23 | Android 클라이언트 구현 현황 섹션 추가, VOTE_STARTED 알림 방장 제외(`notifyAllExcept`) 반영 |
+| 2026-05-23 | USR-028 DONE 전환 알림 구현, 투표 자동 종료(전원 완료 즉시 + 1시간 타임아웃), VOTE_STARTED 전원 알림으로 변경, TRIP_ENDED 알림 타입 추가 |
 
 ---
 
-**마지막 수정:** 2026-05-22 | **최신 DDL:** `SyncTrip_DDL_v7.sql`
+**마지막 수정:** 2026-05-23 | **최신 DDL:** `SyncTrip_DDL_v7.sql`

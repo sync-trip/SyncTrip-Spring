@@ -129,6 +129,8 @@ public class User {
             case SETTLEMENT_REQUEST  -> notiSettlementRequest;
             case MEMBER_READY        -> notiMemberReady;
             case MEMBER_JOINED       -> notiMemberJoined;
+            // 여행 종료 알림은 개인 토글 없이 항상 발송
+            case TRIP_ENDED          -> true;
         };
     }
 
@@ -140,6 +142,8 @@ public class User {
             case SETTLEMENT_REQUEST  -> notiSettlementRequest = enabled;
             case MEMBER_READY        -> notiMemberReady = enabled;
             case MEMBER_JOINED       -> notiMemberJoined = enabled;
+            // TRIP_ENDED는 토글 불가 — 무시
+            case TRIP_ENDED          -> { }
         }
     }
 

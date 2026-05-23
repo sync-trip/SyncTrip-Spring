@@ -6,7 +6,9 @@
       "Bash(./gradlew clean *)",
       "Bash(grep *)",
       "Read(//c/Users/Min/StudioProjects/SyncTrip-Android/**)",
-      "Read(//mnt/c/Users/Min/StudioProjects/**)"
+      "Read(//mnt/c/Users/Min/StudioProjects/**)",
+      "Read(//mnt/c/IntelliJprojects/SyncTrip-Spring/**)",
+      "Bash(./gradlew.bat clean *)"
     ]
   },
   "spinnerTipsEnabled": true

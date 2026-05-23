@@ -40,6 +40,7 @@ public class VoteService {
     private final VoteRepository voteRepository;
     private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final BandService bandService;
 
     public VoteService(BandRepository bandRepository,
                        BandMemberRepository bandMemberRepository,
@@ -47,7 +48,8 @@ public class VoteService {
                        PlaceBookmarkRepository placeBookmarkRepository,
                        VoteRepository voteRepository,
                        UserRepository userRepository,
-                       SimpMessagingTemplate messagingTemplate) {
+                       SimpMessagingTemplate messagingTemplate,
+                       BandService bandService) {
         this.bandRepository = bandRepository;
         this.bandMemberRepository = bandMemberRepository;
         this.placeRepository = placeRepository;
@@ -55,6 +57,7 @@ public class VoteService {
         this.voteRepository = voteRepository;
         this.userRepository = userRepository;
         this.messagingTemplate = messagingTemplate;
+        this.bandService = bandService;
     }
 
     @Transactional(readOnly = true)
@@ -126,6 +129,13 @@ public class VoteService {
         int myVotedCount = (int) voteRepository.countByBandIdAndUserId(bandId, userId);
         messagingTemplate.convertAndSend("/topic/bands/" + bandId + "/votes",
                 new VoteEvent(userId, place.getId(), myVotedCount, totalPlaces));
+
+        // 전원이 모든 장소에 투표했으면 즉시 자동 마감
+        long eligibleVoters = bandMemberRepository.countEligibleVoters(bandId);
+        long totalVotesInBand = voteRepository.countByBandId(bandId);
+        if (eligibleVoters > 0 && totalVotesInBand >= eligibleVoters * totalPlaces) {
+            bandService.finishVoting(bandId);
+        }
 
         return new VoteResponse(vote.getId(), place.getId(), vote.getResult(), vote.getVotedAt());
     }
