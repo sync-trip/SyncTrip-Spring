@@ -1,6 +1,7 @@
 package com.sync.controller;
 
 import com.sync.common.annotation.LoginUser;
+import com.sync.dto.band.AccommodationUpdateRequest;
 import com.sync.dto.band.BandCreateRequest;
 import com.sync.dto.band.BandJoinRequest;
 import com.sync.dto.band.BandInviteCodeResponse;
@@ -15,6 +16,7 @@ import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -78,6 +80,17 @@ public class BandController {
     // 밴드의 멤버 목록 조회 (모든 인증 사용자 접근 가능)
     public ResponseEntity<List<BandMemberResponse>> getBandMembers(@PathVariable Long bandId) {
         return ResponseEntity.ok(bandService.getBandMembers(bandId));
+    }
+
+    @PatchMapping("/{bandId}/accommodation")
+    // 숙소 변경 (방장 전용 / VOTING·GENERATING 단계 제외)
+    public ResponseEntity<Void> updateAccommodation(
+            @LoginUser Long userId,
+            @PathVariable Long bandId,
+            @RequestBody AccommodationUpdateRequest request
+    ) {
+        bandService.updateAccommodation(userId, bandId, request);
+        return ResponseEntity.ok().build();
     }
 
     @PostMapping("/{bandId}/ready")

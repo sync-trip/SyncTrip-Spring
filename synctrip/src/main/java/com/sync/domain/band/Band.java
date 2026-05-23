@@ -215,6 +215,19 @@ public class Band {
         this.accommodationLng = accommodationLng;
     }
 
+    /**
+     * 숙소 정보만 단독 변경 (PLANNING 외 단계에서도 호출 가능).
+     * VOTING/GENERATING 단계에서는 변경 불가.
+     */
+    public void updateAccommodation(String name, Double lat, Double lng) {
+        if (this.status == BandStatus.VOTING || this.status == BandStatus.GENERATING) {
+            throw new IllegalStateException("투표 또는 일정 생성 중에는 숙소를 변경할 수 없습니다.");
+        }
+        this.accommodationName = name;
+        this.accommodationLat = lat;
+        this.accommodationLng = lng;
+    }
+
     public void startEditing(Long userId) {
         this.currentlyEditingUserId = userId;
         this.lastEditingAt = LocalDateTime.now();

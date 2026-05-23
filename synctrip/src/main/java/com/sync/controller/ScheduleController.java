@@ -2,11 +2,13 @@ package com.sync.controller;
 
 import com.sync.common.annotation.LoginUser;
 import com.sync.dto.schedule.ScheduleAltResponse;
+import com.sync.dto.schedule.ScheduleReorderRequest;
 import com.sync.dto.schedule.ScheduleResponse;
 import com.sync.service.ScheduleService;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -51,6 +53,15 @@ public class ScheduleController {
             @PathVariable Long bandId,
             @RequestBody com.sync.dto.schedule.PlanBRequest request) {
         return ResponseEntity.ok(scheduleService.getPlanBRecommendations(userId, bandId, request.targetPlaceId()));
+    }
+
+    @PatchMapping("/reorder")
+    public ResponseEntity<Void> reorderSchedule(
+            @LoginUser Long userId,
+            @PathVariable Long bandId,
+            @RequestBody ScheduleReorderRequest request) {
+        scheduleService.reorderSchedule(userId, bandId, request);
+        return ResponseEntity.ok().build();
     }
 
     @PostMapping("/swap")

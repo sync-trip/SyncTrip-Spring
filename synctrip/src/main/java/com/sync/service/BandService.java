@@ -166,6 +166,25 @@ public class BandService {
     }
 
     /**
+     * 숙소 단독 변경 (v2.4 FIX-35/36)
+     * - PLANNING / TRAVELLING / DONE 단계에서 방장만 변경 가능.
+     * - VOTING / GENERATING 단계에서는 불가.
+     * - TRAVELLING 단계이면 오늘 이후 day의 TSP를 재계산한다.
+     */
+    public void updateAccommodation(Long userId, Long bandId,
+                                    com.sync.dto.band.AccommodationUpdateRequest request) {
+        Band band = loadBandForOwner(userId, bandId);
+        // Band.updateAccommodation()이 VOTING/GENERATING 단계를 내부에서 차단한다.
+        band.updateAccommodation(request.accommodationName(), request.accommodationLat(), request.accommodationLng());
+        bandRepository.save(band);
+
+        // TRAVELLING 단계에서만 현재일 이후 day TSP 재계산
+        if (band.getStatus() == BandStatus.TRAVELLING) {
+            scheduleService.recalculateFutureDays(band);
+        }
+    }
+
+    /**
      * 준비 완료(Ready) 상태 변경
      * - 모든 멤버가 Ready가 되면 자동으로 투표(VOTING) 단계로 넘어갑니다.
      */

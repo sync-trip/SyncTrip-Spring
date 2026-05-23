@@ -93,14 +93,16 @@
 |---|---|---|---|---|---|
 | USR-015 | 일자별 동선 초안 생성 | ✅ 구현 | 2026-05-17 | `ScheduleService.generateAutomated()` | 투표 종료 후 알고리즘 파이프라인 자동 실행 |
 | USR-016 | 이상치 감지 / 제외 | ✅ 구현 | 2026-05-17 | `AlgorithmService` (Step 2/3) | 거리 이상치 감지 + `OUTLIER_FULL_DAY` 배지 |
-| USR-017 | Drag & Drop 순서 변경 | ✅ 구현 | 2026-05-17 | `ScheduleService.reorderSchedule()` | REORDER 모드 (TSP 재계산) |
+| USR-017 | Drag & Drop 순서 변경 | ✅ 구현 | 2026-05-23 | `ScheduleService.reorderSchedule()` | REORDER 모드 / `PATCH /schedule/reorder` / 사용자 지정 순서 고정 후 시간만 재계산 (TSP 재정렬 없음) |
 | USR-018 | 수동 편집 시 대안 팝업 (Plan B) | ✅ 구현 | 2026-05-19 | `ScheduleService.swapSchedulePlace()` | RESTRUCTURE 트랜잭션 + altPool 복귀 / 교체 후 해당 Day TSP 재계산 |
 | USR-031 | 실시간 Plan B 추천 | ✅ 구현 | 2026-05-19 | `ScheduleService.getPlanBRecommendations()` | `POST /api/bands/{bandId}/schedule/plan-b` / 최대 7개 |
 | — | 편집 락 (5분 타임아웃 + 자동 갱신) | ➕ 추가 구현 | 2026-05-20 ~ 05-21 | `ScheduleService.startEditing()` / `finishEditing()` | `POST /api/bands/{bandId}/schedule/edit/start·finish` / 그룹 동시 편집 방지 |
 | — | 일정 변경 WebSocket 브로드캐스트 | ➕ 추가 구현 | 2026-05-19 | `ScheduleService` → `SimpMessagingTemplate` | 장소 교체 시 `/topic/bands/{bandId}/schedule` 채널로 `ScheduleUpdatedEvent` 발송 |
 
+| — | 숙소 단독 변경 + partial TSP 재계산 | ➕ 추가 구현 | 2026-05-23 | `BandService.updateAccommodation()`, `ScheduleService.recalculateFutureDays()` | `PATCH /api/bands/{bandId}/accommodation` / 방장 전용 / VOTING·GENERATING 단계 차단 / TRAVELLING 시 오늘 이후 day TSP 재계산 (v2.4 FIX-35/36) |
+
 **보완할 점**
-- 숙소 변경 시 current_date 이후 day만 재계산(Step 3 partial) 구현 여부 확인 필요
+- (없음)
 
 ---
 
@@ -265,7 +267,9 @@
 | 2026-05-23 | USR-023 공유 앨범 구현: AlbumPhoto 엔티티, AlbumService(6개 메서드), AlbumController(6개 API), DDL v9(photo_url→photo_data LONGTEXT), DDL v10(caption/latitude/longitude 추가) |
 | 2026-05-23 | USR-024 여권 스탬프 구현: PassportStamp 엔티티, PassportStampService, GET /api/users/me/stamps, BandService DONE 전환 시 stampForAllMembers() 자동 호출 |
 | 2026-05-23 | 구현현황 문서 전면 재검증 및 갱신: 아카이빙 섹션 ❌→✅, 미구현 요약 갱신, 결정사항 추가, DDL v10 반영 |
+| 2026-05-23 | USR-017 Drag & Drop 순서 변경 실제 구현: `ScheduleService.reorderSchedule()` / `PATCH /schedule/reorder` |
+| 2026-05-23 | 숙소 변경 + TRAVELLING 단계 partial TSP 재계산 구현: `Band.updateAccommodation()` / `BandService.updateAccommodation()` / `ScheduleService.recalculateFutureDays()` / `PATCH /api/bands/{bandId}/accommodation` (v2.4 FIX-35/36) |
 
 ---
 
-**마지막 수정:** 2026-05-23 (USR-023 공유 앨범 구현 / USR-024 여권 스탬프 구현 / 문서 전면 재검증) | **최신 DDL:** `SyncTrip_DDL_v10.sql`
+**마지막 수정:** 2026-05-23 (USR-017 Drag & Drop 순서 변경 구현 / 숙소 변경 + partial TSP 재계산 구현) | **최신 DDL:** `SyncTrip_DDL_v10.sql`

@@ -29,6 +29,7 @@ import com.sync.domain.user.User;
 import com.sync.dto.schedule.ScheduleAltResponse;
 import com.sync.dto.schedule.ScheduleDayResponse;
 import com.sync.dto.schedule.SchedulePlaceInfo;
+import com.sync.dto.schedule.ScheduleReorderRequest;
 import com.sync.dto.schedule.ScheduleResponse;
 import com.sync.dto.schedule.ScheduleSlotResponse;
 import com.sync.dto.schedule.PlanBResponse;
@@ -473,6 +474,124 @@ public class ScheduleService {
 
         /* 12. 최종 추천 반환 */
         return recommendations;
+    }
+
+    /**
+     * Drag & Drop 순서 변경 (USR-017 REORDER 모드)
+     * - 사용자가 지정한 순서를 그대로 유지하면서 이동 시간·시작 시각만 재계산한다.
+     * - TSP 재정렬 없음 (RESTRUCTURE의 recalculateDayTsp와 구분).
+     */
+    @Transactional
+    public void reorderSchedule(Long userId, Long bandId, ScheduleReorderRequest request) {
+        loadActiveUser(userId);
+        Band band = loadBand(bandId);
+        requireMembership(bandId, userId);
+        requireEditingLock(band, userId);
+
+        List<Long> orderedIds = request.orderedScheduleIds();
+        if (orderedIds == null || orderedIds.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "재정렬할 일정 슬롯 목록이 비어 있습니다.");
+        }
+
+        // 해당 day의 슬롯 전체 조회
+        List<Schedule> daySchedules =
+                scheduleRepository.findByBandIdAndDayNumberOrderBySlotOrderAsc(bandId, request.dayNumber());
+
+        Map<Long, Schedule> byId = daySchedules.stream()
+                .collect(Collectors.toMap(Schedule::getId, s -> s));
+
+        // 요청의 모든 ID가 해당 day에 속하는지 검증
+        for (Long id : orderedIds) {
+            if (!byId.containsKey(id)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "슬롯 ID " + id + "는 해당 일차의 일정이 아닙니다.");
+            }
+        }
+
+        // 사용자 지정 순서로 시간 재계산 (TSP 재정렬 없이 순서 고정)
+        List<Schedule> ordered = orderedIds.stream()
+                .map(byId::get)
+                .toList();
+        assignTimesInOrder(ordered, band.isOverseas());
+        scheduleRepository.saveAll(ordered);
+
+        // 그룹 전원에게 일정 변경 알림
+        messagingTemplate.convertAndSend(
+                "/topic/bands/" + bandId + "/schedule",
+                new ScheduleUpdatedEvent(bandId, userId));
+
+        notificationService.notifyAll(bandId, NotificationType.SCHEDULE_UPDATED,
+                band.getName() + " 여행 일정 순서가 변경됐어요! 확인해보세요 🔀");
+    }
+
+    /**
+     * 사용자 지정 순서 그대로 이동 시간·시작 시각을 재계산한다.
+     * TSP 재정렬 없이 입력된 리스트 순서를 그대로 사용한다.
+     */
+    private void assignTimesInOrder(List<Schedule> ordered, boolean isOverseas) {
+        LocalTime current = SimpleTsp.DEFAULT_DAY_START;
+        for (int i = 0; i < ordered.size(); i++) {
+            Schedule s = ordered.get(i);
+            if (s.getPlace() == null) continue;
+
+            Integer travelTime = null;
+            if (i > 0 && ordered.get(i - 1).getPlace() != null) {
+                Place prev = ordered.get(i - 1).getPlace();
+                double distKm = haversine(
+                        prev.getLatitude(), prev.getLongitude(),
+                        s.getPlace().getLatitude(), s.getPlace().getLongitude());
+                long travelMin = Math.round(distKm / com.sync.algorithm.AlgorithmConstants.TRAVEL_SPEED_KMH * 60.0);
+                current = current.plusMinutes(travelMin);
+                travelTime = (int) travelMin;
+            }
+
+            int duration = s.getPlace().getEstimatedDuration();
+            s.updateTimes(i + 1, current, duration, travelTime);
+            current = current.plusMinutes(duration);
+        }
+    }
+
+    /**
+     * 숙소 변경 후 TRAVELLING 단계에서 현재일 이후 day의 TSP를 재계산한다.
+     * BandService.updateAccommodation() 에서 호출.
+     *
+     * @param band 이미 숙소가 업데이트된 Band 엔티티
+     */
+    public void recalculateFutureDays(Band band) {
+        // 오늘 날짜 기준으로 몇 번째 day인지 계산 (여행 시작일이 day=1)
+        long daysSinceStart = java.time.temporal.ChronoUnit.DAYS.between(band.getStartDate(), LocalDate.now());
+        int currentDayNumber = (int) daysSinceStart + 1;
+
+        // 현재일 이후 슬롯만 조회
+        List<Schedule> futureSchedules = scheduleRepository
+                .findByBandIdOrderByDayNumberAscSlotOrderAsc(band.getId())
+                .stream()
+                .filter(s -> s.getDayNumber() > currentDayNumber)
+                .toList();
+
+        if (futureSchedules.isEmpty()) {
+            log.info("숙소 변경 후 재계산할 미래 일정 없음: band={}", band.getId());
+            return;
+        }
+
+        // day별로 묶어서 TSP 재계산
+        Map<Integer, List<Schedule>> byDay = futureSchedules.stream()
+                .collect(Collectors.groupingBy(Schedule::getDayNumber, LinkedHashMap::new, Collectors.toList()));
+
+        for (Map.Entry<Integer, List<Schedule>> entry : byDay.entrySet()) {
+            recalculateDayTsp(band, entry.getKey(), entry.getValue());
+        }
+
+        log.info("숙소 변경 후 {}일차 이후 {}개 day 재계산 완료: band={}",
+                currentDayNumber, byDay.size(), band.getId());
+
+        // 그룹 전원에게 일정 변경 알림
+        messagingTemplate.convertAndSend(
+                "/topic/bands/" + band.getId() + "/schedule",
+                new ScheduleUpdatedEvent(band.getId(), null));
+
+        notificationService.notifyAll(band.getId(), NotificationType.SCHEDULE_UPDATED,
+                band.getName() + " 숙소가 변경되어 이후 일정이 업데이트됐어요 🏨");
     }
 
     @Transactional
