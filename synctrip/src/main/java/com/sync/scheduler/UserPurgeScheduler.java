@@ -62,6 +62,8 @@ public class UserPurgeScheduler {
         jdbc.update("DELETE FROM group_members WHERE user_id = ?", userId);
         // 방장인 그룹 처리 (다른 멤버에게 이전 or 그룹 삭제)
         handleOwnedGroups(userId);
+        // 소프트 삭제된 그룹에 남아있는 owner_id 참조 제거 (FK 제약 방지)
+        jdbc.update("DELETE FROM user_groups WHERE owner_id = ? AND is_deleted = TRUE", userId);
         // 사용자 삭제
         jdbc.update("DELETE FROM users WHERE user_id = ?", userId);
 
