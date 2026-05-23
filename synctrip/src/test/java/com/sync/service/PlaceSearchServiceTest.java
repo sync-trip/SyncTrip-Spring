@@ -160,7 +160,7 @@ class PlaceSearchServiceTest {
                 false,
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 5),
-                com.sync.domain.band.TravelStyle.PACKED, null, null, null
+                com.sync.domain.band.TravelStyle.PACKED, null, null, null, null
         );
         setId(band, id);
         return band;
@@ -178,7 +178,7 @@ class PlaceSearchServiceTest {
                 true,
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 5),
-                com.sync.domain.band.TravelStyle.PACKED, null, null, null
+                com.sync.domain.band.TravelStyle.PACKED, null, null, null, null
         );
         setId(band, id);
         return band;

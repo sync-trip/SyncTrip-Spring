@@ -83,7 +83,7 @@ class BandServiceTest {
                 false,
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 5),
-                TravelStyle.PACKED, null, null, null
+                TravelStyle.PACKED, null, null, null, null
         );
         setId(band, 10L);
 
@@ -118,7 +118,7 @@ class BandServiceTest {
                 false,
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 5),
-                TravelStyle.PACKED, null, null, null
+                TravelStyle.PACKED, null, null, null, null
         );
         setId(band, 10L);
 
@@ -158,7 +158,7 @@ class BandServiceTest {
                 false,
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 5),
-                TravelStyle.PACKED, null, null, null
+                TravelStyle.PACKED, null, null, null, null
         );
         setId(band, 10L);
 
@@ -192,7 +192,7 @@ class BandServiceTest {
                 false,
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 5),
-                TravelStyle.PACKED, null, null, null
+                TravelStyle.PACKED, null, null, null, null
         );
         setId(band, 10L);
 
@@ -258,7 +258,7 @@ class BandServiceTest {
                 false,
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 5),
-                TravelStyle.PACKED, null, null, null
+                TravelStyle.PACKED, null, null, null, null
         );
         setId(band, 10L);
 
@@ -289,7 +289,7 @@ class BandServiceTest {
                 false,
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 5),
-                TravelStyle.PACKED, null, null, null
+                TravelStyle.PACKED, null, null, null, null
         );
         setId(band1, 10L);
 
@@ -303,7 +303,7 @@ class BandServiceTest {
                 false,
                 LocalDate.of(2026, 7, 1),
                 LocalDate.of(2026, 7, 7),
-                TravelStyle.RELAXED, null, null, null
+                TravelStyle.RELAXED, null, null, null, null
         );
         setId(band2, 11L);
 

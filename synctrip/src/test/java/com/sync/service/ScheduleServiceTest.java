@@ -273,6 +273,7 @@ class ScheduleServiceTest {
                 com.sync.domain.band.TravelStyle.PACKED,
                 null,
                 null,
+                null,
                 null
         );
         setId(band, id);
