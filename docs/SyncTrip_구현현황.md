@@ -24,11 +24,12 @@
 | USR-001 | 회원가입/로그인 (카카오) | ✅ 구현 | 2026-05-12 | `KakaoAuthService` | JWT 발급 (access + refresh) |
 | USR-001 | 회원가입/로그인 (구글) | ✅ 구현 | 2026-05-20 | `GoogleAuthService` | 구글 OAuth 추가 |
 | USR-002 | 정보 수정 / 탈퇴 | ✅ 구현 | 2026-05-12 ~ 05-21 | `UserController`, `AuthService` | 프로필 조회·수정(05-21) / Soft Delete 탈퇴 / 로그아웃(05-12) |
-| USR-029 | 로그아웃 / 세션 만료 | ✅ 구현 | 2026-05-12 | `AuthService.logout()` | JWT 만료 기반 / Refresh Token 갱신 |
-| — | 토큰 갱신 | ➕ 추가 구현 | 2026-05-12 | `AuthService.refresh()` | Refresh Token으로 Access Token 재발급 |
+| USR-029 | 로그아웃 / 세션 만료 | ✅ 구현 | 2026-05-12 | `AuthService.logout()` | JWT 만료 기반 / Refresh Token Redis 블랙리스트 서버 측 무효화 |
+| — | 토큰 갱신 | ➕ 추가 구현 | 2026-05-12 | `AuthService.refresh()` | Refresh Token으로 Access Token 재발급 / 블랙리스트 체크 선행 |
+| — | Refresh Token 블랙리스트 | ➕ 추가 구현 | 2026-05-22 | `RedisTokenBlacklistService` | 로그아웃 시 Redis에 남은 TTL만큼 저장 / `/refresh` 호출 시 블랙리스트 검증 |
 
 **보완할 점**
-- Refresh Token 블랙리스트 미구현: 로그아웃 시 서버 측 무효화 없음. 코드에 `// 향후 추가 가능` 주석 있음
+- (없음)
 
 ---
 
@@ -185,6 +186,7 @@
 | 우선순위 | 기능 | 관련 USR | 설명 |
 |---|---|---|---|
 | 🟡 중간 | 공휴일 알림 | USR-030 | Nager.Date API 연동 + `@Scheduled` 스케줄러 |
+
 | 🟢 낮음 | 공유 앨범 | USR-023 | DDL 있음, 서비스·컨트롤러 없음 |
 | 🟢 낮음 | 여권 스탬프 | USR-024 | DDL 있음, 서비스·컨트롤러 없음 |
 | 🟢 낮음 | 과거 여행 아카이브 | USR-025 | DONE 상태 밴드 전용 뷰 없음 |
@@ -230,7 +232,7 @@
 | 2026-05-21 | `MEMBER_JOINED` 알림 타입 추가, 멤버 합류 알림 연동, 오래된 알림 자동 삭제 스케줄러 추가 |
 | 2026-05-22 | 코드 3회 정독 후 누락 항목 반영: DestinationController/Service, InviteController, 밴드 삭제 API, Plan B 오기재 수정, WebSocket 채널 보완 |
 | 2026-05-23 | Android 클라이언트 구현 현황 섹션 추가, VOTE_STARTED 알림 방장 제외(`notifyAllExcept`) 반영 |
-| 2026-05-23 | USR-028 DONE 전환 알림 구현, 투표 자동 종료(전원 완료 즉시 + 1시간 타임아웃), VOTE_STARTED 전원 알림으로 변경, TRIP_ENDED 알림 타입 추가 |
+| 2026-05-23 | USR-028 DONE 전환 알림 구현, 투표 자동 종료(전원 완료 즉시 + 1시간 타임아웃), VOTE_STARTED 강제시작 시 방장 제외, TRIP_ENDED 알림 타입 추가, Refresh Token 블랙리스트 구현 현황 반영 |
 
 ---
 
