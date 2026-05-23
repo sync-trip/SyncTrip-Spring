@@ -81,7 +81,8 @@ public class BandService {
                 user, request.name(), request.destination(), request.destinationLat(),
                 request.destinationLng(), request.countryCode(), request.overseas(),
                 request.startDate(), request.endDate(), request.travelStyle(),
-                request.accommodationName(), request.accommodationLat(), request.accommodationLng()
+                request.accommodationName(), request.accommodationLat(), request.accommodationLng(),
+                request.thumbnailUrl()
         );
         bandRepository.save(band);
 
@@ -341,7 +342,8 @@ public class BandService {
                 band.getId(), band.getName(), band.getDestination(),
                 band.getStartDate(), band.getEndDate(), band.getInviteCode(),
                 band.getStatus(), isOwner, band.isOverseas(),
-                band.getTravelStyle(), band.getAccommodationName(), memberCount
+                band.getTravelStyle(), band.getAccommodationName(), memberCount,
+                band.getThumbnailUrl()
         );
     }
 

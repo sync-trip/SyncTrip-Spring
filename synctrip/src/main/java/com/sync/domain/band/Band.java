@@ -84,6 +84,9 @@ public class Band {
     @Column(name = "accommodation_lng")
     private Double accommodationLng;
 
+    @Column(name = "thumbnail_url", length = 500)
+    private String thumbnailUrl; // 여행지 썸네일 이미지 URL (여행지 선택 시 수신, NULL 허용)
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private BandStatus status; // 현재 진행 상태
@@ -118,7 +121,7 @@ public class Band {
                   String countryCode, boolean overseas, LocalDate startDate, LocalDate endDate,
                   String inviteCode, LocalDateTime inviteCodeExpiredAt, int maxMembers,
                   TravelStyle travelStyle, String accommodationName, Double accommodationLat,
-                  Double accommodationLng, BandStatus status, String closedBy) {
+                  Double accommodationLng, BandStatus status, String closedBy, String thumbnailUrl) {
         this.owner = owner;
         this.name = name;
         this.destination = destination;
@@ -137,6 +140,7 @@ public class Band {
         this.accommodationLng = accommodationLng;
         this.status = status;
         this.closedBy = closedBy;
+        this.thumbnailUrl = thumbnailUrl;
     }
 
     /**
@@ -145,14 +149,15 @@ public class Band {
     public static Band create(User owner, String name, String destination, double destinationLat,
                               double destinationLng, String countryCode, boolean overseas,
                               LocalDate startDate, LocalDate endDate, TravelStyle travelStyle,
-                              String accommodationName, Double accommodationLat, Double accommodationLng) {
+                              String accommodationName, Double accommodationLat, Double accommodationLng,
+                              String thumbnailUrl) {
         return new Band(
                 owner, name, destination, destinationLat, destinationLng,
                 countryCode, overseas, startDate, endDate,
                 generateInviteCode(),
                 LocalDateTime.now().plusSeconds(INVITE_CODE_TTL_SECONDS),
                 8, travelStyle, accommodationName, accommodationLat, accommodationLng,
-                BandStatus.PLANNING, null
+                BandStatus.PLANNING, null, thumbnailUrl
         );
     }
 
@@ -276,6 +281,7 @@ public class Band {
     public Double getAccommodationLng() { return accommodationLng; }
     public BandStatus getStatus() { return status; }
     public String getClosedBy() { return closedBy; }
+    public String getThumbnailUrl() { return thumbnailUrl; }
     public boolean isDeleted() { return isDeleted; }
     public LocalDateTime getDeletedAt() { return deletedAt; }
     public Long getCurrentlyEditingUserId() { return currentlyEditingUserId; }

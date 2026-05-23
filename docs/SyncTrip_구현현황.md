@@ -1,5 +1,5 @@
 # SyncTrip 구현 현황 문서
-**인수인계 문서 기준:** v6 | **최신 DDL:** `SyncTrip_DDL_v10.sql`
+**인수인계 문서 기준:** v6 | **최신 DDL:** `SyncTrip_DDL_v11.sql`
 
 > 이 문서는 기능이 구현되거나 수정될 때마다 업데이트합니다.
 > 기준: `SyncTrip_인수인계문서_v6.md` + 실제 Spring Boot 코드 (`com.sync.*`)
@@ -269,7 +269,8 @@
 | 2026-05-23 | 구현현황 문서 전면 재검증 및 갱신: 아카이빙 섹션 ❌→✅, 미구현 요약 갱신, 결정사항 추가, DDL v10 반영 |
 | 2026-05-23 | USR-017 Drag & Drop 순서 변경 실제 구현: `ScheduleService.reorderSchedule()` / `PATCH /schedule/reorder` |
 | 2026-05-23 | 숙소 변경 + TRAVELLING 단계 partial TSP 재계산 구현: `Band.updateAccommodation()` / `BandService.updateAccommodation()` / `ScheduleService.recalculateFutureDays()` / `PATCH /api/bands/{bandId}/accommodation` (v2.4 FIX-35/36) |
+| 2026-05-24 | ➕ 밴드 썸네일 저장 구현: `Band.thumbnailUrl` 필드 추가, `BandCreateRequest.thumbnailUrl` 수신, `BandResponse.thumbnailUrl` 반환. DDL v11(`user_groups.thumbnail_url` 컬럼 추가). Android 홈 화면 밴드 카드 이미지 표시 연동. |
 
 ---
 
-**마지막 수정:** 2026-05-23 (USR-017 Drag & Drop 순서 변경 구현 / 숙소 변경 + partial TSP 재계산 구현) | **최신 DDL:** `SyncTrip_DDL_v10.sql`
+**마지막 수정:** 2026-05-24 (밴드 썸네일 저장/반환 구현, DDL v11) | **최신 DDL:** `SyncTrip_DDL_v11.sql`

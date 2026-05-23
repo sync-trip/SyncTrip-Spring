@@ -31,6 +31,8 @@ public record BandCreateRequest(
 
     String accommodationName,
     Double accommodationLat,
-    Double accommodationLng
+    Double accommodationLng,
+    // 여행지 선택 화면에서 수신한 썸네일 URL (NULL 허용 — 구 앱 호환 포함)
+    String thumbnailUrl
 ) {
 }

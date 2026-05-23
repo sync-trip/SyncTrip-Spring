@@ -16,6 +16,8 @@ public record BandResponse(
     boolean isOverseas,
     TravelStyle travelStyle,
     String accommodationName,
-    int memberCount
+    int memberCount,
+    // 여행지 썸네일 이미지 URL (NULL=이미지 없음, 플레이스홀더 표시)
+    String thumbnailUrl
 ) {
 }

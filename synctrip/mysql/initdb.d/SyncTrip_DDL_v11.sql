@@ -1,7 +1,12 @@
 -- ════════════════════════════════════════
--- SyncTrip DDL v10
--- 작성일: 2026-05-23
+-- SyncTrip DDL v11
+-- 작성일: 2026-05-24
 -- 총 테이블: 17개 + 트리거 2개
+-- ════════════════════════════════════════
+-- v10 → v11 변경사항: 2026-05-24
+--   1. user_groups 테이블에 thumbnail_url 컬럼 추가
+--      → 여행지 선택 시 DestinationResponse.thumbnailUrl을 함께 저장
+--      → Android 홈 화면 밴드 카드 썸네일 표시에 사용
 -- ════════════════════════════════════════
 -- v9 → v10 변경사항: 2026-05-23
 --   1. album_photos에 caption, latitude, longitude 추가
@@ -81,6 +86,7 @@ CREATE TABLE `users` (
 
 -- 2. user_groups (구 groups, MySQL 예약어 회피)
 -- [v7 수정] 테이블명 변경 + 소프트 삭제 컬럼 추가
+-- [v11 수정] thumbnail_url 컬럼 추가 (여행지 썸네일 이미지 URL)
 CREATE TABLE `user_groups` (
                                `group_id`               BIGINT       NOT NULL AUTO_INCREMENT COMMENT '그룹 고유 ID',
                                `owner_id`               BIGINT       NOT NULL                COMMENT '방장 회원 ID (FK → users)',
@@ -99,6 +105,7 @@ CREATE TABLE `user_groups` (
                                `accommodation_name`     VARCHAR(100) NULL                    COMMENT '숙소명 (선택사항)',
                                `accommodation_lat`      DOUBLE       NULL                    COMMENT '숙소 위도 (NULL이면 destination_lat을 TSP 출발점으로 사용)',
                                `accommodation_lng`      DOUBLE       NULL                    COMMENT '숙소 경도 (NULL이면 destination_lng을 TSP 출발점으로 사용)',
+                               `thumbnail_url`          VARCHAR(500) NULL                    COMMENT '여행지 썸네일 이미지 URL (여행지 선택 시 DestinationResponse에서 수신)',
                                `status`                 ENUM('PLANNING','VOTING','GENERATING','TRAVELLING','DONE') NOT NULL DEFAULT 'PLANNING' COMMENT '그룹 상태',
                                `closed_by`              VARCHAR(20)  NULL                    COMMENT '여행 종료 주체 (AUTO / OWNER)',
                                `currently_editing_user_id` BIGINT   NULL                    COMMENT '현재 편집 락 보유 사용자 ID (NULL=미사용, Plan B 슬롯 교체 동시 접근 방지)',
