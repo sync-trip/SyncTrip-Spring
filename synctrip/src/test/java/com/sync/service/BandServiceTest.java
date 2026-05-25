@@ -14,7 +14,9 @@ import com.sync.dto.band.BandStatusTransitionResponse;
 import com.sync.repository.BandMemberRepository;
 import com.sync.repository.BandRepository;
 import com.sync.repository.UserRepository;
+import com.sync.service.HolidayService;
 import com.sync.service.NotificationService;
+import com.sync.service.PassportStampService;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -60,7 +62,9 @@ class BandServiceTest {
                 mock(ScheduleService.class),
                 mock(com.sync.repository.GroupVoteInfoRepository.class),
                 mock(org.springframework.messaging.simp.SimpMessagingTemplate.class),
-                mock(NotificationService.class)
+                mock(NotificationService.class),
+                mock(HolidayService.class),
+                mock(PassportStampService.class)
         );
     }
 
@@ -79,7 +83,7 @@ class BandServiceTest {
                 false,
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 5),
-                TravelStyle.PACKED, null, null, null
+                TravelStyle.PACKED, null, null, null, null
         );
         setId(band, 10L);
 
@@ -114,7 +118,7 @@ class BandServiceTest {
                 false,
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 5),
-                TravelStyle.PACKED, null, null, null
+                TravelStyle.PACKED, null, null, null, null
         );
         setId(band, 10L);
 
@@ -154,7 +158,7 @@ class BandServiceTest {
                 false,
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 5),
-                TravelStyle.PACKED, null, null, null
+                TravelStyle.PACKED, null, null, null, null
         );
         setId(band, 10L);
 
@@ -188,7 +192,7 @@ class BandServiceTest {
                 false,
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 5),
-                TravelStyle.PACKED, null, null, null
+                TravelStyle.PACKED, null, null, null, null
         );
         setId(band, 10L);
 
@@ -254,7 +258,7 @@ class BandServiceTest {
                 false,
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 5),
-                TravelStyle.PACKED, null, null, null
+                TravelStyle.PACKED, null, null, null, null
         );
         setId(band, 10L);
 
@@ -285,7 +289,7 @@ class BandServiceTest {
                 false,
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 5),
-                TravelStyle.PACKED, null, null, null
+                TravelStyle.PACKED, null, null, null, null
         );
         setId(band1, 10L);
 
@@ -299,7 +303,7 @@ class BandServiceTest {
                 false,
                 LocalDate.of(2026, 7, 1),
                 LocalDate.of(2026, 7, 7),
-                TravelStyle.RELAXED, null, null, null
+                TravelStyle.RELAXED, null, null, null, null
         );
         setId(band2, 11L);
 

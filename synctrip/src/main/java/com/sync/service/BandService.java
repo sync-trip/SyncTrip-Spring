@@ -15,6 +15,7 @@ import com.sync.dto.band.BandResponse;
 import com.sync.dto.band.BandStatusTransitionResponse;
 import com.sync.dto.band.BandUpdateRequest;
 import com.sync.domain.vote.GroupVoteInfo;
+import com.sync.dto.holiday.HolidayInfo;
 import com.sync.dto.ws.ReadyEvent;
 import com.sync.dto.ws.StatusEvent;
 import com.sync.repository.BandMemberRepository;
@@ -43,6 +44,8 @@ public class BandService {
     private final GroupVoteInfoRepository groupVoteInfoRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final NotificationService notificationService;
+    private final HolidayService holidayService;
+    private final PassportStampService passportStampService;
 
     public BandService(BandRepository bandRepository,
                        BandMemberRepository bandMemberRepository,
@@ -51,7 +54,9 @@ public class BandService {
                        ScheduleService scheduleService,
                        GroupVoteInfoRepository groupVoteInfoRepository,
                        SimpMessagingTemplate messagingTemplate,
-                       NotificationService notificationService) {
+                       NotificationService notificationService,
+                       HolidayService holidayService,
+                       PassportStampService passportStampService) {
         this.bandRepository = bandRepository;
         this.bandMemberRepository = bandMemberRepository;
         this.userRepository = userRepository;
@@ -60,6 +65,8 @@ public class BandService {
         this.groupVoteInfoRepository = groupVoteInfoRepository;
         this.messagingTemplate = messagingTemplate;
         this.notificationService = notificationService;
+        this.holidayService = holidayService;
+        this.passportStampService = passportStampService;
     }
 
     /**
@@ -74,7 +81,8 @@ public class BandService {
                 user, request.name(), request.destination(), request.destinationLat(),
                 request.destinationLng(), request.countryCode(), request.overseas(),
                 request.startDate(), request.endDate(), request.travelStyle(),
-                request.accommodationName(), request.accommodationLat(), request.accommodationLng()
+                request.accommodationName(), request.accommodationLat(), request.accommodationLng(),
+                request.thumbnailUrl()
         );
         bandRepository.save(band);
 
@@ -115,6 +123,16 @@ public class BandService {
         notificationService.notifyAll(band.getId(), NotificationType.MEMBER_JOINED,
                 user.getName() + "님이 " + band.getName() + "에 합류했어요! 👋");
 
+        // 해외 밴드이면 합류한 멤버 본인에게 공휴일 안내 알림
+        if (band.isOverseas()) {
+            List<HolidayInfo> holidays = holidayService.getHolidaysInRange(
+                    band.getCountryCode(), band.getStartDate(), band.getEndDate());
+            if (!holidays.isEmpty()) {
+                notificationService.notify(user.getId(), band.getId(), NotificationType.HOLIDAY_WARNING,
+                        holidayService.buildHolidayMessage(band, holidays));
+            }
+        }
+
         long memberCount = bandMemberRepository.countByBand(band);
         return toBandResponse(band, false, (int) memberCount);
     }
@@ -149,6 +167,25 @@ public class BandService {
     }
 
     /**
+     * 숙소 단독 변경 (v2.4 FIX-35/36)
+     * - PLANNING / TRAVELLING / DONE 단계에서 방장만 변경 가능.
+     * - VOTING / GENERATING 단계에서는 불가.
+     * - TRAVELLING 단계이면 오늘 이후 day의 TSP를 재계산한다.
+     */
+    public void updateAccommodation(Long userId, Long bandId,
+                                    com.sync.dto.band.AccommodationUpdateRequest request) {
+        Band band = loadBandForOwner(userId, bandId);
+        // Band.updateAccommodation()이 VOTING/GENERATING 단계를 내부에서 차단한다.
+        band.updateAccommodation(request.accommodationName(), request.accommodationLat(), request.accommodationLng());
+        bandRepository.save(band);
+
+        // TRAVELLING 단계에서만 현재일 이후 day TSP 재계산
+        if (band.getStatus() == BandStatus.TRAVELLING) {
+            scheduleService.recalculateFutureDays(band);
+        }
+    }
+
+    /**
      * 준비 완료(Ready) 상태 변경
      * - 모든 멤버가 Ready가 되면 자동으로 투표(VOTING) 단계로 넘어갑니다.
      */
@@ -172,20 +209,46 @@ public class BandService {
 
         if (previousStatus == BandStatus.PLANNING) {
             groupVoteInfoRepository.save(GroupVoteInfo.start(band, true));
-            notificationService.notifyAll(band.getId(), NotificationType.VOTE_STARTED,
+            // 방장이 직접 강제 시작한 경우 — 방장 본인은 제외
+            notificationService.notifyAllExcept(band.getId(), userId, NotificationType.VOTE_STARTED,
                     band.getName() + " 여행 투표가 시작됐어요! 지금 바로 참여하세요 ✈️");
         } else if (previousStatus == BandStatus.VOTING) {
-            groupVoteInfoRepository.findByBandId(band.getId()).ifPresent(info -> {
-                info.end();
-                groupVoteInfoRepository.save(info);
-            });
-            scheduleService.generateAutomated(band);
+            finishVotingInternal(band);
+            return new BandStatusTransitionResponse(band.getId(), previousStatus, band.getStatus());
+        } else if (previousStatus == BandStatus.TRAVELLING) {
+            // 여행 종료 — 전원에게 정산 유도 알림 + 여권 스탬프 자동 부여
+            notificationService.notifyAll(band.getId(), NotificationType.TRIP_ENDED,
+                    band.getName() + " 여행이 종료됐어요! 정산을 완료해보세요 💰");
+            passportStampService.stampForAllMembers(band);
         }
 
         messagingTemplate.convertAndSend("/topic/bands/" + band.getId() + "/status",
                 new StatusEvent(band.getId(), band.getStatus()));
 
         return new BandStatusTransitionResponse(band.getId(), previousStatus, band.getStatus());
+    }
+
+    /**
+     * 투표 마감 처리 — VoteService(전원 완료 감지), VoteScheduler(타임아웃)에서도 호출
+     * 이미 VOTING이 아니면 조용히 무시하여 멱등성을 보장한다.
+     */
+    public void finishVoting(Long bandId) {
+        Band band = bandRepository.findByIdAndIsDeletedFalse(bandId).orElse(null);
+        if (band == null || band.getStatus() != BandStatus.VOTING) return;
+        band.advanceStatus();
+        bandRepository.save(band);
+        finishVotingInternal(band);
+    }
+
+    // VOTING → GENERATING 전환 공통 처리 (GroupVoteInfo 마감 + 일정 생성 + WebSocket)
+    private void finishVotingInternal(Band band) {
+        groupVoteInfoRepository.findByBandId(band.getId()).ifPresent(info -> {
+            info.end();
+            groupVoteInfoRepository.save(info);
+        });
+        scheduleService.generateAutomated(band);
+        messagingTemplate.convertAndSend("/topic/bands/" + band.getId() + "/status",
+                new StatusEvent(band.getId(), band.getStatus()));
     }
 
     /**
@@ -249,6 +312,7 @@ public class BandService {
             groupVoteInfoRepository.save(GroupVoteInfo.start(band, false));
             messagingTemplate.convertAndSend("/topic/bands/" + bandId + "/status",
                     new StatusEvent(bandId, band.getStatus()));
+            // 방장 포함 전원에게 투표 시작 알림
             notificationService.notifyAll(bandId, NotificationType.VOTE_STARTED,
                     band.getName() + " 여행 투표가 시작됐어요! 지금 바로 참여하세요 ✈️");
         } else if (ready) {
@@ -278,7 +342,8 @@ public class BandService {
                 band.getId(), band.getName(), band.getDestination(),
                 band.getStartDate(), band.getEndDate(), band.getInviteCode(),
                 band.getStatus(), isOwner, band.isOverseas(),
-                band.getTravelStyle(), band.getAccommodationName(), memberCount
+                band.getTravelStyle(), band.getAccommodationName(), memberCount,
+                band.getThumbnailUrl()
         );
     }
 
@@ -293,6 +358,18 @@ public class BandService {
                         m.getUser().getProfileImageUrl(), m.getRole(), m.isReady(),
                         m.getJoinedAt(), m.getBookmarkCount()
                 )).collect(Collectors.toList());
+    }
+
+    /**
+     * 밴드 여행 기간 내 공휴일 목록 조회 (방장/멤버 공통)
+     * - 국내 밴드(is_overseas=FALSE)는 빈 목록 반환
+     */
+    @Transactional(readOnly = true)
+    public List<HolidayInfo> getBandHolidays(Long bandId) {
+        Band band = bandRepository.findByIdAndIsDeletedFalse(bandId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "밴드를 찾을 수 없습니다."));
+        if (!band.isOverseas()) return List.of();
+        return holidayService.getHolidaysInRange(band.getCountryCode(), band.getStartDate(), band.getEndDate());
     }
 
     /**

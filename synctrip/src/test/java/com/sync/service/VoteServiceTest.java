@@ -60,6 +60,8 @@ class VoteServiceTest {
     private UserRepository userRepository;
     @Mock
     private SimpMessagingTemplate messagingTemplate;
+    @Mock
+    private BandService bandService;
 
     private VoteService voteService;
 
@@ -72,7 +74,8 @@ class VoteServiceTest {
                 placeBookmarkRepository,
                 voteRepository,
                 userRepository,
-                messagingTemplate
+                messagingTemplate,
+                bandService
         );
     }
 
@@ -211,6 +214,7 @@ class VoteServiceTest {
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2026, 6, 5),
                 com.sync.domain.band.TravelStyle.PACKED,
+                null,
                 null,
                 null,
                 null

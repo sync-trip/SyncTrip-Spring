@@ -1,6 +1,7 @@
 package com.sync.controller;
 
 import com.sync.common.annotation.LoginUser;
+import com.sync.dto.band.AccommodationUpdateRequest;
 import com.sync.dto.band.BandCreateRequest;
 import com.sync.dto.band.BandJoinRequest;
 import com.sync.dto.band.BandInviteCodeResponse;
@@ -9,11 +10,13 @@ import com.sync.dto.band.BandReadyResponse;
 import com.sync.dto.band.BandResponse;
 import com.sync.dto.band.BandStatusTransitionResponse;
 import com.sync.dto.band.BandUpdateRequest;
+import com.sync.dto.holiday.HolidayInfo;
 import com.sync.service.BandService;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -79,6 +82,17 @@ public class BandController {
         return ResponseEntity.ok(bandService.getBandMembers(bandId));
     }
 
+    @PatchMapping("/{bandId}/accommodation")
+    // 숙소 변경 (방장 전용 / VOTING·GENERATING 단계 제외)
+    public ResponseEntity<Void> updateAccommodation(
+            @LoginUser Long userId,
+            @PathVariable Long bandId,
+            @RequestBody AccommodationUpdateRequest request
+    ) {
+        bandService.updateAccommodation(userId, bandId, request);
+        return ResponseEntity.ok().build();
+    }
+
     @PostMapping("/{bandId}/ready")
     public ResponseEntity<BandReadyResponse> markReady(
             @LoginUser Long userId,
@@ -119,6 +133,12 @@ public class BandController {
             @PathVariable Long bandId
     ) {
         return ResponseEntity.ok(bandService.advanceBandStatus(userId, bandId));
+    }
+
+    // 밴드 여행 기간 내 현지 공휴일 목록 조회 (방장/멤버 공통, 국내 밴드는 빈 목록)
+    @GetMapping("/{bandId}/holidays")
+    public ResponseEntity<List<HolidayInfo>> getBandHolidays(@PathVariable Long bandId) {
+        return ResponseEntity.ok(bandService.getBandHolidays(bandId));
     }
 
 }

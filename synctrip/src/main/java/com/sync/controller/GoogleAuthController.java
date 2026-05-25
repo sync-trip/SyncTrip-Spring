@@ -2,6 +2,7 @@ package com.sync.controller;
 
 import com.sync.common.annotation.LoginUser;
 import com.sync.dto.auth.LoginResponse;
+import com.sync.dto.auth.LogoutRequest;
 import com.sync.dto.auth.TokenRefreshRequest;
 import com.sync.dto.google.GoogleLoginRequest;
 import com.sync.service.AuthService;
@@ -55,13 +56,10 @@ public class GoogleAuthController {
     }
 
     @PostMapping("/logout")
-    /**
-     * 로그아웃 처리
-     * JWT는 Stateless이므로 프론트에서 로컬 토큰 삭제만 하면 됨
-     * 백엔드는 로그 기록 등의 처리만 수행
-     */
-    public ResponseEntity<Void> logout(@LoginUser Long userId) {
-        authService.logout(userId);
+    public ResponseEntity<Void> logout(@LoginUser Long userId,
+                                       @RequestBody(required = false) LogoutRequest request) {
+        String refreshToken = request != null ? request.refreshToken() : null;
+        authService.logout(refreshToken);
         log.info("사용자 로그아웃: userId={}", userId);
         return ResponseEntity.ok().build();
     }

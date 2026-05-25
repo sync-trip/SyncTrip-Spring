@@ -3,6 +3,7 @@ package com.sync.service;
 import com.sync.dto.destination.DestinationResponse;
 import com.sync.dto.google.NearbySearchResponse;
 import java.util.List;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.Cacheable;
@@ -17,6 +18,15 @@ public class DestinationService {
     private static final double KR_LAT_MAX = 38.9;
     private static final double KR_LNG_MIN = 124.0;
     private static final double KR_LNG_MAX = 132.0;
+
+    // 여행 목적지로 허용하는 Google Places 타입 — 도시·행정구역·섬만 허용
+    // (기업, 상점, 병원 등 establishment 계열은 모두 제외됨)
+    private static final Set<String> CITY_TYPES = Set.of(
+            "locality",
+            "administrative_area_level_1",
+            "administrative_area_level_2",
+            "island"
+    );
 
     private static final String IMG = "https://images.unsplash.com/";
 
@@ -167,6 +177,9 @@ public class DestinationService {
 
         return response.places().stream()
                 .filter(p -> p.location() != null && p.displayName() != null)
+                // 도시·행정구역·섬 타입만 통과 — 기업·상점·의원 등 establishment 제외
+                .filter(p -> p.types() != null
+                        && p.types().stream().anyMatch(CITY_TYPES::contains))
                 .map(this::toDestination)
                 .toList();
     }

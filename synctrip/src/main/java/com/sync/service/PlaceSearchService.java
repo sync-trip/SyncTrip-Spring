@@ -47,7 +47,14 @@ public class PlaceSearchService {
             "pizza_restaurant", "sushi_restaurant", "ramen_restaurant",
             "korean_restaurant", "chinese_restaurant", "japanese_restaurant",
             "seafood_restaurant", "steak_house", "brunch_restaurant",
-            "meal_delivery", "meal_takeaway", "food"
+            "meal_delivery", "meal_takeaway", "food",
+            // 2025-05-23 추가: New Places API 세부 음식점 타입
+            "american_restaurant", "asian_restaurant", "brazilian_restaurant",
+            "french_restaurant", "greek_restaurant", "hamburger_restaurant",
+            "indian_restaurant", "italian_restaurant", "mediterranean_restaurant",
+            "mexican_restaurant", "thai_restaurant", "turkish_restaurant",
+            "vietnamese_restaurant", "vegan_restaurant", "vegetarian_restaurant",
+            "food_court", "pub"
     );
     // 문화 시설 관련 구글 타입
     // point_of_interest: 관광 명소/랜드마크처럼 검색되지만 세부 타입이 없는 장소의 fallback
@@ -59,12 +66,19 @@ public class PlaceSearchService {
     // 액티비티/오락 관련 구글 타입
     private static final Set<String> ACTIVITY_TYPES = Set.of(
             "amusement_park", "zoo", "aquarium", "bowling_alley",
-            "spa", "night_club", "stadium", "water_park", "theme_park"
+            "spa", "night_club", "stadium", "water_park", "theme_park",
+            // 2025-05-23 추가: 스포츠/레저 시설 타입
+            "fitness_center", "gym", "golf_course", "ski_resort",
+            "swimming_pool", "tennis_court", "sports_club", "playground"
     );
     // 쇼핑 관련 구글 타입
     private static final Set<String> SHOPPING_TYPES = Set.of(
             "shopping_mall", "department_store", "clothing_store",
-            "jewelry_store", "market", "gift_shop", "book_store"
+            "jewelry_store", "market", "gift_shop", "book_store",
+            // 2025-05-23 추가: 세부 쇼핑 시설 타입
+            "supermarket", "grocery_store", "convenience_store",
+            "electronics_store", "shoe_store", "sporting_goods_store",
+            "furniture_store", "pet_store", "toy_store", "florist"
     );
     // 자연/공원 관련 구글 타입
     private static final Set<String> NATURE_TYPES = Set.of(

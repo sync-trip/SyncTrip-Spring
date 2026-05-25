@@ -1,7 +1,26 @@
 -- ════════════════════════════════════════
--- SyncTrip DDL v7
--- 작성일: 2026-05-18
+-- SyncTrip DDL v11
+-- 작성일: 2026-05-24
 -- 총 테이블: 17개 + 트리거 2개
+-- ════════════════════════════════════════
+-- v10 → v11 변경사항: 2026-05-24
+--   1. user_groups 테이블에 thumbnail_url 컬럼 추가
+--      → 여행지 선택 시 DestinationResponse.thumbnailUrl을 함께 저장
+--      → Android 홈 화면 밴드 카드 썸네일 표시에 사용
+-- ════════════════════════════════════════
+-- v9 → v10 변경사항: 2026-05-23
+--   1. album_photos에 caption, latitude, longitude 추가
+--      → 사진 + 글 피드 지원 (caption)
+--      → 지도 핀 기능 지원 (latitude, longitude, NULL 허용)
+-- ════════════════════════════════════════
+-- v8 → v9 변경사항: 2026-05-23
+--   1. album_photos.photo_url VARCHAR(500) → photo_data LONGTEXT
+--      → 사진을 Base64로 DB에 직접 저장 (외부 스토리지 불필요)
+-- ════════════════════════════════════════
+-- v7 → v8 변경사항: 2026-05-23
+--   1. notifications.type ENUM 확장
+--      → 'TRIP_ENDED' 추가 (코드에 이미 존재했으나 ENUM 누락 상태였음)
+--      → 'HOLIDAY_WARNING' 추가 (USR-030 공휴일 알림 구현)
 -- ════════════════════════════════════════
 -- v6 → v7 변경사항:
 --   1. 테이블명 `groups` → `user_groups` 변경
@@ -67,6 +86,7 @@ CREATE TABLE `users` (
 
 -- 2. user_groups (구 groups, MySQL 예약어 회피)
 -- [v7 수정] 테이블명 변경 + 소프트 삭제 컬럼 추가
+-- [v11 수정] thumbnail_url 컬럼 추가 (여행지 썸네일 이미지 URL)
 CREATE TABLE `user_groups` (
                                `group_id`               BIGINT       NOT NULL AUTO_INCREMENT COMMENT '그룹 고유 ID',
                                `owner_id`               BIGINT       NOT NULL                COMMENT '방장 회원 ID (FK → users)',
@@ -85,6 +105,7 @@ CREATE TABLE `user_groups` (
                                `accommodation_name`     VARCHAR(100) NULL                    COMMENT '숙소명 (선택사항)',
                                `accommodation_lat`      DOUBLE       NULL                    COMMENT '숙소 위도 (NULL이면 destination_lat을 TSP 출발점으로 사용)',
                                `accommodation_lng`      DOUBLE       NULL                    COMMENT '숙소 경도 (NULL이면 destination_lng을 TSP 출발점으로 사용)',
+                               `thumbnail_url`          VARCHAR(500) NULL                    COMMENT '여행지 썸네일 이미지 URL (여행지 선택 시 DestinationResponse에서 수신)',
                                `status`                 ENUM('PLANNING','VOTING','GENERATING','TRAVELLING','DONE') NOT NULL DEFAULT 'PLANNING' COMMENT '그룹 상태',
                                `closed_by`              VARCHAR(20)  NULL                    COMMENT '여행 종료 주체 (AUTO / OWNER)',
                                `currently_editing_user_id` BIGINT   NULL                    COMMENT '현재 편집 락 보유 사용자 ID (NULL=미사용, Plan B 슬롯 교체 동시 접근 방지)',
@@ -281,8 +302,8 @@ CREATE TABLE `expense_members` (
 
 
 -- 14. notifications
--- [v5 수정 1] type 컬럼 VARCHAR(50) → ENUM(4종) 전환
--- 알림 종류 추가 필요 시 ALTER TABLE ... MODIFY COLUMN으로 ENUM 확장
+-- [v5 수정 1] type 컬럼 VARCHAR(50) → ENUM 전환
+-- [v8 수정] ENUM에 TRIP_ENDED, HOLIDAY_WARNING 추가
 CREATE TABLE `notifications` (
                                  `notification_id` BIGINT       NOT NULL AUTO_INCREMENT COMMENT '알림 고유 ID',
                                  `user_id`         BIGINT       NOT NULL                COMMENT '수신 회원 ID (FK → users)',
@@ -292,7 +313,9 @@ CREATE TABLE `notifications` (
                       'MEMBER_JOINED',
                       'VOTE_STARTED',
                       'SCHEDULE_UPDATED',
-                      'SETTLEMENT_REQUEST'
+                      'SETTLEMENT_REQUEST',
+                      'TRIP_ENDED',
+                      'HOLIDAY_WARNING'
                     ) NOT NULL COMMENT '알림 종류',
                                  `content`         VARCHAR(255) NOT NULL                COMMENT '알림 내용',
                                  `is_read`         BOOLEAN      NOT NULL DEFAULT FALSE  COMMENT '읽음 여부',
@@ -307,11 +330,15 @@ CREATE TABLE `notifications` (
 
 -- 15. album_photos
 -- [v7 수정] 소프트 삭제 컬럼 추가 (휴지통 패턴 — 실수 복구)
+-- [v9 수정] photo_url VARCHAR(500) → photo_data LONGTEXT (Base64 DB 직접 저장)
 CREATE TABLE `album_photos` (
                                 `album_photo_id` BIGINT       NOT NULL AUTO_INCREMENT COMMENT '앨범 사진 고유 ID',
                                 `group_id`       BIGINT       NOT NULL                COMMENT '그룹 ID (FK → user_groups)',
                                 `uploader_id`    BIGINT       NOT NULL                COMMENT '업로드한 회원 ID (FK → users)',
-                                `photo_url`      VARCHAR(500) NOT NULL                COMMENT '사진 저장 URL',
+                                `photo_data`     LONGTEXT     NOT NULL                COMMENT '사진 데이터 (Base64 인코딩)',
+                                `caption`        TEXT         NULL                    COMMENT '사진 설명 글 (선택)',
+                                `latitude`       DOUBLE       NULL                    COMMENT '촬영 위치 위도 (GPS 메타데이터, NULL=위치 없음)',
+                                `longitude`      DOUBLE       NULL                    COMMENT '촬영 위치 경도 (GPS 메타데이터, NULL=위치 없음)',
                                 `taken_at`       TIMESTAMP    NULL                    COMMENT '촬영 시각',
                                 `is_deleted`     BOOLEAN      NOT NULL DEFAULT FALSE  COMMENT '삭제 여부 (Soft Delete) — 휴지통 30일 보관 후 자동삭제 정책 대응',
                                 `deleted_at`     TIMESTAMP    NULL                    COMMENT '삭제 시각 (NULL=활성 사진)',

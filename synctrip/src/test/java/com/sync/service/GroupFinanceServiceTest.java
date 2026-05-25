@@ -191,7 +191,7 @@ class GroupFinanceServiceTest {
         Band b = Band.create(owner, "테스트밴드", "제주도",
                 33.4, 126.5, "KR", false,
                 LocalDate.now(), LocalDate.now().plusDays(3),
-                TravelStyle.PACKED, null, null, null);
+                TravelStyle.PACKED, null, null, null, null);
         setId(b, id);
         return b;
     }

@@ -129,6 +129,8 @@ public class User {
             case SETTLEMENT_REQUEST  -> notiSettlementRequest;
             case MEMBER_READY        -> notiMemberReady;
             case MEMBER_JOINED       -> notiMemberJoined;
+            // 공휴일/여행 종료 알림은 개인 토글 없이 항상 발송
+            case HOLIDAY_WARNING, TRIP_ENDED -> true;
         };
     }
 
@@ -140,6 +142,8 @@ public class User {
             case SETTLEMENT_REQUEST  -> notiSettlementRequest = enabled;
             case MEMBER_READY        -> notiMemberReady = enabled;
             case MEMBER_JOINED       -> notiMemberJoined = enabled;
+            // HOLIDAY_WARNING, TRIP_ENDED는 토글 불가 — 무시
+            case HOLIDAY_WARNING, TRIP_ENDED -> { }
         }
     }
 
@@ -161,6 +165,15 @@ public class User {
     public void withdraw() {
         this.isDeleted = true;
         this.deletedAt = LocalDateTime.now();
+    }
+
+    // 탈퇴 후 재가입: 계정 재활성화 (동일 oauth_id 제약조건 우회)
+    public void reactivate(String name, String profileImageUrl, String email) {
+        this.isDeleted = false;
+        this.deletedAt = null;
+        this.name = name;
+        this.profileImageUrl = profileImageUrl;
+        this.email = email;
     }
 }
 

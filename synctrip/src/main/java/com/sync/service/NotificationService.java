@@ -91,6 +91,24 @@ public class NotificationService {
     }
 
     /**
+     * 밴드 멤버 중 특정 유저를 제외하고 알림 발송
+     * - VOTE_STARTED 시 방장 제외에 사용
+     */
+    public void notifyAllExcept(Long bandId, Long excludeUserId, NotificationType type, String content) {
+        Band band = bandRepository.findById(bandId).orElse(null);
+        List<BandMember> members = bandMemberRepository.findByBandIdWithUser(bandId);
+        for (BandMember member : members) {
+            User user = member.getUser();
+            if (user.isDeleted()) continue;
+            if (user.getId().equals(excludeUserId)) continue;
+            notificationRepository.save(Notification.create(user, band, type, content));
+            if (user.isNotificationEnabled(type)) {
+                fcmService.send(user.getFcmToken(), type.getTitle(), content);
+            }
+        }
+    }
+
+    /**
      * 내 알림 목록 조회 (최신순, 페이지네이션)
      * - 기본 20건씩 반환. 클라이언트가 page=0, size=20 으로 요청.
      * - 응답 목록 크기가 size보다 작으면 마지막 페이지.
