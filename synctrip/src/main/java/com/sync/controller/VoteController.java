@@ -3,6 +3,7 @@ package com.sync.controller;
 import com.sync.common.annotation.LoginUser;
 import com.sync.dto.vote.GroupVoteStatusResponse;
 import com.sync.dto.vote.VotePlaceResponse;
+import com.sync.dto.vote.VotePlaceResultResponse;
 import com.sync.dto.vote.VoteRequest;
 import com.sync.dto.vote.VoteResponse;
 import com.sync.dto.vote.VoteStatusResponse;
@@ -57,5 +58,14 @@ public class VoteController {
             @PathVariable Long bandId
     ) {
         return ResponseEntity.ok(voteService.getGroupVoteStatus(userId, bandId));
+    }
+
+    /** 투표 결과 조회 — 장소별 좋아요/싫어요 집계. VOTING 종료 후에도 호출 가능 */
+    @GetMapping("/results")
+    public ResponseEntity<List<VotePlaceResultResponse>> getVoteResults(
+            @LoginUser Long userId,
+            @PathVariable Long bandId
+    ) {
+        return ResponseEntity.ok(voteService.getVoteResults(userId, bandId));
     }
 }

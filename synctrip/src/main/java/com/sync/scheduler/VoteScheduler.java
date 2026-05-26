@@ -40,6 +40,13 @@ public class VoteScheduler {
             } catch (Exception e) {
                 // 개별 밴드 실패가 전체 스케줄러를 멈추지 않도록 예외를 격리
                 log.error("투표 자동 마감 실패: bandId={}, error={}", bandId, e.getMessage());
+                // 장바구니 없음 등으로 마감 불가한 밴드는 PLANNING으로 복원해 반복 실패 방지
+                try {
+                    bandService.rollbackVotingToPlanning(bandId);
+                    log.warn("투표 마감 실패 밴드를 PLANNING으로 복원: bandId={}", bandId);
+                } catch (Exception rollbackEx) {
+                    log.error("PLANNING 복원 실패: bandId={}, error={}", bandId, rollbackEx.getMessage());
+                }
             }
         }
     }

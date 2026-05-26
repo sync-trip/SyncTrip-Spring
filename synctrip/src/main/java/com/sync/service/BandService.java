@@ -240,6 +240,18 @@ public class BandService {
         finishVotingInternal(band);
     }
 
+    /**
+     * 투표 취소 및 PLANNING 복원 — VoteScheduler가 마감 실패 시 호출
+     * 장바구니가 비는 등의 이유로 finishVoting이 실패하면 이 메서드로 반복 실패를 방지한다.
+     */
+    public void rollbackVotingToPlanning(Long bandId) {
+        Band band = bandRepository.findByIdAndIsDeletedFalse(bandId).orElse(null);
+        if (band == null || band.getStatus() != BandStatus.VOTING) return;
+        band.rollbackToPlanning();
+        bandRepository.save(band);
+        groupVoteInfoRepository.findByBandId(bandId).ifPresent(groupVoteInfoRepository::delete);
+    }
+
     // VOTING → GENERATING 전환 공통 처리 (GroupVoteInfo 마감 + 일정 생성 + WebSocket)
     private void finishVotingInternal(Band band) {
         groupVoteInfoRepository.findByBandId(band.getId()).ifPresent(info -> {

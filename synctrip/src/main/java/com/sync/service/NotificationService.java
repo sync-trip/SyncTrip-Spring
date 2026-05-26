@@ -11,7 +11,9 @@ import com.sync.repository.BandMemberRepository;
 import com.sync.repository.BandRepository;
 import com.sync.repository.NotificationRepository;
 import com.sync.repository.UserRepository;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -57,6 +59,7 @@ public class NotificationService {
      * 특정 유저 1명에게 알림 발송
      * - 탈퇴한 유저는 건너뜀
      * - FCM 토큰이 없으면 DB 저장만 하고 푸시는 생략
+     * - data 페이로드(bandId, type)를 포함해 앱에서 즉시 갱신할 수 있도록 한다
      */
     public void notify(Long userId, Long bandId, NotificationType type, String content) {
         User user = userRepository.findByIdAndIsDeletedFalse(userId).orElse(null);
@@ -67,7 +70,7 @@ public class NotificationService {
         notificationRepository.save(Notification.create(user, band, type, content));
         // FCM 푸시는 유저가 해당 타입 알림을 켜둔 경우에만 발송
         if (user.isNotificationEnabled(type)) {
-            fcmService.send(user.getFcmToken(), type.getTitle(), content);
+            fcmService.send(user.getFcmToken(), type.getTitle(), content, buildData(bandId, type));
         }
     }
 
@@ -80,12 +83,13 @@ public class NotificationService {
         Band band = bandRepository.findById(bandId).orElse(null);
         // findByBandIdWithUser: JOIN FETCH로 user를 미리 로딩 (N+1 방지)
         List<BandMember> members = bandMemberRepository.findByBandIdWithUser(bandId);
+        Map<String, String> data = buildData(bandId, type);
         for (BandMember member : members) {
             User user = member.getUser();
             if (user.isDeleted()) continue;
             notificationRepository.save(Notification.create(user, band, type, content));
             if (user.isNotificationEnabled(type)) {
-                fcmService.send(user.getFcmToken(), type.getTitle(), content);
+                fcmService.send(user.getFcmToken(), type.getTitle(), content, data);
             }
         }
     }
@@ -97,15 +101,24 @@ public class NotificationService {
     public void notifyAllExcept(Long bandId, Long excludeUserId, NotificationType type, String content) {
         Band band = bandRepository.findById(bandId).orElse(null);
         List<BandMember> members = bandMemberRepository.findByBandIdWithUser(bandId);
+        Map<String, String> data = buildData(bandId, type);
         for (BandMember member : members) {
             User user = member.getUser();
             if (user.isDeleted()) continue;
             if (user.getId().equals(excludeUserId)) continue;
             notificationRepository.save(Notification.create(user, band, type, content));
             if (user.isNotificationEnabled(type)) {
-                fcmService.send(user.getFcmToken(), type.getTitle(), content);
+                fcmService.send(user.getFcmToken(), type.getTitle(), content, data);
             }
         }
+    }
+
+    /** FCM data 페이로드 생성 — 앱에서 bandId·type으로 즉시 갱신 판단에 사용 */
+    private Map<String, String> buildData(Long bandId, NotificationType type) {
+        Map<String, String> data = new HashMap<>();
+        if (bandId != null) data.put("bandId", bandId.toString());
+        data.put("type", type.name());
+        return data;
     }
 
     /**

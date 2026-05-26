@@ -10,7 +10,8 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Min\\\\StudioProjects\\\\SyncTrip-kt\" -Recurse -Directory)",
       "Bash(Select-Object -First 50 FullName)",
       "Read(//mnt/c/IntelliJprojects/SyncTrip-Spring/**)",
-      "Bash(./gradlew.bat clean *)"
+      "Bash(./gradlew.bat clean *)",
+      "Bash(.\\\\gradlew.bat build *)"
     ]
   },
   "spinnerTipsEnabled": true

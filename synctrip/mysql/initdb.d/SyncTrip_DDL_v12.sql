@@ -106,7 +106,7 @@ CREATE TABLE `user_groups` (
                                `start_date`             DATE         NOT NULL                COMMENT '여행 시작일',
                                `end_date`               DATE         NOT NULL                COMMENT '여행 종료일',
                                `invite_code`            VARCHAR(20)  NOT NULL                COMMENT '그룹 초대 코드 (6자리)',
-                               `invite_code_expired_at` TIMESTAMP    NOT NULL                COMMENT '초대 코드 만료 시각 (72시간)',
+                               `invite_code_expired_at` TIMESTAMP    NOT NULL                COMMENT '초대 코드 만료 시각 (24시간)',
                                `max_members`            INT          NOT NULL DEFAULT 8      COMMENT '그룹 최대 인원 (최대 8명)',
                                `travel_style`           ENUM('RELAXED','PACKED') NOT NULL DEFAULT 'PACKED' COMMENT '여행 스타일 (RELAXED=여유롭게, PACKED=빡빡하게)',
                                `accommodation_name`     VARCHAR(100) NULL                    COMMENT '숙소명 (선택사항)',
