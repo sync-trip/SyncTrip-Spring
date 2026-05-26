@@ -8,7 +8,7 @@ import com.sync.domain.place.Place;
 import com.sync.domain.place.PlaceApiSource;
 import com.sync.domain.place.PlaceCategory;
 import com.sync.domain.user.User;
-import com.sync.dto.kakao.KakaoLocalSearchResponse;
+import com.sync.dto.google.NearbySearchResponse;
 import com.sync.dto.place.PlaceSearchResult;
 import com.sync.repository.BandRepository;
 import com.sync.repository.PlaceBookmarkRepository;
@@ -27,7 +27,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -46,9 +45,6 @@ class PlaceSearchServiceTest {
     private UserRepository userRepository;
 
     @Mock
-    private KakaoPlacesService kakaoPlacesService;
-
-    @Mock
     private GooglePlacesService googlePlacesService;
 
     private PlaceSearchService placeSearchService;
@@ -60,39 +56,36 @@ class PlaceSearchServiceTest {
                 placeRepository,
                 placeBookmarkRepository,
                 userRepository,
-                kakaoPlacesService,
                 googlePlacesService,
                 new ObjectMapper()
         );
     }
 
+    // 국내 밴드도 Google Places를 사용하여 장소를 검색하고 캐싱한다.
     @Test
-    void searchPlaces_routesDomesticSearchToKakaoAndCachesPlace() {
+    void searchPlaces_domesticUsesGoogleAndCachesPlace() {
         User user = createUser(1L);
-        Band band = createBand(10L);
-        BandMember member = BandMember.create(user, band, BandRole.MEMBER);
-        setId(member, 100L);
-        KakaoLocalSearchResponse.Document doc = new KakaoLocalSearchResponse.Document(
-                "kakao-123",
-                "경복궁",
-                "관광명소",
-                "AT4",
-                "관광명소",
+        Band band = createBand(10L); // is_overseas = false
+
+        NearbySearchResponse.Place gPlace = new NearbySearchResponse.Place(
+                "google-abc",
+                List.of("tourist_attraction", "point_of_interest"),
+                new NearbySearchResponse.LocalizedText("경복궁", "ko"),
+                new NearbySearchResponse.LatLng(37.5796, 126.9770),
+                4.5,
                 "서울 종로구 사직로 161",
-                "서울 종로구 사직로 161",
-                "126.977041",
-                "37.579617",
-                "02-123-4567",
-                "https://place.map.kakao.com/123",
-                "0"
+                null,
+                null,
+                null
         );
+        NearbySearchResponse response = new NearbySearchResponse(List.of(gPlace));
 
         when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
         when(bandRepository.findByIdAndIsDeletedFalse(10L)).thenReturn(Optional.of(band));
         when(placeBookmarkRepository.findByBandIdAndUserIdOrderByCreatedAtDesc(10L, 1L)).thenReturn(List.of());
-        when(kakaoPlacesService.searchNearby(37.5665, 126.9780, 4200.0, PlaceCategory.CULTURE))
-                .thenReturn(List.of(doc));
-        when(placeRepository.findByApiSourceAndExternalId(PlaceApiSource.KAKAO, "kakao-123"))
+        when(googlePlacesService.searchText(37.5665, 126.9780, "경복궁"))
+                .thenReturn(response);
+        when(placeRepository.findByApiSourceAndExternalId(PlaceApiSource.GOOGLE, "google-abc"))
                 .thenReturn(Optional.empty());
         when(placeRepository.save(any(Place.class))).thenAnswer(invocation -> {
             Place place = invocation.getArgument(0);
@@ -100,30 +93,48 @@ class PlaceSearchServiceTest {
             return place;
         });
 
-        List<PlaceSearchResult> results = placeSearchService.searchPlaces(1L, 10L, null, PlaceCategory.CULTURE, 4200.0);
+        List<PlaceSearchResult> results = placeSearchService.searchPlaces(1L, 10L, "경복궁", PlaceCategory.CULTURE, 5000.0);
 
         assertThat(results).hasSize(1);
-        assertThat(results.get(0).apiSource()).isEqualTo(PlaceApiSource.KAKAO);
-        assertThat(results.get(0).externalId()).isEqualTo("kakao-123");
+        assertThat(results.get(0).apiSource()).isEqualTo(PlaceApiSource.GOOGLE);
+        assertThat(results.get(0).externalId()).isEqualTo("google-abc");
         assertThat(results.get(0).name()).isEqualTo("경복궁");
         assertThat(results.get(0).category()).isEqualTo(PlaceCategory.CULTURE);
+        assertThat(results.get(0).rating()).isEqualTo(4.5f);
         assertThat(results.get(0).isBookmarked()).isFalse();
         assertThat(results.get(0).placeId()).isEqualTo(300L);
-
-        verifyNoInteractions(googlePlacesService);
     }
 
     @Test
     void searchPlaces_rejectsMissingUser() {
         when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.empty());
 
-        org.springframework.web.server.ResponseStatusException ex =
-                org.junit.jupiter.api.Assertions.assertThrows(ResponseStatusException.class,
-                        () -> placeSearchService.searchPlaces(1L, 10L, null, null, 5000.0));
+        ResponseStatusException ex = org.junit.jupiter.api.Assertions.assertThrows(
+                ResponseStatusException.class,
+                () -> placeSearchService.searchPlaces(1L, 10L, null, null, 5000.0));
 
         assertThat(ex.getStatusCode().value()).isEqualTo(404);
     }
 
+    // 국내 밴드도 keyword 없으면 BAD_REQUEST
+    @Test
+    void searchPlaces_domesticRequiresKeyword() {
+        User user = createUser(1L);
+        Band band = createBand(10L); // is_overseas = false
+
+        when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
+        when(bandRepository.findByIdAndIsDeletedFalse(10L)).thenReturn(Optional.of(band));
+        when(placeBookmarkRepository.findByBandIdAndUserIdOrderByCreatedAtDesc(10L, 1L)).thenReturn(List.of());
+
+        ResponseStatusException ex = org.junit.jupiter.api.Assertions.assertThrows(
+                ResponseStatusException.class,
+                () -> placeSearchService.searchPlaces(1L, 10L, "", PlaceCategory.CULTURE, 5000.0)
+        );
+
+        assertThat(ex.getStatusCode().value()).isEqualTo(400);
+    }
+
+    // 해외 밴드도 동일하게 keyword 없으면 BAD_REQUEST
     @Test
     void searchPlaces_overseasRequiresKeyword() {
         User user = createUser(1L);
@@ -139,7 +150,6 @@ class PlaceSearchServiceTest {
         );
 
         assertThat(ex.getStatusCode().value()).isEqualTo(400);
-        verifyNoInteractions(googlePlacesService);
     }
 
     private User createUser(Long id) {
@@ -193,7 +203,4 @@ class PlaceSearchServiceTest {
             throw new RuntimeException(e);
         }
     }
-
 }
-
-

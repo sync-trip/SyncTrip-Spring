@@ -84,7 +84,7 @@ public class Band {
     @Column(name = "accommodation_lng")
     private Double accommodationLng;
 
-    @Column(name = "thumbnail_url", length = 500)
+    @Column(name = "thumbnail_url", columnDefinition = "TEXT")
     private String thumbnailUrl; // 여행지 썸네일 이미지 URL (여행지 선택 시 수신, NULL 허용)
 
     @Enumerated(EnumType.STRING)

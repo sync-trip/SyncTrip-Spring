@@ -1,5 +1,5 @@
 # SyncTrip 구현 현황 문서
-**인수인계 문서 기준:** v6 | **최신 DDL:** `SyncTrip_DDL_v11.sql`
+**인수인계 문서 기준:** v6 | **최신 DDL:** `SyncTrip_DDL_v12.sql`
 
 > 이 문서는 기능이 구현되거나 수정될 때마다 업데이트합니다.
 > 기준: `SyncTrip_인수인계문서_v6.md` + 실제 Spring Boot 코드 (`com.sync.*`)
@@ -204,6 +204,7 @@
 | Plan B 최대 추천 수 | §7.7 인수인계 문서 기준 불명확 | **최대 7개** (`PLAN_B_MAX_RECOMMENDATIONS = 7`) — DebugController 주석의 "최대 3개"는 오기재 | 2026-05-19 |
 | 공유 앨범 사진 저장 방식 | "사진 저장 방식 미정" | **Base64 LONGTEXT MySQL 저장** — 외부 스토리지(S3 등) 없이 DB에 직접 저장 / 졸업 프로젝트 범위 고려 | 2026-05-23 |
 | 과거 여행 기록(USR-025) | 별도 아카이브 뷰 API 필요 | **프론트 클라이언트에서 처리** — 기존 `GET /api/bands` 응답의 `status`/날짜 기준으로 다가오는/지난 여행 분류 / 백엔드 추가 불필요 | 2026-05-23 |
+| 블라인드 장바구니 장소 검색 API | 국내 = 카카오맵 API, 해외 = Google Places API | **국내/해외 모두 Google Places Text Search 사용** — Kakao API는 rating/thumbnail 미제공으로 UX 불가. KakaoPlacesService는 장소 탐색에서 미사용(카카오 로그인은 별개). `is_overseas` 플래그는 영업시간·알고리즘에서 유지 | 2026-05-26 |
 
 ---
 
@@ -270,7 +271,9 @@
 | 2026-05-23 | USR-017 Drag & Drop 순서 변경 실제 구현: `ScheduleService.reorderSchedule()` / `PATCH /schedule/reorder` |
 | 2026-05-23 | 숙소 변경 + TRAVELLING 단계 partial TSP 재계산 구현: `Band.updateAccommodation()` / `BandService.updateAccommodation()` / `ScheduleService.recalculateFutureDays()` / `PATCH /api/bands/{bandId}/accommodation` (v2.4 FIX-35/36) |
 | 2026-05-24 | ➕ 밴드 썸네일 저장 구현: `Band.thumbnailUrl` 필드 추가, `BandCreateRequest.thumbnailUrl` 수신, `BandResponse.thumbnailUrl` 반환. DDL v11(`user_groups.thumbnail_url` 컬럼 추가). Android 홈 화면 밴드 카드 이미지 표시 연동. |
+| 2026-05-26 | 타입 불일치 수정: `user_groups.thumbnail_url` VARCHAR(500) → TEXT. Google Places 사진 URL 500자 초과 시 strict mode 오류 방지. `Band.java` `@Column` 동기화. DDL v12. |
+| 2026-05-26 | 블라인드 장바구니 국내 장소 검색 Google 통일: `PlaceSearchService.searchDomestic()` 제거 → `searchWithGoogle()`으로 통합. keyword 없으면 BAD_REQUEST(국내/해외 동일). Android `PassportAndSearchScreens.kt` 버튼 "Google 지도에서 보기" → "지도에서 보기". `PlaceSearchServiceTest` 갱신. |
 
 ---
 
-**마지막 수정:** 2026-05-24 (밴드 썸네일 저장/반환 구현, DDL v11) | **최신 DDL:** `SyncTrip_DDL_v11.sql`
+**마지막 수정:** 2026-05-26 (국내 장소 검색 Google 통일, 지도 버튼 텍스트 변경) | **최신 DDL:** `SyncTrip_DDL_v12.sql`

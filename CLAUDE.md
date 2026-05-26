@@ -5,7 +5,9 @@ SyncTrip — 그룹 여행 의사결정 앱.
 블라인드 장바구니 → 스와이프 투표 → AI 일정 자동 생성 (Step1 Weighted Cost → Step2 K-Means → Step3 TSP).
 
 - 담당 파트: 알고리즘 + Google Maps API 연동
-- 장소 검색: 국내 = 카카오맵 API (is_overseas=FALSE), 해외 = Google Places API (is_overseas=TRUE)
+- 장소 검색: 국내/해외 모두 Google Places Text Search 사용 (is_overseas 무관)
+- is_overseas 플래그는 영업시간 체크(해외 전용), 알고리즘 로직에서만 유지
+- KakaoPlacesService는 장소 탐색에서 미사용 (카카오 로그인은 별개)
 
 ## Build & Test
 cd synctrip
