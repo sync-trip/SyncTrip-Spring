@@ -45,7 +45,7 @@ Spring profiles: local (local+common) / prod (prod+common, Docker) / test (H2, c
 2. DB 작업은 서비스 레이어만 담당
 3. K-Means 재실행 금지 — 최초 1회만. 이후 수정은 TSP만
 4. 결정론성 보장 — 같은 입력 → 같은 출력
-5. 영업시간 체크는 해외 전용 — 국내는 opening_hours = NULL
+5. 영업시간 체크는 해외 전용 — 국내 밴드는 isOverseas=false로 알고리즘에 빈 맵 전달, DB의 opening_hours 유무와 무관
 6. Google API FieldMask 필수 — X-Goog-FieldMask 항상 명시, * 와일드카드 금지
 7. Google API 응답은 places 테이블에 캐싱 — external_id 기준 중복 저장 방지
 8. 코드 작성 시 한국어로 주석을 달아둘 것 — 영어는 공식 문서나 주석이 없는 경우에만 사용

@@ -55,7 +55,7 @@
 
 | USR | 기능명 | 상태 | 구현일 | 구현 위치 | 비고 |
 |---|---|---|---|---|---|
-| USR-007 | 지도 장소 검색 | ✅ 구현 | 2026-05-19 | `KakaoPlacesService`, `GooglePlacesService` | 국내=카카오(거리순/최대15), 해외=구글(최대20) / `GET /api/bands/{bandId}/places/search` |
+| USR-007 | 지도 장소 검색 | ✅ 구현 | 2026-05-26 | `PlaceSearchService`, `GooglePlacesService` | 국내/해외 모두 Google Places Text Search (keyword 필수, 없으면 400) / 최대 20개 / `GET /api/bands/{bandId}/places/search?keyword=&category=` |
 | USR-008 | 블라인드 장바구니 담기 | ✅ 구현 | 2026-05-14 | `PlacePickController`, `PlacePickService` | 1인당 5개 제한 / bookmark_count 동기화 |
 | — | 여행지 탐색 (인기 목록 + 도시 검색) | ➕ 추가 구현 | 2026-05-19 | `DestinationController`, `DestinationService` | `GET /api/destinations/popular` (하드코딩 28개) / `GET /api/destinations/search?query=` (Google Places + Spring Cache) |
 
@@ -273,7 +273,8 @@
 | 2026-05-24 | ➕ 밴드 썸네일 저장 구현: `Band.thumbnailUrl` 필드 추가, `BandCreateRequest.thumbnailUrl` 수신, `BandResponse.thumbnailUrl` 반환. DDL v11(`user_groups.thumbnail_url` 컬럼 추가). Android 홈 화면 밴드 카드 이미지 표시 연동. |
 | 2026-05-26 | 타입 불일치 수정: `user_groups.thumbnail_url` VARCHAR(500) → TEXT. Google Places 사진 URL 500자 초과 시 strict mode 오류 방지. `Band.java` `@Column` 동기화. DDL v12. |
 | 2026-05-26 | 블라인드 장바구니 국내 장소 검색 Google 통일: `PlaceSearchService.searchDomestic()` 제거 → `searchWithGoogle()`으로 통합. keyword 없으면 BAD_REQUEST(국내/해외 동일). Android `PassportAndSearchScreens.kt` 버튼 "Google 지도에서 보기" → "지도에서 보기". `PlaceSearchServiceTest` 갱신. |
+| 2026-05-26 | 죽은 코드 및 주석 정리: `radiusMeters` 파라미터 전체 제거(`PlaceController`, `PlaceSearchService`, `PlaceSearchServiceTest`, Android `SyncTripApiService`, `BandRepository`). `DEFAULT_RADIUS_METERS` 상수 제거. `KakaoProperties`, `KakaoLocalSearchResponse`, `PlaceSearchResult` 주석 최신화. CLAUDE.md 절대 규칙 5 수정("국내는 opening_hours=NULL" → isOverseas 기반 빈 맵 전달로 정정). Android `NavGraph.kt` `onSearch` / `onCategoryChange` keyword 빈 값 가드 추가. |
 
 ---
 
-**마지막 수정:** 2026-05-26 (국내 장소 검색 Google 통일, 지도 버튼 텍스트 변경) | **최신 DDL:** `SyncTrip_DDL_v12.sql`
+**마지막 수정:** 2026-05-26 (radiusMeters 제거, 주석 정리, NavGraph 빈 keyword 가드) | **최신 DDL:** `SyncTrip_DDL_v12.sql`

@@ -23,21 +23,20 @@ public class PlaceController {
     }
 
     /**
-     * 여행지 주변 장소 검색 (해외 전용 — Google Places API)
+     * 장소 검색 — 국내/해외 모두 Google Places Text Search 사용
      *
-     * @param category    장소 카테고리 필터 (FOOD/CULTURE/ACTIVITY/SHOPPING/NATURE, 미입력 시 전체)
-     * @param radiusMeters 검색 반경 (미터, 기본 5000)
+     * @param keyword  검색 키워드 (필수, 없으면 400)
+     * @param category 장소 카테고리 필터 (FOOD/CULTURE/ACTIVITY/SHOPPING/NATURE, 미입력 시 전체)
      */
     @GetMapping("/search")
     public ResponseEntity<List<PlaceSearchResult>> searchPlaces(
             @LoginUser Long userId,
             @PathVariable Long bandId,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) PlaceCategory category,
-            @RequestParam(defaultValue = "5000") double radiusMeters
+            @RequestParam(required = false) PlaceCategory category
     ) {
         return ResponseEntity.ok(
-                placeSearchService.searchPlaces(userId, bandId, keyword, category, radiusMeters)
+                placeSearchService.searchPlaces(userId, bandId, keyword, category)
         );
     }
 }

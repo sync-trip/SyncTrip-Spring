@@ -10,7 +10,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *
  * 사용 위치:
  * - KakaoAuthService: OAuth 로그인 (authorizationUri, tokenUri, userInfoUri, clientId 등)
- * - KakaoPlacesService: 국내 장소 검색 (localSearchUri, clientId)
+ * - KakaoPlacesService: 장소 검색에서는 미사용, 향후 확장 가능성으로 유지
  */
 @ConfigurationProperties(prefix = "kakao")
 public record KakaoProperties(

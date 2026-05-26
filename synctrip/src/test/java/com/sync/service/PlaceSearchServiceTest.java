@@ -93,7 +93,7 @@ class PlaceSearchServiceTest {
             return place;
         });
 
-        List<PlaceSearchResult> results = placeSearchService.searchPlaces(1L, 10L, "경복궁", PlaceCategory.CULTURE, 5000.0);
+        List<PlaceSearchResult> results = placeSearchService.searchPlaces(1L, 10L, "경복궁", PlaceCategory.CULTURE);
 
         assertThat(results).hasSize(1);
         assertThat(results.get(0).apiSource()).isEqualTo(PlaceApiSource.GOOGLE);
@@ -111,7 +111,7 @@ class PlaceSearchServiceTest {
 
         ResponseStatusException ex = org.junit.jupiter.api.Assertions.assertThrows(
                 ResponseStatusException.class,
-                () -> placeSearchService.searchPlaces(1L, 10L, null, null, 5000.0));
+                () -> placeSearchService.searchPlaces(1L, 10L, null, null));
 
         assertThat(ex.getStatusCode().value()).isEqualTo(404);
     }
@@ -128,7 +128,7 @@ class PlaceSearchServiceTest {
 
         ResponseStatusException ex = org.junit.jupiter.api.Assertions.assertThrows(
                 ResponseStatusException.class,
-                () -> placeSearchService.searchPlaces(1L, 10L, "", PlaceCategory.CULTURE, 5000.0)
+                () -> placeSearchService.searchPlaces(1L, 10L, "", PlaceCategory.CULTURE)
         );
 
         assertThat(ex.getStatusCode().value()).isEqualTo(400);
@@ -146,7 +146,7 @@ class PlaceSearchServiceTest {
 
         ResponseStatusException ex = org.junit.jupiter.api.Assertions.assertThrows(
                 ResponseStatusException.class,
-                () -> placeSearchService.searchPlaces(1L, 20L, "", PlaceCategory.CULTURE, 5000.0)
+                () -> placeSearchService.searchPlaces(1L, 20L, "", PlaceCategory.CULTURE)
         );
 
         assertThat(ex.getStatusCode().value()).isEqualTo(400);

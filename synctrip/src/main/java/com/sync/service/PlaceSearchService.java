@@ -36,8 +36,6 @@ import org.springframework.web.server.ResponseStatusException;
 public class PlaceSearchService {
 
     private static final Logger log = LoggerFactory.getLogger(PlaceSearchService.class);
-    // 기본 검색 반경 (5000미터 = 5km)
-    private static final double DEFAULT_RADIUS_METERS = 5000;
 
     // Google Places API에서 사용하는 타입들을 서비스 내부 카테고리(PlaceCategory)로 매핑하기 위한 집합
     // 음식점 관련 구글 타입
@@ -111,18 +109,16 @@ public class PlaceSearchService {
      * 장소 검색 메인 메서드
      * 국내/해외 구분 없이 Google Places Text Search를 사용한다.
      *
-     * @param userId       검색을 요청한 사용자 ID (북마크 여부 확인용)
-     * @param bandId       검색 기준이 되는 밴드 ID (여행지 좌표 확인)
-     * @param keyword      검색 키워드 (필수)
-     * @param category     검색할 장소 카테고리 (null인 경우 전체)
-     * @param radiusMeters 검색 반경 (단위: 미터, 현재 미사용 — Google Text Search는 locationBias로 처리)
+     * @param userId   검색을 요청한 사용자 ID (북마크 여부 확인용)
+     * @param bandId   검색 기준이 되는 밴드 ID (여행지 좌표 확인)
+     * @param keyword  검색 키워드 (필수, 없으면 BAD_REQUEST)
+     * @param category 검색할 장소 카테고리 (null인 경우 전체)
      * @return 검색된 장소 목록 (북마크 여부 포함)
      */
     @Transactional
     public List<PlaceSearchResult> searchPlaces(Long userId, Long bandId,
                                                  String keyword,
-                                                 PlaceCategory category,
-                                                 double radiusMeters) {
+                                                 PlaceCategory category) {
         // 1. 요청 데이터 검증 (사용자 및 밴드 존재 여부)
         userRepository.findByIdAndIsDeletedFalse(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
