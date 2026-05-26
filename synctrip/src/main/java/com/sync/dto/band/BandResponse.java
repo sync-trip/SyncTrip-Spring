@@ -18,6 +18,9 @@ public record BandResponse(
     String accommodationName,
     int memberCount,
     // 여행지 썸네일 이미지 URL (NULL=이미지 없음, 플레이스홀더 표시)
-    String thumbnailUrl
+    String thumbnailUrl,
+    // 여행지 좌표 — 앨범 지도 탭 초기 중심 위치에 사용
+    double destinationLat,
+    double destinationLng
 ) {
 }

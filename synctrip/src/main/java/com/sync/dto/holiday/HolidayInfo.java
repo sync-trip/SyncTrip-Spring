@@ -9,5 +9,5 @@ public record HolidayInfo(
         LocalDate date,
         String localName,  // 현지어 공휴일명 (예: 成人の日)
         String name        // 영문 공휴일명 (예: Coming of Age Day)
-) {
+) implements java.io.Serializable {
 }

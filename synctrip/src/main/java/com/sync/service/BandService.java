@@ -343,7 +343,8 @@ public class BandService {
                 band.getStartDate(), band.getEndDate(), band.getInviteCode(),
                 band.getStatus(), isOwner, band.isOverseas(),
                 band.getTravelStyle(), band.getAccommodationName(), memberCount,
-                band.getThumbnailUrl()
+                band.getThumbnailUrl(),
+                band.getDestinationLat(), band.getDestinationLng()
         );
     }
 
