@@ -138,6 +138,42 @@ public class PlaceSearchService {
     }
 
     /**
+     * 밴드 없이 위치 기반 장소 검색 — 숙소 선택 등 밴드 생성 전 단계에서 사용.
+     * 북마크 컨텍스트가 없으므로 isBookmarked는 항상 false.
+     *
+     * @param userId  요청 사용자 ID (인증 확인용)
+     * @param keyword 검색 키워드 (필수)
+     * @param lat     검색 중심 위도
+     * @param lng     검색 중심 경도
+     */
+    @Transactional
+    public List<PlaceSearchResult> searchPlacesForLocation(Long userId, String keyword, double lat, double lng) {
+        userRepository.findByIdAndIsDeletedFalse(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
+
+        if (keyword == null || keyword.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "장소 검색은 키워드가 필요합니다.");
+        }
+
+        NearbySearchResponse response = googlePlacesService.searchText(lat, lng, keyword);
+
+        if (response.places() == null || response.places().isEmpty()) {
+            return List.of();
+        }
+
+        List<PlaceSearchResult> results = new ArrayList<>();
+        for (NearbySearchResponse.Place gPlace : response.places()) {
+            try {
+                Place place = cacheGooglePlace(gPlace);
+                results.add(toSearchResult(place, Set.of()));
+            } catch (Exception e) {
+                log.warn("Google 장소 캐싱 실패 (externalId={}): {}", gPlace.id(), e.getMessage());
+            }
+        }
+        return results;
+    }
+
+    /**
      * Google Places Text Search로 장소 검색 (국내/해외 공통)
      * - keyword 필수, 없으면 BAD_REQUEST
      * - 응답 후 서버 사이드에서 카테고리 필터링 (includedTypes는 TextSearch 미지원)
