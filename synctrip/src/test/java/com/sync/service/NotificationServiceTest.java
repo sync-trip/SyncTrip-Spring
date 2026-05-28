@@ -27,6 +27,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import java.util.Map;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -65,7 +66,7 @@ class NotificationServiceTest {
         notificationService.notify(1L, 10L, NotificationType.VOTE_STARTED, "투표 시작!");
 
         verify(notificationRepository).save(any(Notification.class));
-        verify(fcmService).send("test-fcm-token", "투표 시작", "투표 시작!");
+        verify(fcmService).send(eq("test-fcm-token"), eq("투표 시작"), eq("투표 시작!"), any(Map.class));
     }
 
     @Test
@@ -89,7 +90,7 @@ class NotificationServiceTest {
         notificationService.notify(1L, 10L, NotificationType.MEMBER_READY, "준비완료");
 
         verify(notificationRepository).save(any());
-        verify(fcmService).send(null, "멤버 준비완료", "준비완료");
+        verify(fcmService).send(eq(null), eq("멤버 준비완료"), eq("준비완료"), any(Map.class));
     }
 
     @Test
