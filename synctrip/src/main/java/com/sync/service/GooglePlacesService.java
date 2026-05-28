@@ -155,9 +155,11 @@ public class GooglePlacesService {
     public NearbySearchResponse searchDestination(String textQuery) {
         TextSearchRequest body = new TextSearchRequest(
                 textQuery,
-                null,
+                null,   // locationBias — 글로벌 검색이므로 위치 편향 없음
+                null,   // locationRestriction — 반경 제한 없음
                 5,
-                "ko"
+                "ko",
+                null    // includedType — 도시/여행지 검색이므로 타입 제한 없음
         );
 
         HttpHeaders headers = new HttpHeaders();
