@@ -155,7 +155,7 @@ public class PlaceSearchService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "장소 검색은 키워드가 필요합니다.");
         }
 
-        NearbySearchResponse response = googlePlacesService.searchText(lat, lng, keyword);
+        NearbySearchResponse response = googlePlacesService.searchText(lat, lng, keyword, "lodging");
 
         if (response.places() == null || response.places().isEmpty()) {
             return List.of();
@@ -185,7 +185,7 @@ public class PlaceSearchService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "장소 검색은 키워드가 필요합니다.");
         }
         NearbySearchResponse response = googlePlacesService.searchText(
-                band.getDestinationLat(), band.getDestinationLng(), keyword
+                band.getDestinationLat(), band.getDestinationLng(), keyword, null
         );
 
         if (response.places() == null || response.places().isEmpty()) {

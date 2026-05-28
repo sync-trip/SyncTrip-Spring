@@ -83,7 +83,7 @@ class PlaceSearchServiceTest {
         when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
         when(bandRepository.findByIdAndIsDeletedFalse(10L)).thenReturn(Optional.of(band));
         when(placeBookmarkRepository.findByBandIdAndUserIdOrderByCreatedAtDesc(10L, 1L)).thenReturn(List.of());
-        when(googlePlacesService.searchText(37.5665, 126.9780, "경복궁"))
+        when(googlePlacesService.searchText(37.5665, 126.9780, "경복궁", null))
                 .thenReturn(response);
         when(placeRepository.findByApiSourceAndExternalId(PlaceApiSource.GOOGLE, "google-abc"))
                 .thenReturn(Optional.empty());
