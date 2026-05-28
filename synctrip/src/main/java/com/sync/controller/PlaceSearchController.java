@@ -27,18 +27,16 @@ public class PlaceSearchController {
     /**
      * 위도·경도 기반 장소 검색 — 밴드 생성 전 숙소 선택 단계에서 호출.
      *
-     * @param userId  JWT에서 추출한 현재 사용자 ID
-     * @param keyword 검색 키워드 (필수, 없으면 400)
-     * @param lat     검색 중심 위도
-     * @param lng     검색 중심 경도
+     * @param userId JWT에서 추출한 현재 사용자 ID
+     * @param lat    검색 중심 위도
+     * @param lng    검색 중심 경도
      */
     @GetMapping("/search")
     public ResponseEntity<List<PlaceSearchResult>> searchPlaces(
             @LoginUser Long userId,
-            @RequestParam String keyword,
             @RequestParam double lat,
             @RequestParam double lng) {
-        List<PlaceSearchResult> results = placeSearchService.searchPlacesForLocation(userId, keyword, lat, lng);
+        List<PlaceSearchResult> results = placeSearchService.searchPlacesForLocation(userId, lat, lng);
         return ResponseEntity.ok(results);
     }
 }
