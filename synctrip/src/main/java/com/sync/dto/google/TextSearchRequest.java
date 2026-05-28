@@ -6,11 +6,15 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 public record TextSearchRequest(
         String textQuery,
         LocationBias locationBias,
+        LocationRestriction locationRestriction,
         int maxResultCount,
         String languageCode,
         String includedType
 ) {
     public record LocationBias(Circle circle) {}
+    /** circle은 미지원 — rectangle만 사용 가능 */
+    public record LocationRestriction(Rectangle rectangle) {}
     public record Circle(LatLng center, double radius) {}
+    public record Rectangle(LatLng low, LatLng high) {}
     public record LatLng(double latitude, double longitude) {}
 }

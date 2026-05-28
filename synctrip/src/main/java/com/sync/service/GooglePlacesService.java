@@ -111,14 +111,20 @@ public class GooglePlacesService {
      *                     null → locationBias(선호), non-null → locationRestriction(엄격 제한)
      */
     public NearbySearchResponse searchText(double lat, double lng, String textQuery, String includedType) {
-        // Google Text Search API의 locationRestriction은 circle 미지원(rectangle만 가능)이므로 항상 locationBias 사용.
-        // includedType으로 타입을 제한하면 도시/행정구역 등 비숙소 결과가 자연히 걸러진다.
-        TextSearchRequest.LocationBias bias = new TextSearchRequest.LocationBias(
-                new TextSearchRequest.Circle(
-                        new TextSearchRequest.LatLng(lat, lng), TEXT_SEARCH_BIAS_RADIUS_METERS));
+        TextSearchRequest.LocationBias bias = null;
+        TextSearchRequest.LocationRestriction restriction = null;
+
+        if (includedType != null) {
+            // 숙소 등 타입 지정 검색: rectangle restriction으로 반경 밖 결과를 완전히 제외
+            restriction = buildRectangleRestriction(lat, lng, TEXT_SEARCH_BIAS_RADIUS_METERS);
+        } else {
+            bias = new TextSearchRequest.LocationBias(
+                    new TextSearchRequest.Circle(
+                            new TextSearchRequest.LatLng(lat, lng), TEXT_SEARCH_BIAS_RADIUS_METERS));
+        }
 
         TextSearchRequest body = new TextSearchRequest(
-                textQuery, bias, MAX_RESULT_COUNT, "ko", includedType);
+                textQuery, bias, restriction, MAX_RESULT_COUNT, "ko", includedType);
 
         HttpHeaders headers = buildHeaders();
         HttpEntity<TextSearchRequest> request = new HttpEntity<>(body, headers);
@@ -150,6 +156,7 @@ public class GooglePlacesService {
         TextSearchRequest body = new TextSearchRequest(
                 textQuery,
                 null,   // locationBias — 글로벌 검색이므로 위치 편향 없음
+                null,   // locationRestriction — 반경 제한 없음
                 5,
                 "ko",
                 null    // includedType — 도시/여행지 검색이므로 타입 제한 없음
@@ -189,6 +196,21 @@ public class GooglePlacesService {
     public String buildPhotoUrl(String photoName) {
         return properties.placesBaseUrl() + "/v1/" + photoName
                 + "/media?maxHeightPx=400&maxWidthPx=400&key=" + properties.apiKey();
+    }
+
+    /**
+     * 중심 좌표와 반경(미터)으로 rectangle restriction을 계산한다.
+     * 위도 1도 ≈ 111km, 경도 1도 ≈ 111km * cos(위도) 공식 적용.
+     */
+    private TextSearchRequest.LocationRestriction buildRectangleRestriction(double lat, double lng, double radiusMeters) {
+        double latOffset = radiusMeters / 111_000.0;
+        double lngOffset = radiusMeters / (111_000.0 * Math.cos(Math.toRadians(lat)));
+        return new TextSearchRequest.LocationRestriction(
+                new TextSearchRequest.Rectangle(
+                        new TextSearchRequest.LatLng(lat - latOffset, lng - lngOffset),
+                        new TextSearchRequest.LatLng(lat + latOffset, lng + lngOffset)
+                )
+        );
     }
 
     /**

@@ -35,8 +35,9 @@ public class PlaceSearchController {
     public ResponseEntity<List<PlaceSearchResult>> searchPlaces(
             @LoginUser Long userId,
             @RequestParam double lat,
-            @RequestParam double lng) {
-        List<PlaceSearchResult> results = placeSearchService.searchPlacesForLocation(userId, lat, lng);
+            @RequestParam double lng,
+            @RequestParam(required = false) String keyword) {
+        List<PlaceSearchResult> results = placeSearchService.searchPlacesForLocation(userId, keyword, lat, lng);
         return ResponseEntity.ok(results);
     }
 }
