@@ -111,20 +111,14 @@ public class GooglePlacesService {
      *                     null → locationBias(선호), non-null → locationRestriction(엄격 제한)
      */
     public NearbySearchResponse searchText(double lat, double lng, String textQuery, String includedType) {
-        TextSearchRequest.LocationBias bias = null;
-        TextSearchRequest.LocationRestriction restriction = null;
-        TextSearchRequest.Circle circle = new TextSearchRequest.Circle(
-                new TextSearchRequest.LatLng(lat, lng), TEXT_SEARCH_BIAS_RADIUS_METERS);
-
-        // includedType이 있는 경우(숙소 등 특정 타입 검색): 반경 밖 결과를 완전히 차단
-        if (includedType != null) {
-            restriction = new TextSearchRequest.LocationRestriction(circle);
-        } else {
-            bias = new TextSearchRequest.LocationBias(circle);
-        }
+        // Google Text Search API의 locationRestriction은 circle 미지원(rectangle만 가능)이므로 항상 locationBias 사용.
+        // includedType으로 타입을 제한하면 도시/행정구역 등 비숙소 결과가 자연히 걸러진다.
+        TextSearchRequest.LocationBias bias = new TextSearchRequest.LocationBias(
+                new TextSearchRequest.Circle(
+                        new TextSearchRequest.LatLng(lat, lng), TEXT_SEARCH_BIAS_RADIUS_METERS));
 
         TextSearchRequest body = new TextSearchRequest(
-                textQuery, bias, restriction, MAX_RESULT_COUNT, "ko", includedType);
+                textQuery, bias, MAX_RESULT_COUNT, "ko", includedType);
 
         HttpHeaders headers = buildHeaders();
         HttpEntity<TextSearchRequest> request = new HttpEntity<>(body, headers);
@@ -156,7 +150,6 @@ public class GooglePlacesService {
         TextSearchRequest body = new TextSearchRequest(
                 textQuery,
                 null,   // locationBias — 글로벌 검색이므로 위치 편향 없음
-                null,   // locationRestriction — 반경 제한 없음
                 5,
                 "ko",
                 null    // includedType — 도시/여행지 검색이므로 타입 제한 없음
