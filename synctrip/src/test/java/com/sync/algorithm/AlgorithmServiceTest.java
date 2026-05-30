@@ -28,7 +28,7 @@ class AlgorithmServiceTest {
     private GroupInfo group(TravelStyle style, int days, boolean isOverseas) {
         LocalDate start = LocalDate.of(2025, 7, 1);
         return new GroupInfo(1L, DEST_LAT, DEST_LNG, style, start,
-                start.plusDays(days - 1), isOverseas);
+                start.plusDays(days - 1), isOverseas, null, null);
     }
 
     private List<MemberInfo> members(int count) {

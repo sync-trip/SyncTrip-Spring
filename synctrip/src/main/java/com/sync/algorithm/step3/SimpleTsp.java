@@ -39,7 +39,8 @@ public final class SimpleTsp {
 
         List<DaySchedule> schedules = new ArrayList<>(step2.dayGroups().size());
         for (DayGroup dg : step2.dayGroups()) {
-            schedules.add(scheduleDay(dg, dayStart, style, input.isOverseas(), input.openingHoursById()));
+            schedules.add(scheduleDay(dg, dayStart, style, input.isOverseas(), input.openingHoursById(),
+                    input.startLat(), input.startLng()));
         }
 
         return new Step3Result(
@@ -50,7 +51,8 @@ public final class SimpleTsp {
 
     private static DaySchedule scheduleDay(DayGroup dayGroup, LocalTime dayStart,
                                             TravelStyle style, boolean isOverseas,
-                                            Map<Long, OpeningHours> openingHoursById) {
+                                            Map<Long, OpeningHours> openingHoursById,
+                                            Double startLat, Double startLng) {
         List<AssignedPlace> places = dayGroup.places();
         if (places.isEmpty()) {
             return new DaySchedule(dayGroup.day(), List.of(), false);
@@ -64,16 +66,17 @@ public final class SimpleTsp {
                 .filter(p -> p.category() == PlaceCategory.FOOD)
                 .collect(Collectors.toList());
 
-        // 비FOOD만 Nearest Neighbor TSP로 동선 확정
+        // 비FOOD만 Nearest Neighbor TSP로 동선 확정 (숙소 좌표 전달)
         List<AssignedPlace> nonFoodOrdered = nonFood.isEmpty()
                 ? Collections.emptyList()
-                : nearestNeighborTsp(nonFood);
+                : nearestNeighborTsp(nonFood, startLat, startLng);
 
         // FOOD를 식사 윈도우에 삽입해 최종 순서 결정
         List<AssignedPlace> ordered = insertFoodByWindow(nonFoodOrdered, foods, style, dayStart);
 
         List<ScheduledPlace> scheduled = assignTimes(
-                ordered, dayGroup.day(), dayStart, style, isOverseas, openingHoursById);
+                ordered, dayGroup.day(), dayStart, style, isOverseas, openingHoursById,
+                startLat, startLng);
 
         // DAY_OVERLOADED: 마지막 슬롯 종료 시각이 22:00 초과 [작업3]
         boolean dayOverloaded = !scheduled.isEmpty()
@@ -186,14 +189,32 @@ public final class SimpleTsp {
     // ── Nearest Neighbor TSP ─────────────────────────────────────────────
     //
     // 비FOOD 장소만 받는다 (FIX-47: FOOD는 insertFoodByWindow에서 처리).
-    // 시작점: places.get(0) — Step2가 우선순위 내림차순으로 정렬한 첫 번째 장소.
+    // 시작점: startLat/Lng 있으면 숙소 haversine 최근접 장소, 없으면 places.get(0).
     // 동거리 동점: 입력 순서 앞쪽 우선 (strict < 비교로 결정론성 보장).
 
-    private static List<AssignedPlace> nearestNeighborTsp(List<AssignedPlace> places) {
+    private static List<AssignedPlace> nearestNeighborTsp(List<AssignedPlace> places,
+                                                           Double startLat, Double startLng) {
         List<AssignedPlace> remaining = new ArrayList<>(places);
         List<AssignedPlace> route     = new ArrayList<>(places.size());
 
-        AssignedPlace current = remaining.remove(0);
+        // 숙소 좌표가 있으면 숙소에서 가장 가까운 장소를 첫 노드로 선택
+        AssignedPlace current;
+        if (startLat != null && startLng != null) {
+            AssignedPlace nearest = remaining.get(0);
+            double minDist = haversine(startLat, startLng, nearest.latitude(), nearest.longitude());
+            for (int i = 1; i < remaining.size(); i++) {
+                AssignedPlace c = remaining.get(i);
+                double d = haversine(startLat, startLng, c.latitude(), c.longitude());
+                if (d < minDist) {  // strict < 로 동점 시 입력 순서 앞쪽 유지 (결정론성)
+                    minDist = d;
+                    nearest = c;
+                }
+            }
+            remaining.remove(nearest);
+            current = nearest;
+        } else {
+            current = remaining.remove(0);
+        }
         route.add(current);
 
         while (!remaining.isEmpty()) {
@@ -225,14 +246,19 @@ public final class SimpleTsp {
     private static List<ScheduledPlace> assignTimes(List<AssignedPlace> ordered, int day,
                                                       LocalTime dayStart, TravelStyle style,
                                                       boolean isOverseas,
-                                                      Map<Long, OpeningHours> openingHoursById) {
+                                                      Map<Long, OpeningHours> openingHoursById,
+                                                      Double startLat, Double startLng) {
         List<ScheduledPlace> result = new ArrayList<>(ordered.size());
         LocalTime current = dayStart;
 
         for (int i = 0; i < ordered.size(); i++) {
             AssignedPlace p = ordered.get(i);
 
-            if (i > 0) {
+            if (i == 0 && startLat != null && startLng != null) {
+                // 숙소→첫 장소 이동시간 반영
+                long travelMin = travelMinutes(startLat, startLng, p.latitude(), p.longitude());
+                current = current.plusMinutes(travelMin);
+            } else if (i > 0) {
                 AssignedPlace prev = ordered.get(i - 1);
                 long travelMin = travelMinutes(prev.latitude(), prev.longitude(),
                         p.latitude(), p.longitude());

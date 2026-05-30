@@ -21,7 +21,7 @@ class WeightedCostFunctionTest {
 
     private GroupInfo group(TravelStyle style, int days) {
         LocalDate start = LocalDate.of(2025, 7, 1);
-        return new GroupInfo(1L, DEST_LAT, DEST_LNG, style, start, start.plusDays(days - 1), false);
+        return new GroupInfo(1L, DEST_LAT, DEST_LNG, style, start, start.plusDays(days - 1), false, null, null);
     }
 
     private List<MemberInfo> members(int count) {
@@ -333,7 +333,7 @@ class WeightedCostFunctionTest {
     @Test
     void K_여행일수_당일치기_1일() {
         GroupInfo g = new GroupInfo(1L, DEST_LAT, DEST_LNG, TravelStyle.RELAXED,
-                LocalDate.of(2025, 7, 1), LocalDate.of(2025, 7, 1), false);
+                LocalDate.of(2025, 7, 1), LocalDate.of(2025, 7, 1), false, null, null);
         Step1Result result = WeightedCostFunction.compute(
                 new Step1Input(g, members(4), List.of(), List.of()));
         assertThat(result.meta().K()).isEqualTo(1);
@@ -342,7 +342,7 @@ class WeightedCostFunctionTest {
     @Test
     void K_여행일수_3박4일() {
         GroupInfo g = new GroupInfo(1L, DEST_LAT, DEST_LNG, TravelStyle.RELAXED,
-                LocalDate.of(2025, 7, 1), LocalDate.of(2025, 7, 4), false);
+                LocalDate.of(2025, 7, 1), LocalDate.of(2025, 7, 4), false, null, null);
         Step1Result result = WeightedCostFunction.compute(
                 new Step1Input(g, members(4), List.of(), List.of()));
         assertThat(result.meta().K()).isEqualTo(4);

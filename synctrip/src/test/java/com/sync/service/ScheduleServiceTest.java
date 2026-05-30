@@ -126,7 +126,7 @@ class ScheduleServiceTest {
                 "{\"MON\":[{\"open\":\"09:00\",\"close\":\"23:00\"}]}"
         );
 
-        Schedule targetSchedule = Schedule.create(band, target, 1, 1, LocalTime.of(18, 0), 90, null);
+        Schedule targetSchedule = Schedule.create(band, target, 1, 1, LocalTime.of(18, 0), 90, null, false, false, false, false, false);
         setId(targetSchedule, 500L);
 
         ScheduleAlt altClosed = ScheduleAlt.create(band, closedAtVisit, 0.95f);
@@ -180,7 +180,7 @@ class ScheduleServiceTest {
                 null
         );
 
-        Schedule targetSchedule = Schedule.create(band, target, 1, 1, LocalTime.of(12, 0), 90, null);
+        Schedule targetSchedule = Schedule.create(band, target, 1, 1, LocalTime.of(12, 0), 90, null, false, false, false, false, false);
         setId(targetSchedule, 800L);
 
         ScheduleAlt alt = ScheduleAlt.create(band, stageThreeCandidate, 0.9f);
@@ -211,7 +211,7 @@ class ScheduleServiceTest {
 
         Place target = createPlace(3000L, "target-3", "Target", PlaceCategory.FOOD, 37.5665, 126.9780, null);
 
-        Schedule targetSchedule = Schedule.create(band, target, 1, 1, LocalTime.of(12, 0), 90, null);
+        Schedule targetSchedule = Schedule.create(band, target, 1, 1, LocalTime.of(12, 0), 90, null, false, false, false, false, false);
         setId(targetSchedule, 1000L);
 
         /* 10개의 후보 생성 (모두 1km 이내) */

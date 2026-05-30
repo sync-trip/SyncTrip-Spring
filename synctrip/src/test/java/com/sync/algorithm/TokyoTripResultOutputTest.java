@@ -92,7 +92,7 @@ class TokyoTripResultOutputTest {
             new MemberInfo(1L, "LEADER", true), new MemberInfo(2L, "MEMBER", true),
             new MemberInfo(3L, "MEMBER", true), new MemberInfo(4L, "MEMBER", true));
         GroupInfo group = new GroupInfo(1L, DEST_LAT, DEST_LNG, TravelStyle.PACKED,
-            LocalDate.of(2025, 8, 1), LocalDate.of(2025, 8, 4), true);
+            LocalDate.of(2025, 8, 1), LocalDate.of(2025, 8, 4), true, null, null);
 
         List<PlaceInfo> places = new ArrayList<>(PLACE_MAP.values());
 

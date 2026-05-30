@@ -30,7 +30,7 @@ class SimpleTspTest {
     private Step3Result run(List<DayGroup> days, boolean isOverseas,
                              LocalTime start, Map<Long, OpeningHours> hours) {
         Step2Result step2 = new Step2Result(days, List.of());
-        return SimpleTsp.schedule(new Step3Input(step2, isOverseas, start, hours, TravelStyle.RELAXED));
+        return SimpleTsp.schedule(new Step3Input(step2, isOverseas, start, hours, TravelStyle.RELAXED, null, null));
     }
 
     private Step3Result run(List<DayGroup> days) {
@@ -156,7 +156,7 @@ class SimpleTspTest {
         AssignedPlace p = ap(1, 0.0, 0.0, 60);
         Step2Result step2 = new Step2Result(List.of(new DayGroup(1, List.of(p))), List.of());
         Step3Result result = SimpleTsp.schedule(
-                new Step3Input(step2, false, null, Map.of(), TravelStyle.RELAXED));
+                new Step3Input(step2, false, null, Map.of(), TravelStyle.RELAXED, null, null));
 
         assertThat(result.daySchedules().get(0).places().get(0).startTime())
                 .isEqualTo(LocalTime.of(9, 0));
@@ -325,7 +325,7 @@ class SimpleTspTest {
         );
 
         Step3Result result = SimpleTsp.schedule(
-                new Step3Input(step2, false, SimpleTsp.DEFAULT_DAY_START, Map.of(), TravelStyle.RELAXED));
+                new Step3Input(step2, false, SimpleTsp.DEFAULT_DAY_START, Map.of(), TravelStyle.RELAXED, null, null));
 
         assertThat(result.overflow()).hasSize(1);
         assertThat(result.overflow().get(0).placeId()).isEqualTo(99L);

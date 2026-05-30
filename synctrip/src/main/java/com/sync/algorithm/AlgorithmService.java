@@ -41,7 +41,9 @@ public final class AlgorithmService {
                 input.group().isOverseas(),
                 input.dayStartTime(),
                 input.openingHoursById(),
-                input.group().travelStyle());  // 식사 윈도우 결정용 [작업1]
+                input.group().travelStyle(),          // 식사 윈도우 결정용
+                input.group().accommodationLat(),     // 숙소 출발 좌표
+                input.group().accommodationLng());    // null이면 첫 장소 출발
         Step3Result s3out = SimpleTsp.schedule(s3in);
 
         return new AlgorithmResult(s3out, s1out);

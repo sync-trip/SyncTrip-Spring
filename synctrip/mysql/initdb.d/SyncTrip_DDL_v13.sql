@@ -1,7 +1,16 @@
 -- ════════════════════════════════════════
--- SyncTrip DDL v12
--- 작성일: 2026-05-26
+-- SyncTrip DDL v13
+-- 작성일: 2026-05-30
 -- 총 테이블: 17개 + 트리거 2개
+-- ════════════════════════════════════════
+-- v12 → v13 변경사항: 2026-05-30
+--   1. schedules 테이블에 알고리즘 경고 플래그 5개 컬럼 추가
+--      - is_outlier_candidate   : K-Means 이상치 후보 여부 (Step2 판정, 재계산 시 보존)
+--      - opening_hours_violation: 해외 전용 — 영업시간 범위 외 배치
+--      - meal_window_violation  : FOOD 슬롯이 식사 윈도우 외 배치
+--      - late_schedule          : 시작 시각 22:00 이후
+--      - opening_hours_unverified: 해외이고 영업시간 데이터 없음
+--      → 프론트에서 배지/경고 표시용, 생성 시점 값 보존 (재계산 시 갱신)
 -- ════════════════════════════════════════
 -- v11 → v12 변경사항: 2026-05-26
 --   1. user_groups.thumbnail_url VARCHAR(500) → TEXT
@@ -237,17 +246,23 @@ CREATE TABLE `votes` (
 
 -- 10. schedules
 -- [v5 수정 2] cluster_id 제거 (day_number와 1:1 중복)
+-- [v13 수정] 알고리즘 경고 플래그 5개 컬럼 추가 (생성 시점 값 보존, 재계산 시 갱신)
 CREATE TABLE `schedules` (
-                             `schedule_id`           BIGINT    NOT NULL AUTO_INCREMENT COMMENT '일정 고유 ID',
-                             `group_id`              BIGINT    NOT NULL                COMMENT '그룹 ID (FK → user_groups)',
-                             `day_number`            INT       NOT NULL                COMMENT '여행 일차 (1부터 시작, K-Means 클러스터 ID와 동일)',
-                             `slot_order`            INT       NOT NULL                COMMENT '하루 내 방문 순서',
-                             `place_id`              BIGINT    NULL                    COMMENT '배정된 장소 ID (NULL이면 자유시간 슬롯)',
-                             `is_free_time`          BOOLEAN   NOT NULL DEFAULT FALSE  COMMENT '자유시간 여부 (TRUE이면 place_id NULL 강제)',
-                             `start_time`            TIME      NULL                    COMMENT '방문 시작 시각',
-                             `duration_minutes`      INT       NULL                    COMMENT '체류/자유시간 길이(분). 일반 장소는 places.estimated_duration 참조용 캐시, 자유시간 슬롯은 이 컬럼만 사용',
-                             `travel_time_from_prev` INT       NULL                    COMMENT '이전 장소 이동 시간 (분)',
-                             `updated_at`            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '최종 수정일시',
+                             `schedule_id`              BIGINT    NOT NULL AUTO_INCREMENT COMMENT '일정 고유 ID',
+                             `group_id`                 BIGINT    NOT NULL                COMMENT '그룹 ID (FK → user_groups)',
+                             `day_number`               INT       NOT NULL                COMMENT '여행 일차 (1부터 시작, K-Means 클러스터 ID와 동일)',
+                             `slot_order`               INT       NOT NULL                COMMENT '하루 내 방문 순서',
+                             `place_id`                 BIGINT    NULL                    COMMENT '배정된 장소 ID (NULL이면 자유시간 슬롯)',
+                             `is_free_time`             BOOLEAN   NOT NULL DEFAULT FALSE  COMMENT '자유시간 여부 (TRUE이면 place_id NULL 강제)',
+                             `start_time`               TIME      NULL                    COMMENT '방문 시작 시각',
+                             `duration_minutes`         INT       NULL                    COMMENT '체류/자유시간 길이(분). 일반 장소는 places.estimated_duration 참조용 캐시, 자유시간 슬롯은 이 컬럼만 사용',
+                             `travel_time_from_prev`    INT       NULL                    COMMENT '이전 장소 이동 시간 (분)',
+                             `is_outlier_candidate`     BOOLEAN   NOT NULL DEFAULT FALSE  COMMENT 'K-Means 이상치 후보 여부 (Step2 판정값, 재계산 시 보존)',
+                             `opening_hours_violation`  BOOLEAN   NOT NULL DEFAULT FALSE  COMMENT '해외 전용 — 영업시간 범위 외 배치 경고',
+                             `meal_window_violation`    BOOLEAN   NOT NULL DEFAULT FALSE  COMMENT 'FOOD 슬롯이 식사 윈도우 외 배치 경고',
+                             `late_schedule`            BOOLEAN   NOT NULL DEFAULT FALSE  COMMENT '시작 시각 22:00 이후 경고',
+                             `opening_hours_unverified` BOOLEAN   NOT NULL DEFAULT FALSE  COMMENT '해외이고 영업시간 데이터 없음 경고',
+                             `updated_at`               TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '최종 수정일시',
                              PRIMARY KEY (`schedule_id`),
                              UNIQUE KEY `uq_schedules_slot` (`group_id`, `day_number`, `slot_order`),
                              CONSTRAINT `fk_schedules_group` FOREIGN KEY (`group_id`) REFERENCES `user_groups` (`group_id`),

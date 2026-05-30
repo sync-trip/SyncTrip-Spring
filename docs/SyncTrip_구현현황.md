@@ -1,5 +1,5 @@
 # SyncTrip 구현 현황 문서
-**인수인계 문서 기준:** v6 | **최신 DDL:** `SyncTrip_DDL_v12.sql`
+**인수인계 문서 기준:** v6 | **최신 DDL:** `SyncTrip_DDL_v13.sql`
 
 > 이 문서는 기능이 구현되거나 수정될 때마다 업데이트합니다.
 > 기준: `SyncTrip_인수인계문서_v6.md` + 실제 Spring Boot 코드 (`com.sync.*`)
@@ -98,8 +98,12 @@
 | USR-031 | 실시간 Plan B 추천 | ✅ 구현 | 2026-05-19 | `ScheduleService.getPlanBRecommendations()` | `POST /api/bands/{bandId}/schedule/plan-b` / 최대 7개 |
 | — | 편집 락 (5분 타임아웃 + 자동 갱신) | ➕ 추가 구현 | 2026-05-20 ~ 05-21 | `ScheduleService.startEditing()` / `finishEditing()` | `POST /api/bands/{bandId}/schedule/edit/start·finish` / 그룹 동시 편집 방지 |
 | — | 일정 변경 WebSocket 브로드캐스트 | ➕ 추가 구현 | 2026-05-19 | `ScheduleService` → `SimpMessagingTemplate` | 장소 교체 시 `/topic/bands/{bandId}/schedule` 채널로 `ScheduleUpdatedEvent` 발송 |
-
 | — | 숙소 단독 변경 + partial TSP 재계산 | ➕ 추가 구현 | 2026-05-23 | `BandService.updateAccommodation()`, `ScheduleService.recalculateFutureDays()` | `PATCH /api/bands/{bandId}/accommodation` / 방장 전용 / VOTING·GENERATING 단계 차단 / TRAVELLING 시 오늘 이후 day TSP 재계산 (v2.4 FIX-35/36) |
+| — | 숙소를 TSP 출발점으로 반영 | ➕ 추가 구현 | 2026-05-30 | `SimpleTsp`, `Step3Input`, `GroupInfo`, `ScheduleService` | 숙소 좌표가 있으면 NN TSP 시작점 = 숙소 최근접 비FOOD 장소 / 첫 슬롯 travelTimeFromPrev = 숙소→첫장소 이동시간 / null이면 현행 유지 |
+| — | 경고 플래그 5종 schedules 저장·노출 | ➕ 추가 구현 | 2026-05-30 | `Schedule` 엔티티, `ScheduleSlotResponse`, `ScheduleService` | is_outlier_candidate / opening_hours_violation / meal_window_violation / late_schedule / opening_hours_unverified 컬럼 저장 / DDL v13 / swap·reorder 재계산 시 갱신(outlier 보존) |
+| — | DONE 상태 편집 차단 | ➕ 추가 구현 | 2026-05-30 | `ScheduleService` | startEditing / reorderSchedule / swapSchedulePlace 진입 시 BandStatus.DONE이면 409 |
+| — | joined_after_voting 멤버 읽기전용 | ➕ 추가 구현 | 2026-05-30 | `ScheduleService.requireEditPermission()` | 투표 후 합류 멤버의 편집 API 호출 시 403 |
+| — | 편집자 정보 + canEdit 응답 노출 | ➕ 추가 구현 | 2026-05-30 | `ScheduleResponse`, `ScheduleService.getSchedule()` | editingUserId / editingUserName / canEdit = (status≠DONE) && (!joinedAfterVoting) && (락 없거나 본인) |
 
 **보완할 점**
 - (없음)
@@ -278,7 +282,8 @@
 | 2026-05-26 | FCM data 페이로드 추가 → 멤버 합류·장바구니 변경 즉시 반영: `FcmService.send()` data 오버로드 추가, `NotificationService.buildData()` bandId+type 전달. Android `SyncTripApplication` bandRefreshFlow SharedFlow 추가, `SyncTripFirebaseService` data 수신 시 emitBandRefresh, `NavGraph` tripLobby에서 collect해 loadMembers/loadPicks 즉시 호출. |
 | 2026-05-30 | 알고리즘 코드 리뷰 반영 6개 항목 구현: (1) FOOD 시간 윈도우 끼워넣기 FIX-47 — 비FOOD NN 후 PACKED:점심+저녁/RELAXED:저녁 윈도우에 FOOD 삽입; (2) 경고 배지 3종 — mealWindowViolation/lateSchedule/openingHoursUnverified; (3) DAY_OVERLOADED 경고 — 마지막 슬롯 endTime > 22:00; (4) 이동시간 MIN_TRAVEL_MINUTES=3 하한; (5) PlanB priorityScore [-1.0,1.4]→[0,1] 정규화; (6) PlanB CULTURE↔NATURE 호환 그룹 + 2km fallback. |
 | 2026-05-30 | PlanB 이중 구현 통합: `algorithm/planb/` 패키지 전체 삭제(PlanBRecommender/PlanBInput/PlanBResult/PlanBCandidate), `ScheduleService.getPlanBRecommendations()`에 점수 정규화·CULTURE↔NATURE 카테고리 호환 반영. 관련 테스트(PlanBRecommenderTest, TokyoTripScenarioTest PlanB 케이스, TokyoTripResultOutputTest 표5) 정리. |
+| 2026-05-30 | UI/UX 백엔드 보완 5건: ①숙소를 TSP 출발점으로 반영(GroupInfo/Step3Input/SimpleTsp/ScheduleService) ②경고 플래그 5종 schedules 컬럼 저장·노출(DDL v13, Schedule 엔티티, ScheduleSlotResponse) ③DONE 상태 편집 차단(409) ④joined_after_voting 편집 금지(403) ⑤getSchedule 응답에 editingUserId/editingUserName/canEdit 추가. |
 
 ---
 
-**마지막 수정:** 2026-05-30 (PlanB 이중 구현 통합 정리) | **최신 DDL:** `SyncTrip_DDL_v12.sql`
+**마지막 수정:** 2026-05-30 (UI/UX 백엔드 보완 5건 구현) | **최신 DDL:** `SyncTrip_DDL_v13.sql`

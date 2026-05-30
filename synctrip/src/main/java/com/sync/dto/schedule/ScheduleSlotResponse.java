@@ -8,5 +8,11 @@ public record ScheduleSlotResponse(
         LocalTime startTime,
         Integer durationMinutes,
         Integer travelTimeFromPrev,
-        SchedulePlaceInfo place
+        SchedulePlaceInfo place,
+        // 알고리즘 경고 플래그
+        boolean isOutlierCandidate,
+        boolean openingHoursViolation,
+        boolean mealWindowViolation,
+        boolean lateSchedule,
+        boolean openingHoursUnverified
 ) {}

@@ -187,7 +187,8 @@ class TokyoTripScenarioTest {
             1L, DEST_LAT, DEST_LNG,
             TravelStyle.PACKED,
             START, END,
-            true  // 해외
+            true,  // 해외
+            null, null  // 숙소 좌표 없음
         );
         return new AlgorithmInput(
             group, members, buildPlaces(), buildVotes(),
