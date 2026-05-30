@@ -1,7 +1,13 @@
 -- ════════════════════════════════════════
--- SyncTrip DDL v11
--- 작성일: 2026-05-24
+-- SyncTrip DDL v12
+-- 작성일: 2026-05-26
 -- 총 테이블: 17개 + 트리거 2개
+-- ════════════════════════════════════════
+-- v11 → v12 변경사항: 2026-05-26
+--   1. user_groups.thumbnail_url VARCHAR(500) → TEXT
+--      → Google Places API 사진 URL이 500자를 초과할 수 있어 타입 통일
+--      → places.thumbnail_url(TEXT)와 일관성 확보
+--      → MySQL strict mode 환경에서 밴드 생성 실패 방지
 -- ════════════════════════════════════════
 -- v10 → v11 변경사항: 2026-05-24
 --   1. user_groups 테이블에 thumbnail_url 컬럼 추가
@@ -87,6 +93,7 @@ CREATE TABLE `users` (
 -- 2. user_groups (구 groups, MySQL 예약어 회피)
 -- [v7 수정] 테이블명 변경 + 소프트 삭제 컬럼 추가
 -- [v11 수정] thumbnail_url 컬럼 추가 (여행지 썸네일 이미지 URL)
+-- [v12 수정] thumbnail_url VARCHAR(500) → TEXT (Google Places 사진 URL 500자 초과 대응)
 CREATE TABLE `user_groups` (
                                `group_id`               BIGINT       NOT NULL AUTO_INCREMENT COMMENT '그룹 고유 ID',
                                `owner_id`               BIGINT       NOT NULL                COMMENT '방장 회원 ID (FK → users)',
@@ -99,13 +106,13 @@ CREATE TABLE `user_groups` (
                                `start_date`             DATE         NOT NULL                COMMENT '여행 시작일',
                                `end_date`               DATE         NOT NULL                COMMENT '여행 종료일',
                                `invite_code`            VARCHAR(20)  NOT NULL                COMMENT '그룹 초대 코드 (6자리)',
-                               `invite_code_expired_at` TIMESTAMP    NOT NULL                COMMENT '초대 코드 만료 시각 (72시간)',
+                               `invite_code_expired_at` TIMESTAMP    NOT NULL                COMMENT '초대 코드 만료 시각 (24시간)',
                                `max_members`            INT          NOT NULL DEFAULT 8      COMMENT '그룹 최대 인원 (최대 8명)',
                                `travel_style`           ENUM('RELAXED','PACKED') NOT NULL DEFAULT 'PACKED' COMMENT '여행 스타일 (RELAXED=여유롭게, PACKED=빡빡하게)',
                                `accommodation_name`     VARCHAR(100) NULL                    COMMENT '숙소명 (선택사항)',
                                `accommodation_lat`      DOUBLE       NULL                    COMMENT '숙소 위도 (NULL이면 destination_lat을 TSP 출발점으로 사용)',
                                `accommodation_lng`      DOUBLE       NULL                    COMMENT '숙소 경도 (NULL이면 destination_lng을 TSP 출발점으로 사용)',
-                               `thumbnail_url`          VARCHAR(500) NULL                    COMMENT '여행지 썸네일 이미지 URL (여행지 선택 시 DestinationResponse에서 수신)',
+                               `thumbnail_url`          TEXT         NULL                    COMMENT '여행지 썸네일 이미지 URL (Google Places 사진 URL 길이 무제한 대응)',
                                `status`                 ENUM('PLANNING','VOTING','GENERATING','TRAVELLING','DONE') NOT NULL DEFAULT 'PLANNING' COMMENT '그룹 상태',
                                `closed_by`              VARCHAR(20)  NULL                    COMMENT '여행 종료 주체 (AUTO / OWNER)',
                                `currently_editing_user_id` BIGINT   NULL                    COMMENT '현재 편집 락 보유 사용자 ID (NULL=미사용, Plan B 슬롯 교체 동시 접근 방지)',

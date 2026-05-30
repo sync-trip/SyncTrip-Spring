@@ -13,7 +13,7 @@ import java.util.List;
  * 사용 흐름:
  * 1. KakaoPlacesService에서 이 클래스로 응답 파싱
  * 2. documents에서 개별 Document를 추출
- * 3. PlaceSearchService에서 Document → Place 엔티티로 변환 후 캐싱
+ * (장소 검색은 Google Places로 통일됨 — PlaceSearchService에서 미사용)
  *
  * 주의:
  * - @JsonIgnoreProperties(ignoreUnknown = true)로 미처리 필드는 무시

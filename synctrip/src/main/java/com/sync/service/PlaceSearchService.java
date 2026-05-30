@@ -7,7 +7,7 @@ import com.sync.domain.place.Place;
 import com.sync.domain.place.PlaceApiSource;
 import com.sync.domain.place.PlaceCategory;
 import com.sync.dto.google.NearbySearchResponse;
-import com.sync.dto.kakao.KakaoLocalSearchResponse;
+
 import com.sync.dto.place.PlaceSearchResult;
 import com.sync.repository.BandRepository;
 import com.sync.repository.PlaceBookmarkRepository;
@@ -28,7 +28,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 /**
  * 장소 검색 서비스
- * - 국내(카카오) 및 해외(구글) API를 통합하여 주변 장소 검색 기능을 제공한다.
+ * - 국내/해외 모두 Google Places Text Search를 사용한다.
  * - 검색된 장소는 데이터베이스(places 테이블)에 캐싱하여 관리한다.
  */
 @Service
@@ -36,8 +36,6 @@ import org.springframework.web.server.ResponseStatusException;
 public class PlaceSearchService {
 
     private static final Logger log = LoggerFactory.getLogger(PlaceSearchService.class);
-    // 기본 검색 반경 (5000미터 = 5km)
-    private static final double DEFAULT_RADIUS_METERS = 5000;
 
     // Google Places API에서 사용하는 타입들을 서비스 내부 카테고리(PlaceCategory)로 매핑하기 위한 집합
     // 음식점 관련 구글 타입
@@ -90,7 +88,6 @@ public class PlaceSearchService {
     private final PlaceRepository placeRepository;
     private final PlaceBookmarkRepository placeBookmarkRepository;
     private final UserRepository userRepository;
-    private final KakaoPlacesService kakaoPlacesService;
     private final GooglePlacesService googlePlacesService;
     private final ObjectMapper objectMapper;
 
@@ -98,33 +95,30 @@ public class PlaceSearchService {
                                PlaceRepository placeRepository,
                                PlaceBookmarkRepository placeBookmarkRepository,
                                UserRepository userRepository,
-                               KakaoPlacesService kakaoPlacesService,
                                GooglePlacesService googlePlacesService,
                                ObjectMapper objectMapper) {
         this.bandRepository = bandRepository;
         this.placeRepository = placeRepository;
         this.placeBookmarkRepository = placeBookmarkRepository;
         this.userRepository = userRepository;
-        this.kakaoPlacesService = kakaoPlacesService;
         this.googlePlacesService = googlePlacesService;
         this.objectMapper = objectMapper;
     }
 
     /**
-     * 주변 장소 검색 메인 메서드
-     * 밴드의 설정(국내/해외)에 따라 적절한 API를 호출한다.
+     * 장소 검색 메인 메서드
+     * 국내/해외 구분 없이 Google Places Text Search를 사용한다.
      *
-     * @param userId       검색을 요청한 사용자 ID (북마크 여부 확인용)
-     * @param bandId       검색 기준이 되는 밴드 ID (여행지 좌표 및 국내/해외 여부 확인)
-     * @param category     검색할 장소 카테고리 (null인 경우 전체)
-     * @param radiusMeters 검색 반경 (단위: 미터)
+     * @param userId   검색을 요청한 사용자 ID (북마크 여부 확인용)
+     * @param bandId   검색 기준이 되는 밴드 ID (여행지 좌표 확인)
+     * @param keyword  검색 키워드 (필수, 없으면 BAD_REQUEST)
+     * @param category 검색할 장소 카테고리 (null인 경우 전체)
      * @return 검색된 장소 목록 (북마크 여부 포함)
      */
     @Transactional
     public List<PlaceSearchResult> searchPlaces(Long userId, Long bandId,
                                                  String keyword,
-                                                 PlaceCategory category,
-                                                 double radiusMeters) {
+                                                 PlaceCategory category) {
         // 1. 요청 데이터 검증 (사용자 및 밴드 존재 여부)
         userRepository.findByIdAndIsDeletedFalse(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
@@ -139,28 +133,58 @@ public class PlaceSearchService {
                 .map(pb -> pb.getPlace().getId())
                 .collect(Collectors.toSet());
 
-        // 3. 밴드의 국가 설정에 따라 국내/해외 검색 분기 처리
-        if (band.isOverseas()) {
-            return searchOverseas(band, keyword, category, radiusMeters, myBookmarkPlaceIds);
-        } else {
-            return searchDomestic(band, category, radiusMeters, myBookmarkPlaceIds);
-        }
+        // 3. 국내/해외 모두 Google Places Text Search 사용
+        return searchWithGoogle(band, keyword, category, myBookmarkPlaceIds);
     }
 
     /**
-     * 해외 장소 검색 (Google Places API 활용)
-     * - Text Search로 키워드 검색 후 서버 사이드에서 카테고리 필터링
-     * - includedTypes는 TextSearch API 미지원 (NearbySearch 전용) → 응답 후 필터링으로 처리
+     * 밴드 없이 위치 기반 숙소 검색 — 숙소 선택 등 밴드 생성 전 단계에서 사용.
+     * TextSearch + rectangle restriction(50km)으로 반경 밖 결과를 완전히 제외한다.
+     * keyword가 없으면 "hotel"로 기본 검색해 진입 시 숙소 목록을 자동 표시한다.
+     * 북마크 컨텍스트가 없으므로 isBookmarked는 항상 false.
+     *
+     * @param userId   요청 사용자 ID (인증 확인용)
+     * @param keyword  검색 키워드 (없으면 "hotel" 기본값으로 근처 숙소 목록 반환)
+     * @param lat      검색 중심 위도
+     * @param lng      검색 중심 경도
      */
-    private List<PlaceSearchResult> searchOverseas(Band band, String keyword,
-                                                    PlaceCategory category,
-                                                    double radiusMeters,
-                                                    Set<Long> myBookmarkPlaceIds) {
+    @Transactional
+    public List<PlaceSearchResult> searchPlacesForLocation(Long userId, String keyword, double lat, double lng) {
+        userRepository.findByIdAndIsDeletedFalse(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
+
+        String textQuery = (keyword != null && !keyword.isBlank()) ? keyword : "hotel";
+        NearbySearchResponse response = googlePlacesService.searchText(lat, lng, textQuery, "lodging");
+
+        if (response.places() == null || response.places().isEmpty()) {
+            return List.of();
+        }
+
+        List<PlaceSearchResult> results = new ArrayList<>();
+        for (NearbySearchResponse.Place gPlace : response.places()) {
+            try {
+                Place place = cacheGooglePlace(gPlace);
+                results.add(toSearchResult(place, Set.of()));
+            } catch (Exception e) {
+                log.warn("Google 장소 캐싱 실패 (externalId={}): {}", gPlace.id(), e.getMessage());
+            }
+        }
+        return results;
+    }
+
+    /**
+     * Google Places Text Search로 장소 검색 (국내/해외 공통)
+     * - keyword 필수, 없으면 BAD_REQUEST
+     * - 응답 후 서버 사이드에서 카테고리 필터링 (includedTypes는 TextSearch 미지원)
+     */
+    private List<PlaceSearchResult> searchWithGoogle(Band band, String keyword,
+                                                      PlaceCategory category,
+                                                      Set<Long> myBookmarkPlaceIds) {
         if (keyword == null || keyword.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "해외 장소 검색은 키워드가 필요합니다.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "장소 검색은 키워드가 필요합니다.");
         }
         NearbySearchResponse response = googlePlacesService.searchText(
-                band.getDestinationLat(), band.getDestinationLng(), keyword
+                band.getDestinationLat(), band.getDestinationLng(), keyword, null
         );
 
         if (response.places() == null || response.places().isEmpty()) {
@@ -178,35 +202,6 @@ public class PlaceSearchService {
                 results.add(toSearchResult(place, myBookmarkPlaceIds));
             } catch (Exception e) {
                 log.warn("Google 장소 캐싱 실패 (externalId={}): {}", gPlace.id(), e.getMessage());
-            }
-        }
-        return results;
-    }
-
-    /**
-     * 국내 장소 검색 (Kakao Local API 활용)
-     */
-    private List<PlaceSearchResult> searchDomestic(Band band, PlaceCategory category,
-                                                    double radiusMeters,
-                                                    Set<Long> myBookmarkPlaceIds) {
-        // 카카오 검색 호출
-        List<KakaoLocalSearchResponse.Document> docs = kakaoPlacesService.searchNearby(
-                band.getDestinationLat(), band.getDestinationLng(),
-                radiusMeters, category
-        );
-
-        if (docs == null || docs.isEmpty()) {
-            return List.of();
-        }
-
-        List<PlaceSearchResult> results = new ArrayList<>();
-        for (KakaoLocalSearchResponse.Document doc : docs) {
-            try {
-                // 검색된 장소를 DB에 캐싱하고 DTO로 변환
-                Place place = cacheKakaoPlace(doc, category);
-                results.add(toSearchResult(place, myBookmarkPlaceIds));
-            } catch (Exception e) {
-                log.warn("Kakao 장소 캐싱 실패 (externalId={}): {}", doc.id(), e.getMessage());
             }
         }
         return results;
@@ -236,33 +231,6 @@ public class PlaceSearchService {
                         PlaceApiSource.GOOGLE, gPlace.id(), name, category,
                         lat, lng, gPlace.formattedAddress(), rating,
                         thumbnailUrl, openingHoursJson, null
-                )));
-    }
-
-    /**
-     * 카카오 장소 정보를 데이터베이스에 저장(캐싱)한다.
-     */
-    private Place cacheKakaoPlace(KakaoLocalSearchResponse.Document doc, PlaceCategory requestedCategory) {
-        // 좌표 파싱 (카카오는 문자열로 반환함)
-        double lat = Double.parseDouble(doc.y());
-        double lng = Double.parseDouble(doc.x());
-        // 도로명 주소 우선, 없으면 지번 주소 사용
-        String address = (doc.roadAddressName() != null && !doc.roadAddressName().isEmpty())
-                ? doc.roadAddressName() : doc.addressName();
-
-        // 요청한 카테고리가 있으면 유지, 없으면 기타로 처리
-        PlaceCategory category = requestedCategory != null ? requestedCategory : PlaceCategory.ETC;
-
-        return placeRepository.findByApiSourceAndExternalId(PlaceApiSource.KAKAO, doc.id())
-                .map(existing -> {
-                    existing.syncMetadata(doc.placeName(), category, lat, lng,
-                            address, null, null, null, null);
-                    return placeRepository.save(existing);
-                })
-                .orElseGet(() -> placeRepository.save(Place.create(
-                        PlaceApiSource.KAKAO, doc.id(), doc.placeName(), category,
-                        lat, lng, address, null,
-                        null, null, null
                 )));
     }
 

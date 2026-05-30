@@ -102,25 +102,29 @@ public class GooglePlacesService {
     }
 
     /**
-     * 키워드 기반 텍스트 검색 (해외 장소 검색 전용)
-     * locationBias로 목적지 주변 결과를 우선하되, 엄격히 제한하지는 않는다.
-     * 카테고리 필터는 API 요청이 아닌 응답 결과에서 서버 측 필터링으로 처리한다.
-     * (includedTypes는 NearbySearch 전용 필드 — TextSearch 미지원)
+     * 키워드 기반 텍스트 검색.
      *
-     * @param lat       목적지 위도 (bias 중심)
-     * @param lng       목적지 경도 (bias 중심)
-     * @param textQuery 검색 키워드
+     * @param lat          목적지 위도
+     * @param lng          목적지 경도
+     * @param textQuery    검색 키워드
+     * @param includedType 포함할 장소 타입 (예: "lodging"). null이면 전체 타입 검색.
+     *                     null → locationBias(선호), non-null → locationRestriction(엄격 제한)
      */
-    public NearbySearchResponse searchText(double lat, double lng, String textQuery) {
+    public NearbySearchResponse searchText(double lat, double lng, String textQuery, String includedType) {
+        TextSearchRequest.LocationBias bias = null;
+        TextSearchRequest.LocationRestriction restriction = null;
+
+        if (includedType != null) {
+            // 숙소 등 타입 지정 검색: rectangle restriction으로 반경 밖 결과를 완전히 제외
+            restriction = buildRectangleRestriction(lat, lng, TEXT_SEARCH_BIAS_RADIUS_METERS);
+        } else {
+            bias = new TextSearchRequest.LocationBias(
+                    new TextSearchRequest.Circle(
+                            new TextSearchRequest.LatLng(lat, lng), TEXT_SEARCH_BIAS_RADIUS_METERS));
+        }
+
         TextSearchRequest body = new TextSearchRequest(
-                textQuery,
-                new TextSearchRequest.LocationBias(
-                        new TextSearchRequest.Circle(
-                                new TextSearchRequest.LatLng(lat, lng),
-                                TEXT_SEARCH_BIAS_RADIUS_METERS)),
-                MAX_RESULT_COUNT,
-                "ko"
-        );
+                textQuery, bias, restriction, MAX_RESULT_COUNT, "ko", includedType);
 
         HttpHeaders headers = buildHeaders();
         HttpEntity<TextSearchRequest> request = new HttpEntity<>(body, headers);
@@ -151,9 +155,11 @@ public class GooglePlacesService {
     public NearbySearchResponse searchDestination(String textQuery) {
         TextSearchRequest body = new TextSearchRequest(
                 textQuery,
-                null,
+                null,   // locationBias — 글로벌 검색이므로 위치 편향 없음
+                null,   // locationRestriction — 반경 제한 없음
                 5,
-                "ko"
+                "ko",
+                null    // includedType — 도시/여행지 검색이므로 타입 제한 없음
         );
 
         HttpHeaders headers = new HttpHeaders();
@@ -190,6 +196,21 @@ public class GooglePlacesService {
     public String buildPhotoUrl(String photoName) {
         return properties.placesBaseUrl() + "/v1/" + photoName
                 + "/media?maxHeightPx=400&maxWidthPx=400&key=" + properties.apiKey();
+    }
+
+    /**
+     * 중심 좌표와 반경(미터)으로 rectangle restriction을 계산한다.
+     * 위도 1도 ≈ 111km, 경도 1도 ≈ 111km * cos(위도) 공식 적용.
+     */
+    private TextSearchRequest.LocationRestriction buildRectangleRestriction(double lat, double lng, double radiusMeters) {
+        double latOffset = radiusMeters / 111_000.0;
+        double lngOffset = radiusMeters / (111_000.0 * Math.cos(Math.toRadians(lat)));
+        return new TextSearchRequest.LocationRestriction(
+                new TextSearchRequest.Rectangle(
+                        new TextSearchRequest.LatLng(lat - latOffset, lng - lngOffset),
+                        new TextSearchRequest.LatLng(lat + latOffset, lng + lngOffset)
+                )
+        );
     }
 
     /**

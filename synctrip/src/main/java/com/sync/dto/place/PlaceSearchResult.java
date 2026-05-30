@@ -17,15 +17,14 @@ import com.sync.domain.place.PlaceCategory;
  *
  * 흐름:
  * 1. PlaceSearchService.searchPlaces() 호출
- * 2. API(Google 또는 Kakao)에서 검색
+ * 2. Google Places Text Search로 검색 (국내/해외 공통)
  * 3. 결과를 Place 엔티티로 캐싱
  * 4. 이 DTO로 변환해서 모바일 앱에 반환
  */
 public record PlaceSearchResult(
         // 백엔드 places 테이블의 primary key
         Long placeId,
-        // 출처 (KAKAO 또는 GOOGLE)
-        // 국내 여행이면 KAKAO, 해외 여행이면 GOOGLE
+        // 출처 (현재 항상 GOOGLE — 국내/해외 모두 Google Places)
         PlaceApiSource apiSource,
         // 출처별 외부 ID (Kakao ID 또는 Google Place ID)
         // 같은 출처로 재검색하면 중복 저장 방지하는 키
@@ -40,7 +39,7 @@ public record PlaceSearchResult(
         double longitude,
         // 주소 (도로명 또는 지번)
         String address,
-        // 평점 (Google: 1~5, Kakao: 없을 수 있음)
+        // 평점 (Google: 1~5, 없는 경우 null)
         Float rating,
         // 썸네일 이미지 URL
         String thumbnailUrl,

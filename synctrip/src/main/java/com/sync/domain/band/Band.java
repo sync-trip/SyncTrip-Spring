@@ -26,7 +26,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 @Entity
 @Table(name = "user_groups")
 public class Band {
-    private static final long INVITE_CODE_TTL_SECONDS = 30;
+    private static final long INVITE_CODE_TTL_SECONDS = 86400;  // 24 시간
     private static final int EDIT_LOCK_TIMEOUT_MINUTES = 5;
 
     @Id
@@ -84,7 +84,7 @@ public class Band {
     @Column(name = "accommodation_lng")
     private Double accommodationLng;
 
-    @Column(name = "thumbnail_url", length = 500)
+    @Column(name = "thumbnail_url", columnDefinition = "TEXT")
     private String thumbnailUrl; // 여행지 썸네일 이미지 URL (여행지 선택 시 수신, NULL 허용)
 
     @Enumerated(EnumType.STRING)
@@ -169,7 +169,7 @@ public class Band {
     }
 
     /**
-     * 초대 코드 재발급 및 만료 시간 갱신 (72시간 연장)
+     * 초대 코드 재발급 및 만료 시간 갱신 (24시간 연장)
      */
     public void reissueInviteCode() {
         this.inviteCode = generateInviteCode();
@@ -192,6 +192,17 @@ public class Band {
             throw new IllegalStateException("더 이상 진행할 수 없는 밴드 단계입니다.");
         }
         this.status = nextStatus;
+    }
+
+    /**
+     * 투표 취소 — VOTING → PLANNING 복원
+     * VoteScheduler에서 타임아웃 마감 실패 시 반복 오류 방지용
+     */
+    public void rollbackToPlanning() {
+        if (this.status != BandStatus.VOTING) {
+            throw new IllegalStateException("투표 상태(VOTING)에서만 복원 가능합니다.");
+        }
+        this.status = BandStatus.PLANNING;
     }
 
     /**
