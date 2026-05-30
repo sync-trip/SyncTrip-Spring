@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sync.domain.band.Band;
 import com.sync.domain.band.BandMember;
 import com.sync.domain.band.BandRole;
+import com.sync.domain.band.BandStatus;
 import com.sync.domain.place.Place;
 import com.sync.domain.place.PlaceApiSource;
 import com.sync.domain.place.PlaceCategory;
@@ -11,6 +12,7 @@ import com.sync.domain.schedule.Schedule;
 import com.sync.domain.schedule.ScheduleAlt;
 import com.sync.domain.user.User;
 import com.sync.dto.schedule.PlanBResponse;
+import com.sync.dto.schedule.ScheduleResponse;
 import com.sync.repository.BandMemberRepository;
 import com.sync.repository.BandRepository;
 import com.sync.repository.PlaceBookmarkRepository;
@@ -21,7 +23,9 @@ import com.sync.repository.UserRepository;
 import com.sync.repository.VoteRepository;
 import com.sync.service.HolidayService;
 import com.sync.service.NotificationService;
+import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.web.server.ResponseStatusException;
 import java.lang.reflect.Field;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -35,6 +39,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -304,11 +309,145 @@ class ScheduleServiceTest {
         return place;
     }
 
+    // ── DONE 편집 차단 (항목 3) ──────────────────────────────────────────────
+
+    @Test
+    void startEditing_DONE_상태면_409() {
+        User user = createUser(1L);
+        Band band = createBand(40L, false);
+        setField(band, "status", BandStatus.DONE);
+        BandMember member = BandMember.create(user, band, BandRole.MEMBER);
+        setId(member, 400L);
+
+        when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
+        when(bandRepository.findByIdAndIsDeletedFalse(40L)).thenReturn(Optional.of(band));
+        when(bandMemberRepository.findByBandIdAndUserId(40L, 1L)).thenReturn(Optional.of(member));
+
+        assertThatThrownBy(() -> scheduleService.startEditing(1L, 40L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
+                        .isEqualTo(HttpStatus.CONFLICT));
+    }
+
+    // ── joined_after_voting 편집 금지 (항목 4) ───────────────────────────────
+
+    @Test
+    void startEditing_joined_after_voting_멤버면_403() {
+        User user = createUser(1L);
+        Band band = createBand(41L, false);
+        BandMember member = BandMember.create(user, band, BandRole.MEMBER);
+        setId(member, 410L);
+        setField(member, "joinedAfterVoting", true);
+
+        when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
+        when(bandRepository.findByIdAndIsDeletedFalse(41L)).thenReturn(Optional.of(band));
+        when(bandMemberRepository.findByBandIdAndUserId(41L, 1L)).thenReturn(Optional.of(member));
+
+        assertThatThrownBy(() -> scheduleService.startEditing(1L, 41L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
+                        .isEqualTo(HttpStatus.FORBIDDEN));
+    }
+
+    // ── getSchedule canEdit (항목 5) ─────────────────────────────────────────
+
+    @Test
+    void getSchedule_DONE_밴드면_canEdit_false() {
+        User user = createUser(1L);
+        Band band = createBand(50L, false);
+        setField(band, "status", BandStatus.DONE);
+        BandMember member = BandMember.create(user, band, BandRole.MEMBER);
+        setId(member, 500L);
+
+        Place place = createPlace(5000L, "ext-p1", "Place", PlaceCategory.CULTURE, 37.5, 127.0, null);
+        Schedule schedule = Schedule.create(band, place, 1, 1, LocalTime.of(10, 0), 60, null,
+                false, false, false, false, false);
+        setId(schedule, 5001L);
+
+        when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
+        when(bandRepository.findByIdAndIsDeletedFalse(50L)).thenReturn(Optional.of(band));
+        when(bandMemberRepository.findByBandIdAndUserId(50L, 1L)).thenReturn(Optional.of(member));
+        when(scheduleRepository.findByBandIdOrderByDayNumberAscSlotOrderAsc(50L))
+                .thenReturn(List.of(schedule));
+
+        ScheduleResponse response = scheduleService.getSchedule(1L, 50L);
+
+        assertThat(response.canEdit()).isFalse();
+        assertThat(response.editingUserId()).isNull();
+    }
+
+    @Test
+    void getSchedule_joined_after_voting_멤버면_canEdit_false() {
+        User user = createUser(1L);
+        Band band = createBand(51L, false);
+        BandMember member = BandMember.create(user, band, BandRole.MEMBER);
+        setId(member, 510L);
+        setField(member, "joinedAfterVoting", true);
+
+        Place place = createPlace(5100L, "ext-p2", "Place2", PlaceCategory.CULTURE, 37.5, 127.0, null);
+        Schedule schedule = Schedule.create(band, place, 1, 1, LocalTime.of(10, 0), 60, null,
+                false, false, false, false, false);
+        setId(schedule, 5101L);
+
+        when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
+        when(bandRepository.findByIdAndIsDeletedFalse(51L)).thenReturn(Optional.of(band));
+        when(bandMemberRepository.findByBandIdAndUserId(51L, 1L)).thenReturn(Optional.of(member));
+        when(scheduleRepository.findByBandIdOrderByDayNumberAscSlotOrderAsc(51L))
+                .thenReturn(List.of(schedule));
+
+        ScheduleResponse response = scheduleService.getSchedule(1L, 51L);
+
+        assertThat(response.canEdit()).isFalse();
+    }
+
+    @Test
+    void getSchedule_편집락_없고_일반_멤버면_canEdit_true() {
+        User user = createUser(1L);
+        Band band = createBand(52L, false);  // 기본 status=PLANNING
+        BandMember member = BandMember.create(user, band, BandRole.MEMBER);
+        setId(member, 520L);
+
+        Place place = createPlace(5200L, "ext-p3", "Place3", PlaceCategory.CULTURE, 37.5, 127.0, null);
+        Schedule schedule = Schedule.create(band, place, 1, 1, LocalTime.of(10, 0), 60, null,
+                false, false, false, false, false);
+        setId(schedule, 5201L);
+
+        when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
+        when(bandRepository.findByIdAndIsDeletedFalse(52L)).thenReturn(Optional.of(band));
+        when(bandMemberRepository.findByBandIdAndUserId(52L, 1L)).thenReturn(Optional.of(member));
+        when(scheduleRepository.findByBandIdOrderByDayNumberAscSlotOrderAsc(52L))
+                .thenReturn(List.of(schedule));
+
+        ScheduleResponse response = scheduleService.getSchedule(1L, 52L);
+
+        assertThat(response.canEdit()).isTrue();
+        assertThat(response.editingUserId()).isNull();
+        assertThat(response.editingUserName()).isNull();
+    }
+
+    // ── 공통 헬퍼 ─────────────────────────────────────────────────────────────
+
     private void setId(Object target, Long id) {
+        setField(target, "id", id);
+    }
+
+    /** 클래스 계층을 순회하며 필드를 찾아 값을 설정한다. */
+    private void setField(Object target, String fieldName, Object value) {
         try {
-            Field field = target.getClass().getDeclaredField("id");
-            field.setAccessible(true);
-            field.set(target, id);
+            Class<?> clazz = target.getClass();
+            while (clazz != null) {
+                try {
+                    Field field = clazz.getDeclaredField(fieldName);
+                    field.setAccessible(true);
+                    field.set(target, value);
+                    return;
+                } catch (NoSuchFieldException e) {
+                    clazz = clazz.getSuperclass();
+                }
+            }
+            throw new RuntimeException("Field not found: " + fieldName);
+        } catch (RuntimeException e) {
+            throw e;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

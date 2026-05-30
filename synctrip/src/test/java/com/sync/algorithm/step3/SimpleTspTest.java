@@ -436,4 +436,66 @@ class SimpleTspTest {
         DaySchedule day = run(List.of(new DayGroup(1, List.of(p)))).daySchedules().get(0);
         assertThat(day.dayOverloaded()).isFalse();
     }
+
+    // ── 숙소 출발점 (항목 1) ─────────────────────────────────────────────────
+
+    @Test
+    void 숙소_좌표_지정_시_첫_노드가_숙소_최근접_비FOOD_장소() {
+        // p1(lng=127.0), p2(lng=127.05), p3(lng=127.2)
+        // 숙소: lng=127.06 → p2와 가장 가까움 (haversine 최소)
+        AssignedPlace p1 = ap(1, PlaceCategory.CULTURE, 37.5, 127.0,  60);
+        AssignedPlace p2 = ap(2, PlaceCategory.CULTURE, 37.5, 127.05, 60);
+        AssignedPlace p3 = ap(3, PlaceCategory.CULTURE, 37.5, 127.2,  60);
+
+        Step2Result step2 = new Step2Result(
+                List.of(new DayGroup(1, List.of(p1, p2, p3))), List.of());
+        Step3Result result = SimpleTsp.schedule(
+                new Step3Input(step2, false, SimpleTsp.DEFAULT_DAY_START, Map.of(),
+                        TravelStyle.RELAXED, 37.5, 127.06));
+
+        assertThat(result.daySchedules().get(0).places().get(0).placeId()).isEqualTo(2L);
+    }
+
+    @Test
+    void 숙소_null이면_기존_동작_유지_첫_우선순위_장소_출발() {
+        AssignedPlace p1 = ap(1, PlaceCategory.CULTURE, 37.5, 127.0,  60);
+        AssignedPlace p2 = ap(2, PlaceCategory.CULTURE, 37.5, 127.05, 60);
+        AssignedPlace p3 = ap(3, PlaceCategory.CULTURE, 37.5, 127.2,  60);
+
+        Step2Result step2 = new Step2Result(
+                List.of(new DayGroup(1, List.of(p1, p2, p3))), List.of());
+
+        // null → 입력 순서 첫 번째(placeId=1) 출발 (현행 동작)
+        Step3Result withNull = SimpleTsp.schedule(
+                new Step3Input(step2, false, SimpleTsp.DEFAULT_DAY_START, Map.of(),
+                        TravelStyle.RELAXED, null, null));
+        // 숙소 지정 → 최근접 장소(placeId=2)가 첫 노드
+        Step3Result withAccomm = SimpleTsp.schedule(
+                new Step3Input(step2, false, SimpleTsp.DEFAULT_DAY_START, Map.of(),
+                        TravelStyle.RELAXED, 37.5, 127.06));
+
+        assertThat(withNull.daySchedules().get(0).places().get(0).placeId()).isEqualTo(1L);
+        assertThat(withAccomm.daySchedules().get(0).places().get(0).placeId()).isEqualTo(2L);
+    }
+
+    @Test
+    void 숙소_있으면_첫_슬롯_startTime이_숙소_이동시간만큼_지연됨() {
+        // 숙소 좌표 = 장소 좌표 → haversine≈0 → MIN_TRAVEL_MINUTES(3분) 적용
+        AssignedPlace p = ap(1, PlaceCategory.CULTURE, 0.0, 0.0, 60);
+        Step2Result step2 = new Step2Result(List.of(new DayGroup(1, List.of(p))), List.of());
+
+        Step3Result withAccomm = SimpleTsp.schedule(
+                new Step3Input(step2, false, SimpleTsp.DEFAULT_DAY_START, Map.of(),
+                        TravelStyle.RELAXED, 0.0, 0.0));
+        Step3Result withoutAccomm = SimpleTsp.schedule(
+                new Step3Input(step2, false, SimpleTsp.DEFAULT_DAY_START, Map.of(),
+                        TravelStyle.RELAXED, null, null));
+
+        // 숙소 있음: 09:00 + 3분(최소 이동시간) = 09:03
+        assertThat(withAccomm.daySchedules().get(0).places().get(0).startTime())
+                .isEqualTo(LocalTime.of(9, 3));
+        // 숙소 없음: 09:00 그대로 (현행)
+        assertThat(withoutAccomm.daySchedules().get(0).places().get(0).startTime())
+                .isEqualTo(LocalTime.of(9, 0));
+    }
 }
