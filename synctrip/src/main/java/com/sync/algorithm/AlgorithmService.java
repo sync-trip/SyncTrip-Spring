@@ -19,7 +19,7 @@ import com.sync.algorithm.step3.Step3Result;
  *
  * 핵심 규칙:
  * - 순수 함수 — DB 접근 없음 (DB 작업은 호출하는 서비스 레이어에서 수행)
- * - K-Means 재실행 금지 — compute() 호출은 최초 1회, 슬롯 교체는 PlanBRecommender 사용
+ * - K-Means 재실행 금지 — compute() 호출은 최초 1회, 슬롯 교체는 ScheduleService.getPlanBRecommendations() 사용
  */
 public final class AlgorithmService {
 
@@ -40,7 +40,8 @@ public final class AlgorithmService {
                 s2out,
                 input.group().isOverseas(),
                 input.dayStartTime(),
-                input.openingHoursById());
+                input.openingHoursById(),
+                input.group().travelStyle());  // 식사 윈도우 결정용 [작업1]
         Step3Result s3out = SimpleTsp.schedule(s3in);
 
         return new AlgorithmResult(s3out, s1out);

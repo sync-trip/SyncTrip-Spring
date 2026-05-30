@@ -1,8 +1,5 @@
 package com.sync.algorithm;
 
-import com.sync.algorithm.planb.PlanBCandidate;
-import com.sync.algorithm.planb.PlanBInput;
-import com.sync.algorithm.planb.PlanBRecommender;
 import com.sync.algorithm.step1.AltPoolPlace;
 import com.sync.algorithm.step1.GroupInfo;
 import com.sync.algorithm.step1.MainPoolPlace;
@@ -254,38 +251,6 @@ class TokyoTripResultOutputTest {
         }
         hr();
 
-        // ── 표5: Plan B 추천 ─────────────────────────────────────────────
-        System.out.println();
-        System.out.println("  [표5] Plan B — '라멘 이치란 신주쿠' 대체 장소 추천");
-        System.out.println("  ※ 같은 카테고리(FOOD), 대상 장소에서 1km 이내 후보");
-        hr();
-        System.out.printf("  %-4s  %-20s  %-8s  %8s  %8s  %6s%n",
-            "순위", "장소명", "카테고리", "추천점수", "거리(km)", "출처");
-        hr();
-
-        PlanBInput planBInput = new PlanBInput(
-            result.step3Result(),
-            result.step1Result().altPool(),
-            new ArrayList<>(PLACE_MAP.values()),
-            P_RAMEN);
-        List<PlanBCandidate> recs = PlanBRecommender.recommend(planBInput).recommendations();
-
-        if (recs.isEmpty()) {
-            System.out.println("  추천 후보 없음");
-        } else {
-            int i = 1;
-            for (PlanBCandidate c : recs) {
-                System.out.printf("  %-4d  %-20s  %-8s  %8.4f  %8.3f  %6s%n",
-                    i++,
-                    name(c.placeId()),
-                    c.category().name(),
-                    c.recommendScore(),
-                    c.distanceKmToTarget(),
-                    c.fromOverflow() ? "overflow" : "altPool");
-            }
-        }
-        hr();
-
         // ── 요약 통계 ─────────────────────────────────────────────────────
         System.out.println();
         System.out.println("  [요약]");
@@ -295,7 +260,6 @@ class TokyoTripResultOutputTest {
         System.out.printf("  ∙ altPool 장소 수       : %d개%n", result.step1Result().altPool().size());
         System.out.printf("  ∙ 총 배정 장소 수       : %d개%n", total);
         System.out.printf("  ∙ overflow (미배정)     : %d개%n", overflow.size());
-        System.out.printf("  ∙ Plan B 추천 후보      : %d개%n", recs.size());
         long outliers = result.step3Result().daySchedules().stream()
             .flatMap(d -> d.places().stream())
             .filter(ScheduledPlace::isOutlierCandidate).count();

@@ -1,9 +1,5 @@
 package com.sync.algorithm;
 
-import com.sync.algorithm.planb.PlanBCandidate;
-import com.sync.algorithm.planb.PlanBInput;
-import com.sync.algorithm.planb.PlanBRecommender;
-import com.sync.algorithm.planb.PlanBResult;
 import com.sync.algorithm.step1.GroupInfo;
 import com.sync.algorithm.step1.MemberInfo;
 import com.sync.algorithm.step1.PlaceInfo;
@@ -42,7 +38,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   6) 해외 영업시간 체크 (openingHoursViolation 필드 비정상 예외 없음)
  *   7) 결정론성 (동일 입력 → 동일 출력)
  *   8) 투표 기반 풀 분류 (mainPool/altPool 경계 정확성)
- *   9) Plan B 추천 (altPool 후보가 같은 카테고리·1km 이내로 추천됨)
  */
 class TokyoTripScenarioTest {
 
@@ -406,60 +401,7 @@ class TokyoTripScenarioTest {
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    // Test 9: Plan B 추천 — 라멘 대체 장소로 이자카야 추천
-    //         P_RAMEN(라멘 이치란 신주쿠)을 교체할 때 FOOD 카테고리의
-    //         P_IZAKAYA(이자카야 신주쿠, ~0.2km)가 추천되어야 함
-    // ══════════════════════════════════════════════════════════════════════
-
-    @Test
-    void PlanB_라멘_대체장소_이자카야_추천() {
-        AlgorithmResult result = AlgorithmService.compute(buildTokyoInput());
-
-        // P_RAMEN이 스케줄에 포함되었는지 확인
-        boolean ramenScheduled = result.step3Result().daySchedules().stream()
-            .flatMap(d -> d.places().stream())
-            .anyMatch(sp -> sp.placeId() == P_RAMEN);
-        assertThat(ramenScheduled)
-            .as("P_RAMEN은 4명 all-LIKE이므로 반드시 스케줄에 포함되어야 함")
-            .isTrue();
-
-        // PlanB 실행: 라멘 → 대체 장소 추천
-        PlanBInput planBInput = new PlanBInput(
-            result.step3Result(),
-            result.step1Result().altPool(),
-            buildPlaces(),
-            P_RAMEN
-        );
-        PlanBResult planBResult = PlanBRecommender.recommend(planBInput);
-
-        List<PlanBCandidate> recs = planBResult.recommendations();
-        assertThat(recs).as("P_RAMEN 대체 후보가 존재해야 함 (P_IZAKAYA가 altPool FOOD, ~0.2km 이내)").isNotEmpty();
-
-        // 모든 추천은 같은 카테고리(FOOD)여야 함
-        assertThat(recs).extracting(PlanBCandidate::category)
-            .as("PlanB 추천 장소는 교체 대상(FOOD)과 같은 카테고리여야 함")
-            .allMatch(c -> c == PlaceCategory.FOOD);
-
-        // 모든 추천은 1km 이내여야 함
-        assertThat(recs).extracting(PlanBCandidate::distanceKmToTarget)
-            .as("PlanB 추천 장소는 교체 대상에서 1km 이내여야 함")
-            .allMatch(d -> d <= 1.0);
-
-        // 이자카야(P_IZAKAYA)가 추천 목록에 포함되어야 함 (altPool, ~0.2km, FOOD)
-        assertThat(recs).extracting(PlanBCandidate::placeId)
-            .as("P_IZAKAYA(이자카야)가 추천 목록에 있어야 함: altPool FOOD, P_RAMEN에서 ~0.2km")
-            .contains(P_IZAKAYA);
-
-        // 추천 점수 순으로 정렬되어 있어야 함 (내림차순)
-        for (int i = 1; i < recs.size(); i++) {
-            assertThat(recs.get(i).recommendScore())
-                .as("PlanB 추천은 점수 내림차순으로 정렬되어야 함")
-                .isLessThanOrEqualTo(recs.get(i - 1).recommendScore());
-        }
-    }
-
-    // ══════════════════════════════════════════════════════════════════════
-    // Test 10: 각 일차 orderInDay 순서 일관성 — 1부터 연속 증가
+    // Test 9: 각 일차 orderInDay 순서 일관성 — 1부터 연속 증가
     // ══════════════════════════════════════════════════════════════════════
 
     @Test

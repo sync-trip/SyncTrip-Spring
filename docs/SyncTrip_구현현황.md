@@ -78,12 +78,12 @@
 |---|---|---|---|---|
 | Step 1 | Weighted Cost Function | ✅ 구현 | 2026-05-17 | `algorithm/step1/WeightedCostFunction.java` |
 | Step 2 | K-Means Clustering | ✅ 구현 | 2026-05-17 | `algorithm/step2/KMeansClustering.java` |
-| Step 3 | Simple Order & Time TSP | ✅ 구현 | 2026-05-17 | `algorithm/step3/SimpleTsp.java` |
-| Plan B | 폭포수 반경 검색 (Stage0: 1km, Stage1: 2km, Stage2: 3km) | ✅ 구현 | 2026-05-19 ~ 05-21 | `algorithm/planb/PlanBRecommender.java` (순수 함수) + `ScheduleService.getPlanBRecommendations()` (서비스 인라인 구현) | 최대 7개 추천 / 카테고리 동일 교체 / 영업시간 체크(해외) |
+| Step 3 | Simple Order & Time TSP + FOOD 시간 윈도우 끼워넣기 (FIX-47) | ✅ 구현 | 2026-05-17 → 2026-05-30 | `algorithm/step3/SimpleTsp.java` | 비FOOD NN 후 FOOD를 점심(PACKED)/저녁 윈도우에 삽입. 경고 배지 3종(mealWindowViolation/lateSchedule/openingHoursUnverified) + DAY_OVERLOADED 추가. 이동시간 최소 3분 하한 적용. |
+| Plan B | `ScheduleService.getPlanBRecommendations()` — DB(ScheduleAlt) 기반 / CULTURE↔NATURE 호환 그룹 / priorityScore 정규화 | ✅ 구현 | 2026-05-19 → 2026-05-30 | `service/ScheduleService.java` | 최대 7개 / 1km→2km→3km 3단계 반경 확장 / 카테고리 호환 그룹(CULTURE↔NATURE 허용) / priorityScore [-1.0,1.4] → [0,1] 정규화 후 60/40 가중합 / 해외 밴드 영업시간 검증 포함 |
 | 파이프라인 | Step1→2→3 통합 진입점 | ✅ 구현 | 2026-05-17 | `algorithm/AlgorithmService.java` |
 
 > 알고리즘 함수 전체가 순수 함수 (DB 접근 없음). 서비스 레이어(`ScheduleService`)에서 입력 조립 후 호출.
-> ⚠️ 주의: `PlanBRecommender.java`(알고리즘 패키지)는 단위 테스트에서만 사용됨. 실제 API는 `ScheduleService` 내부에 인라인 구현(`PLAN_B_MAX_RECOMMENDATIONS = 7`)으로 동작함.
+> Plan B 추천은 DB(ScheduleAlt 테이블) 기반이므로 서비스 레이어에서 직접 구현. `algorithm/planb/` 패키지는 2026-05-30 제거됨.
 
 ---
 
@@ -276,7 +276,9 @@
 | 2026-05-26 | 죽은 코드 및 주석 정리: `radiusMeters` 파라미터 전체 제거(`PlaceController`, `PlaceSearchService`, `PlaceSearchServiceTest`, Android `SyncTripApiService`, `BandRepository`). `DEFAULT_RADIUS_METERS` 상수 제거. `KakaoProperties`, `KakaoLocalSearchResponse`, `PlaceSearchResult` 주석 최신화. CLAUDE.md 절대 규칙 5 수정("국내는 opening_hours=NULL" → isOverseas 기반 빈 맵 전달로 정정). Android `NavGraph.kt` `onSearch` / `onCategoryChange` keyword 빈 값 가드 추가. |
 | 2026-05-26 | VoteScheduler 반복 실패 수정: 장바구니 없는 밴드가 VOTING 상태일 때 1분마다 마감 실패 로그 반복 → 실패 시 `BandService.rollbackVotingToPlanning()`으로 PLANNING 복원. `Band.rollbackToPlanning()` 추가. `VoteService.java` `Comparator` import 누락 버그 수정. |
 | 2026-05-26 | FCM data 페이로드 추가 → 멤버 합류·장바구니 변경 즉시 반영: `FcmService.send()` data 오버로드 추가, `NotificationService.buildData()` bandId+type 전달. Android `SyncTripApplication` bandRefreshFlow SharedFlow 추가, `SyncTripFirebaseService` data 수신 시 emitBandRefresh, `NavGraph` tripLobby에서 collect해 loadMembers/loadPicks 즉시 호출. |
+| 2026-05-30 | 알고리즘 코드 리뷰 반영 6개 항목 구현: (1) FOOD 시간 윈도우 끼워넣기 FIX-47 — 비FOOD NN 후 PACKED:점심+저녁/RELAXED:저녁 윈도우에 FOOD 삽입; (2) 경고 배지 3종 — mealWindowViolation/lateSchedule/openingHoursUnverified; (3) DAY_OVERLOADED 경고 — 마지막 슬롯 endTime > 22:00; (4) 이동시간 MIN_TRAVEL_MINUTES=3 하한; (5) PlanB priorityScore [-1.0,1.4]→[0,1] 정규화; (6) PlanB CULTURE↔NATURE 호환 그룹 + 2km fallback. |
+| 2026-05-30 | PlanB 이중 구현 통합: `algorithm/planb/` 패키지 전체 삭제(PlanBRecommender/PlanBInput/PlanBResult/PlanBCandidate), `ScheduleService.getPlanBRecommendations()`에 점수 정규화·CULTURE↔NATURE 카테고리 호환 반영. 관련 테스트(PlanBRecommenderTest, TokyoTripScenarioTest PlanB 케이스, TokyoTripResultOutputTest 표5) 정리. |
 
 ---
 
-**마지막 수정:** 2026-05-26 (VoteScheduler 반복 실패 수정, FCM data 페이로드 즉시 갱신 추가) | **최신 DDL:** `SyncTrip_DDL_v12.sql`
+**마지막 수정:** 2026-05-30 (PlanB 이중 구현 통합 정리) | **최신 DDL:** `SyncTrip_DDL_v12.sql`

@@ -1,6 +1,7 @@
 package com.sync.algorithm.step3;
 
 import com.sync.algorithm.PlaceCategory;
+import com.sync.algorithm.TravelStyle;
 import com.sync.algorithm.step1.MainPoolPlace;
 import com.sync.algorithm.step2.AssignedPlace;
 import com.sync.algorithm.step2.DayGroup;
@@ -17,7 +18,7 @@ class SimpleTspTest {
 
     // ── 헬퍼 ────────────────────────────────────────────────────────────
 
-    /** day=1, isOutlier=false 고정 */
+    /** day=1, category=CULTURE, isOutlier=false 고정 */
     private AssignedPlace ap(long id, double lat, double lng, int duration) {
         return new AssignedPlace(id, 1, PlaceCategory.CULTURE, lat, lng, duration, 1.0 / id, false);
     }
@@ -29,7 +30,7 @@ class SimpleTspTest {
     private Step3Result run(List<DayGroup> days, boolean isOverseas,
                              LocalTime start, Map<Long, OpeningHours> hours) {
         Step2Result step2 = new Step2Result(days, List.of());
-        return SimpleTsp.schedule(new Step3Input(step2, isOverseas, start, hours));
+        return SimpleTsp.schedule(new Step3Input(step2, isOverseas, start, hours, TravelStyle.RELAXED));
     }
 
     private Step3Result run(List<DayGroup> days) {
@@ -120,10 +121,11 @@ class SimpleTspTest {
     // ── 시간 할당 연쇄 ───────────────────────────────────────────────────
 
     @Test
-    void 시간_할당이_이전_종료_시간을_시작_시간으로_연결() {
+    void 시간_할당이_MIN_TRAVEL_MINUTES를_포함해_순서대로_연결됨() {
+        // 동일 좌표(0,0) 3개 → 거리 0km → travelMinutes = max(3, 0) = 3분
         AssignedPlace p1 = ap(1, 0.0, 0.0, 60);   // 09:00 ~ 10:00
-        AssignedPlace p2 = ap(2, 0.0, 0.0, 90);   // 10:00 ~ 11:30
-        AssignedPlace p3 = ap(3, 0.0, 0.0, 30);   // 11:30 ~ 12:00
+        AssignedPlace p2 = ap(2, 0.0, 0.0, 90);   // 10:03 ~ 11:33 (3분 이동)
+        AssignedPlace p3 = ap(3, 0.0, 0.0, 30);   // 11:36 ~ 12:06 (3분 이동)
         List<DayGroup> days = List.of(new DayGroup(1, List.of(p1, p2, p3)));
 
         Step3Result result = run(days);
@@ -131,10 +133,10 @@ class SimpleTspTest {
         List<ScheduledPlace> places = result.daySchedules().get(0).places();
         assertThat(places.get(0).startTime()).isEqualTo(LocalTime.of(9,  0));
         assertThat(places.get(0).endTime())  .isEqualTo(LocalTime.of(10, 0));
-        assertThat(places.get(1).startTime()).isEqualTo(LocalTime.of(10, 0));
-        assertThat(places.get(1).endTime())  .isEqualTo(LocalTime.of(11, 30));
-        assertThat(places.get(2).startTime()).isEqualTo(LocalTime.of(11, 30));
-        assertThat(places.get(2).endTime())  .isEqualTo(LocalTime.of(12, 0));
+        assertThat(places.get(1).startTime()).isEqualTo(LocalTime.of(10, 3));
+        assertThat(places.get(1).endTime())  .isEqualTo(LocalTime.of(11, 33));
+        assertThat(places.get(2).startTime()).isEqualTo(LocalTime.of(11, 36));
+        assertThat(places.get(2).endTime())  .isEqualTo(LocalTime.of(12, 6));
     }
 
     @Test
@@ -153,7 +155,8 @@ class SimpleTspTest {
     void dayStartTime_null이면_기본값_09시_적용() {
         AssignedPlace p = ap(1, 0.0, 0.0, 60);
         Step2Result step2 = new Step2Result(List.of(new DayGroup(1, List.of(p))), List.of());
-        Step3Result result = SimpleTsp.schedule(new Step3Input(step2, false, null, Map.of()));
+        Step3Result result = SimpleTsp.schedule(
+                new Step3Input(step2, false, null, Map.of(), TravelStyle.RELAXED));
 
         assertThat(result.daySchedules().get(0).places().get(0).startTime())
                 .isEqualTo(LocalTime.of(9, 0));
@@ -221,16 +224,16 @@ class SimpleTspTest {
     }
 
     @Test
-    void 해외라도_영업시간_데이터_없으면_violation_false() {
+    void 해외라도_영업시간_데이터_없으면_violation_false_but_unverified_true() {
         AssignedPlace p = ap(1, 0.0, 0.0, 60);
 
-        // 장소 1의 영업시간 데이터 없음
         Step3Result result = run(
                 List.of(new DayGroup(1, List.of(p))),
                 true, SimpleTsp.DEFAULT_DAY_START, Map.of());
 
-        assertThat(result.daySchedules().get(0).places().get(0).openingHoursViolation())
-                .isFalse();
+        ScheduledPlace sp = result.daySchedules().get(0).places().get(0);
+        assertThat(sp.openingHoursViolation()).isFalse();
+        assertThat(sp.openingHoursUnverified()).isTrue();  // 해외+데이터 없음 → unverified
     }
 
     @Test
@@ -322,7 +325,7 @@ class SimpleTspTest {
         );
 
         Step3Result result = SimpleTsp.schedule(
-                new Step3Input(step2, false, SimpleTsp.DEFAULT_DAY_START, Map.of()));
+                new Step3Input(step2, false, SimpleTsp.DEFAULT_DAY_START, Map.of(), TravelStyle.RELAXED));
 
         assertThat(result.overflow()).hasSize(1);
         assertThat(result.overflow().get(0).placeId()).isEqualTo(99L);
@@ -342,5 +345,95 @@ class SimpleTspTest {
         Step3Result r2 = run(days);
 
         assertThat(r1.daySchedules()).isEqualTo(r2.daySchedules());
+    }
+
+    // ── FOOD 윈도우 끼워넣기 (FIX-47) ──────────────────────────────────
+
+    @Test
+    void RELAXED_FOOD_한_개가_저녁_윈도우_전에_비FOOD들이_오면_끝에_배치됨() {
+        // 비FOOD 2개가 09:00 시작이므로 저녁 윈도우(17:00) 이전에 모두 도착
+        // → insertIdx = combined.size() = 2 (맨 끝)
+        AssignedPlace nonFood1 = ap(1, PlaceCategory.CULTURE, 37.5, 127.0, 60);
+        AssignedPlace nonFood2 = ap(2, PlaceCategory.CULTURE, 37.5, 127.1, 60);
+        AssignedPlace food     = ap(3, PlaceCategory.FOOD,    37.5, 127.05, 60);
+
+        List<DayGroup> days = List.of(new DayGroup(1, List.of(nonFood1, nonFood2, food)));
+        Step3Result result = run(days, false, SimpleTsp.DEFAULT_DAY_START, Map.of());
+
+        List<ScheduledPlace> places = result.daySchedules().get(0).places();
+        assertThat(places).hasSize(3);
+        // FOOD가 비FOOD 2개 뒤에 배치됨
+        assertThat(places.get(2).category()).isEqualTo(PlaceCategory.FOOD);
+    }
+
+    @Test
+    void FOOD_없는_일차에_FOOD_윈도우_로직_영향_없음() {
+        // 비FOOD만 있을 때 종전 NN TSP 동작과 동일
+        AssignedPlace p1 = ap(1, PlaceCategory.CULTURE,  37.5, 127.0, 60);
+        AssignedPlace p2 = ap(2, PlaceCategory.ACTIVITY, 37.5, 127.1, 60);
+
+        List<DayGroup> days = List.of(new DayGroup(1, List.of(p1, p2)));
+        List<ScheduledPlace> places = run(days).daySchedules().get(0).places();
+
+        assertThat(places).hasSize(2);
+        assertThat(places.get(0).placeId()).isEqualTo(1L);
+    }
+
+    // ── 경고 배지 [작업2] ─────────────────────────────────────────────────
+
+    @Test
+    void FOOD_슬롯이_식사_윈도우_밖이면_mealWindowViolation_true() {
+        // RELAXED, FOOD가 09:00에 배치 → 저녁 윈도우(17:00~20:00) 밖
+        AssignedPlace food = ap(1, PlaceCategory.FOOD, 37.5, 127.0, 60);
+        List<DayGroup> days = List.of(new DayGroup(1, List.of(food)));
+        Step3Result result = run(days, false, SimpleTsp.DEFAULT_DAY_START, Map.of());
+
+        ScheduledPlace sp = result.daySchedules().get(0).places().get(0);
+        assertThat(sp.mealWindowViolation()).isTrue();
+    }
+
+    @Test
+    void 비FOOD_슬롯은_mealWindowViolation_항상_false() {
+        AssignedPlace p = ap(1, PlaceCategory.CULTURE, 37.5, 127.0, 60);
+        ScheduledPlace sp = run(List.of(new DayGroup(1, List.of(p))))
+                .daySchedules().get(0).places().get(0);
+        assertThat(sp.mealWindowViolation()).isFalse();
+    }
+
+    @Test
+    void lateSchedule_22시_이후_시작이면_true() {
+        // 22:00 이후에 시작하는 슬롯 생성: 21:00 시작 + 60분 체류 후 다음 슬롯 = 22:03
+        AssignedPlace p1 = ap(1, PlaceCategory.CULTURE, 37.5, 127.0, 60);
+        AssignedPlace p2 = ap(2, PlaceCategory.CULTURE, 37.5, 127.0, 60);
+
+        // 21:03에 시작하도록 커스텀 dayStart 조정: 넉넉하게 dayStart=21:00으로 설정
+        List<DayGroup> days = List.of(new DayGroup(1, List.of(p1, p2)));
+        Step3Result result = run(days, false, LocalTime.of(21, 0), Map.of());
+
+        List<ScheduledPlace> places = result.daySchedules().get(0).places();
+        // p1: 21:00~22:00 → lateSchedule=false (21시)
+        assertThat(places.get(0).lateSchedule()).isFalse();
+        // p2: 22:03~23:03 → lateSchedule=true
+        assertThat(places.get(1).lateSchedule()).isTrue();
+    }
+
+    @Test
+    void DAY_OVERLOADED_마지막_슬롯이_22시_초과면_true() {
+        // p1(21:00 start) + p2(22:03 start+60min end=23:03) → dayOverloaded=true
+        AssignedPlace p1 = ap(1, PlaceCategory.CULTURE, 37.5, 127.0, 60);
+        AssignedPlace p2 = ap(2, PlaceCategory.CULTURE, 37.5, 127.0, 60);
+        List<DayGroup> days = List.of(new DayGroup(1, List.of(p1, p2)));
+
+        DaySchedule day = run(days, false, LocalTime.of(21, 0), Map.of())
+                .daySchedules().get(0);
+
+        assertThat(day.dayOverloaded()).isTrue();
+    }
+
+    @Test
+    void DAY_OVERLOADED_22시_이전에_끝나면_false() {
+        AssignedPlace p = ap(1, PlaceCategory.CULTURE, 37.5, 127.0, 60);
+        DaySchedule day = run(List.of(new DayGroup(1, List.of(p)))).daySchedules().get(0);
+        assertThat(day.dayOverloaded()).isFalse();
     }
 }

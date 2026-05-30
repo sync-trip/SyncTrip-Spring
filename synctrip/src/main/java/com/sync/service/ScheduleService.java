@@ -23,6 +23,7 @@ import com.sync.domain.band.BandMember;
 import com.sync.domain.band.BandStatus;
 import com.sync.domain.place.Place;
 import com.sync.domain.place.PlaceBookmark;
+import com.sync.domain.place.PlaceCategory;
 import com.sync.domain.schedule.Schedule;
 import com.sync.domain.schedule.ScheduleAlt;
 import com.sync.domain.user.User;
@@ -74,6 +75,9 @@ public class ScheduleService {
     private static final int PLAN_B_MAX_RECOMMENDATIONS = 7;
     /* 추천 후보에 포함되기 위한 최소 우선순위 점수 (0.3 이상) */
     private static final double PLAN_B_MIN_PRIORITY_SCORE = 0.3;
+    // CULTURE↔NATURE 상호 교환 가능 — 같은 분위기 장소로 대체 허용
+    private static final Set<PlaceCategory> PLAN_B_CULTURE_NATURE_GROUP =
+            Set.of(PlaceCategory.CULTURE, PlaceCategory.NATURE);
 
     private final ScheduleRepository scheduleRepository;
     private final ScheduleAltRepository scheduleAltRepository;
@@ -406,8 +410,8 @@ public class ScheduleService {
                 if (scheduledPlaceIds.contains(alt.getPlace().getId())) continue;
                 /* 이번 루프에서 이미 추가한 장소면 중복 방지 */
                 if (addedPlaceIds.contains(alt.getPlace().getId())) continue;
-                /* 카테고리 다르면 제외 (음식점을 음식점으로만 교체) */
-                if (alt.getCategory() != com.sync.domain.place.PlaceCategory.valueOf(targetPlace.getCategory().name())) continue;
+                /* 카테고리 호환 확인: exact match 또는 CULTURE↔NATURE 그룹 내 교체만 허용 */
+                if (!isPlanBCompatibleCategory(alt.getCategory(), targetPlace.getCategory())) continue;
                 /* 우선순위 점수가 너무 낮으면 제외 */
                 if (alt.getPriorityScore() < PLAN_B_MIN_PRIORITY_SCORE) continue;
 
@@ -432,9 +436,9 @@ public class ScheduleService {
                    거리가 0이면 1.0, 최대 반경(3km)이면 0.0 */
                 double geoScore = Math.max(0.0, 1.0 - distKm / PLAN_B_STAGE_RADII_KM.get(PLAN_B_STAGE_RADII_KM.size() - 1));
                 /* 최종 추천 점수 = 투표점수 60% + 거리점수 40%
-                   투표점수(priorityScore): 알고리즘에서 계산한 이 장소의 선호도
-                   거리점수(geoScore): 거리가 가까울수록 높음 */
-                double recommendScore = alt.getPriorityScore() * 0.6 + geoScore * 0.4;
+                   priorityScore ∈ [-1.0, 1.4] → (score+1.0)/2.4 로 [0,1] 정규화 후 가중합 */
+                double normalizedPriority = (alt.getPriorityScore() + 1.0) / 2.4;
+                double recommendScore = normalizedPriority * 0.6 + geoScore * 0.4;
 
                 /* 이 단계의 후보 리스트에 추가 */
                 stageCandidates.add(new PlanBResponse(
@@ -693,8 +697,11 @@ public class ScheduleService {
                 ? buildOpeningHoursMapFromPlaces(dayPlaces)
                 : Map.of();
 
+        // band.getTravelStyle()은 도메인 enum이므로 이름 기반으로 알고리즘 enum으로 변환
+        com.sync.algorithm.TravelStyle algStyle =
+                com.sync.algorithm.TravelStyle.valueOf(band.getTravelStyle().name());
         Step3Result tspResult = SimpleTsp.schedule(
-                new Step3Input(step2, band.isOverseas(), SimpleTsp.DEFAULT_DAY_START, openingHours));
+                new Step3Input(step2, band.isOverseas(), SimpleTsp.DEFAULT_DAY_START, openingHours, algStyle));
 
         if (tspResult.daySchedules().isEmpty()) return;
         List<ScheduledPlace> newSlots = tspResult.daySchedules().get(0).places();
@@ -726,6 +733,12 @@ public class ScheduleService {
         // 활동 중이므로 락 시간 갱신
         band.refreshEditingLock();
         bandRepository.save(band);
+    }
+
+    // exact match 또는 CULTURE↔NATURE 그룹 내 교체이면 true
+    private static boolean isPlanBCompatibleCategory(PlaceCategory candidate, PlaceCategory target) {
+        if (candidate == target) return true;
+        return PLAN_B_CULTURE_NATURE_GROUP.contains(candidate) && PLAN_B_CULTURE_NATURE_GROUP.contains(target);
     }
 
     private static double haversine(double lat1, double lng1, double lat2, double lng2) {
