@@ -274,7 +274,9 @@
 | 2026-05-26 | 타입 불일치 수정: `user_groups.thumbnail_url` VARCHAR(500) → TEXT. Google Places 사진 URL 500자 초과 시 strict mode 오류 방지. `Band.java` `@Column` 동기화. DDL v12. |
 | 2026-05-26 | 블라인드 장바구니 국내 장소 검색 Google 통일: `PlaceSearchService.searchDomestic()` 제거 → `searchWithGoogle()`으로 통합. keyword 없으면 BAD_REQUEST(국내/해외 동일). Android `PassportAndSearchScreens.kt` 버튼 "Google 지도에서 보기" → "지도에서 보기". `PlaceSearchServiceTest` 갱신. |
 | 2026-05-26 | 죽은 코드 및 주석 정리: `radiusMeters` 파라미터 전체 제거(`PlaceController`, `PlaceSearchService`, `PlaceSearchServiceTest`, Android `SyncTripApiService`, `BandRepository`). `DEFAULT_RADIUS_METERS` 상수 제거. `KakaoProperties`, `KakaoLocalSearchResponse`, `PlaceSearchResult` 주석 최신화. CLAUDE.md 절대 규칙 5 수정("국내는 opening_hours=NULL" → isOverseas 기반 빈 맵 전달로 정정). Android `NavGraph.kt` `onSearch` / `onCategoryChange` keyword 빈 값 가드 추가. |
+| 2026-05-26 | VoteScheduler 반복 실패 수정: 장바구니 없는 밴드가 VOTING 상태일 때 1분마다 마감 실패 로그 반복 → 실패 시 `BandService.rollbackVotingToPlanning()`으로 PLANNING 복원. `Band.rollbackToPlanning()` 추가. `VoteService.java` `Comparator` import 누락 버그 수정. |
+| 2026-05-26 | FCM data 페이로드 추가 → 멤버 합류·장바구니 변경 즉시 반영: `FcmService.send()` data 오버로드 추가, `NotificationService.buildData()` bandId+type 전달. Android `SyncTripApplication` bandRefreshFlow SharedFlow 추가, `SyncTripFirebaseService` data 수신 시 emitBandRefresh, `NavGraph` tripLobby에서 collect해 loadMembers/loadPicks 즉시 호출. |
 
 ---
 
-**마지막 수정:** 2026-05-26 (radiusMeters 제거, 주석 정리, NavGraph 빈 keyword 가드) | **최신 DDL:** `SyncTrip_DDL_v12.sql`
+**마지막 수정:** 2026-05-26 (VoteScheduler 반복 실패 수정, FCM data 페이로드 즉시 갱신 추가) | **최신 DDL:** `SyncTrip_DDL_v12.sql`

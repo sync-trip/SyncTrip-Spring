@@ -10,6 +10,7 @@ import com.sync.dto.vote.GroupVoteStatusResponse;
 import com.sync.dto.vote.MemberVoteStatus;
 import com.sync.dto.ws.VoteEvent;
 import com.sync.dto.vote.VotePlaceResponse;
+import com.sync.dto.vote.VotePlaceResultResponse;
 import com.sync.dto.vote.VoteRequest;
 import com.sync.dto.vote.VoteResponse;
 import com.sync.dto.vote.VoteStatusResponse;
@@ -19,6 +20,7 @@ import com.sync.repository.PlaceBookmarkRepository;
 import com.sync.repository.PlaceRepository;
 import com.sync.repository.UserRepository;
 import com.sync.repository.VoteRepository;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -178,6 +180,56 @@ public class VoteService {
                 .toList();
 
         return new GroupVoteStatusResponse(totalPlaces, votingMembers.size(), memberStatuses);
+    }
+
+    /**
+     * 투표 결과 조회 — 장소별 좋아요/싫어요 집계.
+     * VOTING 종료 후 GENERATING 상태에서도 호출 가능하도록 상태 검사 없음.
+     */
+    @Transactional(readOnly = true)
+    public List<VotePlaceResultResponse> getVoteResults(Long userId, Long bandId) {
+        loadActiveUser(userId);
+        loadBand(bandId);
+
+        List<Place> places = placeRepository.findAllByBandId(bandId);
+        List<Vote> allVotes = voteRepository.findByBandId(bandId);
+
+        long eligibleVoters = bandMemberRepository.countEligibleVoters(bandId);
+        // 과반수 기준: eligibleVoters가 0이면 최소 1표 이상을 요구
+        int threshold = eligibleVoters > 0 ? (int) Math.ceil(eligibleVoters * 0.5) : 1;
+
+        Map<Long, Long> likeMap = allVotes.stream()
+                .filter(v -> v.getResult() >= 0)
+                .collect(Collectors.groupingBy(v -> v.getPlace().getId(), Collectors.counting()));
+        Map<Long, Long> dislikeMap = allVotes.stream()
+                .filter(v -> v.getResult() < 0)
+                .collect(Collectors.groupingBy(v -> v.getPlace().getId(), Collectors.counting()));
+
+        Map<Long, Integer> myVoteMap = voteRepository.findByBandIdAndUserId(bandId, userId)
+                .stream()
+                .collect(Collectors.toMap(v -> v.getPlace().getId(), Vote::getResult));
+
+        return places.stream()
+                .map(p -> {
+                    int likeCount    = likeMap.getOrDefault(p.getId(), 0L).intValue();
+                    int dislikeCount = dislikeMap.getOrDefault(p.getId(), 0L).intValue();
+                    return new VotePlaceResultResponse(
+                            p.getId(),
+                            p.getName(),
+                            p.getCategory(),
+                            p.getThumbnailUrl(),
+                            p.getAddress(),
+                            p.getLatitude(),
+                            p.getLongitude(),
+                            likeCount,
+                            dislikeCount,
+                            likeCount >= threshold,
+                            myVoteMap.get(p.getId())
+                    );
+                })
+                // 좋아요 많은 순 정렬 (통과 장소 상단 노출)
+                .sorted(Comparator.comparingInt(VotePlaceResultResponse::likeCount).reversed())
+                .toList();
     }
 
     private void requireVotingStatus(Band band) {
