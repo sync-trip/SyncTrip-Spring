@@ -934,15 +934,14 @@ public class ScheduleService {
             entityManager.flush();
         }
 
-        // 새 슬롯 생성 — Day 맨 끝에 추가
+        // 새 슬롯 생성 — 저장 전에 리스트에 추가해 assignTimesInOrder로 최종 slotOrder 결정
+        // (먼저 저장하면 slotOrder=1이 기존 슬롯과 충돌 → 기존 슬롯과 함께 한 번에 저장)
         Schedule newSlot = Schedule.create(
-                band, place, request.targetDayNumber(), 1,
+                band, place, request.targetDayNumber(), existingSlots.size() + 1,
                 SimpleTsp.DEFAULT_DAY_START, place.getEstimatedDuration(), null,
                 false, false, false, false, false);
-        scheduleRepository.save(newSlot);
-        entityManager.flush();
 
-        // 해당 Day 전체 시간 재계산
+        // 해당 Day 전체 시간 재계산 후 INSERT(newSlot) + UPDATE(기존 슬롯) 일괄 저장
         existingSlots.add(newSlot);
         assignTimesInOrder(existingSlots, band);
         scheduleRepository.saveAll(existingSlots);
