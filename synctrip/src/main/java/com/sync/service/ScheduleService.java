@@ -595,16 +595,21 @@ public class ScheduleService {
                 scheduleRepository.findByBandIdAndDayNumberOrderBySlotOrderAsc(bandId, sourceDayNumber));
         sourceSlots.remove(schedule);
 
-        schedule.updateDayNumber(targetDayNumber);
-
         if (sourceDayNumber == targetDayNumber) {
+            // 같은 Day 이동: updateDayNumber 불필요
             int insertIndex = Math.max(0, Math.min(request.targetSlotOrder() - 1, sourceSlots.size()));
             sourceSlots.add(insertIndex, schedule);
             assignTimesInOrder(sourceSlots, band);
             scheduleRepository.saveAll(sourceSlots);
         } else {
+            // targetSlots를 updateDayNumber 호출 전에 조회 —
+            // 그 후에 조회하면 Hibernate가 SELECT 전 auto-flush로 slot을 먼저 쓰려 해
+            // (77, targetDay, 1) 중복 키 에러 발생
             List<Schedule> targetSlots = new java.util.ArrayList<>(
                     scheduleRepository.findByBandIdAndDayNumberOrderBySlotOrderAsc(bandId, targetDayNumber));
+
+            schedule.updateDayNumber(targetDayNumber);
+
             int insertIndex = Math.max(0, Math.min(request.targetSlotOrder() - 1, targetSlots.size()));
             targetSlots.add(insertIndex, schedule);
 
