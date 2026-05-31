@@ -59,6 +59,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -90,6 +92,9 @@ public class ScheduleService {
     private final VoteRepository voteRepository;
     private final ObjectMapper objectMapper;
     private final SimpMessagingTemplate messagingTemplate;
+
+    @PersistenceContext
+    private EntityManager entityManager;
     private final NotificationService notificationService;
     private final HolidayService holidayService;
 
@@ -602,23 +607,38 @@ public class ScheduleService {
             assignTimesInOrder(sourceSlots, band);
             scheduleRepository.saveAll(sourceSlots);
         } else {
-            // targetSlots를 updateDayNumber 호출 전에 조회 —
-            // 그 후에 조회하면 Hibernate가 SELECT 전 auto-flush로 slot을 먼저 쓰려 해
-            // (77, targetDay, 1) 중복 키 에러 발생
-            List<Schedule> targetSlots = new java.util.ArrayList<>(
+            // Hibernate는 flush 시 EntityUpdateAction을 entity ID 오름차순으로 실행하므로
+            // saveAll 리스트 역순은 순서 보장 불가 — 임시 주차(10000+i) 방식으로 unique 제약 충돌 방지
+            List<Schedule> existingTargetSlots = new java.util.ArrayList<>(
                     scheduleRepository.findByBandIdAndDayNumberOrderBySlotOrderAsc(bandId, targetDayNumber));
 
+            // 1단계: targetDay 기존 슬롯들을 충돌 없는 임시 번호로 주차
+            for (int i = 0; i < existingTargetSlots.size(); i++) {
+                existingTargetSlots.get(i).updateSlotOrderOnly(10000 + i);
+            }
+            if (!existingTargetSlots.isEmpty()) {
+                scheduleRepository.saveAll(existingTargetSlots);
+                entityManager.flush();
+            }
+
+            // 2단계: 이동할 슬롯을 targetDay로 옮기고 임시 번호 부여 → flush로 sourceDay 자리 비움
             schedule.updateDayNumber(targetDayNumber);
+            schedule.updateSlotOrderOnly(10000 + existingTargetSlots.size());
+            scheduleRepository.save(schedule);
+            entityManager.flush();
 
-            int insertIndex = Math.max(0, Math.min(request.targetSlotOrder() - 1, targetSlots.size()));
-            targetSlots.add(insertIndex, schedule);
+            // 3단계: 삽입 위치 결정 후 targetSlots 구성 (schedule이 이미 targetDay 소속)
+            int insertIndex = Math.max(0, Math.min(request.targetSlotOrder() - 1, existingTargetSlots.size()));
+            existingTargetSlots.add(insertIndex, schedule);
 
+            // 4단계: 시간 재계산
             assignTimesInOrder(sourceSlots, band);
-            assignTimesInOrder(targetSlots, band);
+            assignTimesInOrder(existingTargetSlots, band);
 
-            List<Schedule> toSave = new java.util.ArrayList<>(sourceSlots);
-            toSave.addAll(targetSlots);
-            scheduleRepository.saveAll(toSave);
+            // 5단계: 최종 순서로 저장 (모든 충돌 자리가 비워진 상태)
+            scheduleRepository.saveAll(sourceSlots);
+            entityManager.flush();
+            scheduleRepository.saveAll(existingTargetSlots);
         }
 
         messagingTemplate.convertAndSend(

@@ -118,6 +118,11 @@ public class Schedule {
         this.dayNumber = newDayNumber;
     }
 
+    /** 임시 slot_order 주차용 — unique 제약 충돌 방지를 위해 고유 번호로 이동 후 flush 할 때만 사용 */
+    public void updateSlotOrderOnly(int newSlotOrder) {
+        this.slotOrder = newSlotOrder;
+    }
+
     public void updateTimes(int newSlotOrder, LocalTime newStartTime,
                             int newDuration, Integer newTravelTimeFromPrev) {
         this.slotOrder = newSlotOrder;
