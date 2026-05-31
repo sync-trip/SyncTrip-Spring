@@ -50,6 +50,9 @@ public class BandMember {
     @Column(name = "joined_after_voting", nullable = false)
     private boolean joinedAfterVoting = false; // 투표 시작 이후 합류 여부 (권한 제한용)
 
+    @Column(name = "vote_completed", nullable = false)
+    private boolean voteCompleted = false; // 개인별 투표 완료 여부 (모든 장소 투표 시 true)
+
     @Column(name = "is_deleted", nullable = false)
     private boolean isDeleted = false; // 탈퇴 여부 (Soft Delete)
 
@@ -91,6 +94,13 @@ public class BandMember {
     }
 
     /**
+     * 모든 장소에 투표 완료 시 호출 — 개인 완료 플래그 설정
+     */
+    public void markVoteCompleted() {
+        this.voteCompleted = true;
+    }
+
+    /**
      * 멤버 탈퇴 처리 (Soft Delete)
      */
     public void delete() {
@@ -106,6 +116,7 @@ public class BandMember {
     public boolean isReady() { return isReady; }
     public int getBookmarkCount() { return bookmarkCount; }
     public boolean isJoinedAfterVoting() { return joinedAfterVoting; }
+    public boolean isVoteCompleted() { return voteCompleted; }
     public boolean isDeleted() { return isDeleted; }
     public LocalDateTime getDeletedAt() { return deletedAt; }
     public LocalDateTime getJoinedAt() { return joinedAt; }

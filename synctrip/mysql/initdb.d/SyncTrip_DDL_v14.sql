@@ -1,7 +1,13 @@
 -- ════════════════════════════════════════
--- SyncTrip DDL v13
--- 작성일: 2026-05-30
+-- SyncTrip DDL v14
+-- 작성일: 2026-05-31
 -- 총 테이블: 17개 + 트리거 2개
+-- ════════════════════════════════════════
+-- v13 → v14 변경사항: 2026-05-31
+--   1. group_members.vote_completed 컬럼 추가
+--      → 개인별 투표 완료 플래그 (모든 장소에 투표 완료 시 TRUE)
+--      → 기존 집계 기반(totalVotes >= eligibleVoters × totalPlaces) 완료 판정 대체
+--      → PlaceBookmark 변동에 관계없이 각 멤버의 완료 여부를 명시적으로 추적
 -- ════════════════════════════════════════
 -- v12 → v13 변경사항: 2026-05-30
 --   1. schedules 테이블에 알고리즘 경고 플래그 5개 컬럼 추가
@@ -174,6 +180,7 @@ CREATE TABLE `group_exchange_rates` (
 -- 6. group_members
 -- [v6 수정 1] joined_after_voting 컬럼 추가 (TRAVELLING/DONE 단계 가입자 권한 제한)
 -- [v7 수정] 소프트 삭제 컬럼 추가 (탈퇴 멤버의 정산/앨범 기록 보존)
+-- [v14 수정] vote_completed 컬럼 추가 (개인별 투표 완료 플래그)
 CREATE TABLE `group_members` (
                                  `group_member_id`      BIGINT                 NOT NULL AUTO_INCREMENT COMMENT '그룹 멤버 고유 ID',
                                  `group_id`             BIGINT                 NOT NULL                COMMENT '그룹 ID (FK → user_groups)',
@@ -182,6 +189,7 @@ CREATE TABLE `group_members` (
                                  `is_ready`             BOOLEAN                NOT NULL DEFAULT FALSE  COMMENT 'Ready 상태 (한 번 TRUE로 설정 후 해제 불가 — 백엔드 방어)',
                                  `bookmark_count`       INT                    NOT NULL DEFAULT 0      COMMENT '현재 담기 개수 (1인당 최대 5개 제한 체크용 / place_bookmarks 트리거로 자동 동기화)',
                                  `joined_after_voting`  BOOLEAN                NOT NULL DEFAULT FALSE  COMMENT '투표 종료 후 가입 여부 (TRUE=권한 제한: 장바구니 추가/투표 불가, 일정 보기/가계부/앨범/Plan B만 가능)',
+                                 `vote_completed`       BOOLEAN                NOT NULL DEFAULT FALSE  COMMENT '개인별 투표 완료 여부 (모든 장소에 투표 완료 시 TRUE — 집계 기반 완료 판정 대체)',
                                  `is_deleted`           BOOLEAN                NOT NULL DEFAULT FALSE  COMMENT '탈퇴 여부 (Soft Delete) — expense_members/album_photos FK 무결성 보존',
                                  `deleted_at`           TIMESTAMP              NULL                    COMMENT '탈퇴 시각 (NULL=정상 멤버)',
                                  `joined_at`            TIMESTAMP              NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '그룹 참여일자',

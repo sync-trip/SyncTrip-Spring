@@ -132,10 +132,18 @@ public class VoteService {
         messagingTemplate.convertAndSend("/topic/bands/" + bandId + "/votes",
                 new VoteEvent(userId, place.getId(), myVotedCount, totalPlaces));
 
-        // 전원이 모든 장소에 투표했으면 즉시 자동 마감
-        long eligibleVoters = bandMemberRepository.countEligibleVoters(bandId);
-        long totalVotesInBand = voteRepository.countByBandId(bandId);
-        if (eligibleVoters > 0 && totalVotesInBand >= eligibleVoters * totalPlaces) {
+        // 본인이 모든 장소에 투표 완료했으면 개인 플래그 설정
+        if (myVotedCount >= totalPlaces) {
+            member.markVoteCompleted();
+            bandMemberRepository.save(member);
+        }
+        // 투표 자격 있는 전원의 완료 플래그가 모두 세팅된 경우에만 자동 마감
+        List<BandMember> votingMembers = bandMemberRepository.findByBandId(bandId).stream()
+                .filter(m -> !m.isJoinedAfterVoting())
+                .toList();
+        boolean allCompleted = !votingMembers.isEmpty() &&
+                votingMembers.stream().allMatch(BandMember::isVoteCompleted);
+        if (allCompleted) {
             bandService.finishVoting(bandId);
         }
 
@@ -170,11 +178,12 @@ public class VoteService {
         List<MemberVoteStatus> memberStatuses = votingMembers.stream()
                 .map(m -> {
                     int voted = (int) voteRepository.countByBandIdAndUserId(bandId, m.getUser().getId());
+                    // 완료 여부는 DB에 저장된 플래그 사용 (동적 계산 대비 PlaceBookmark 변동 영향 없음)
                     return new MemberVoteStatus(
                             m.getUser().getId(),
                             m.getUser().getName(),
                             voted,
-                            voted >= totalPlaces
+                            m.isVoteCompleted()
                     );
                 })
                 .toList();

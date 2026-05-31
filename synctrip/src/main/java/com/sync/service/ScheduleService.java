@@ -804,6 +804,60 @@ public class ScheduleService {
         }
     }
 
+    /**
+     * altPool 장소를 특정 Day에 새 슬롯으로 추가한다.
+     * 해당 Day의 기존 슬롯들을 임시 주차 후 추가하여 unique 제약 충돌을 방지한다.
+     */
+    @Transactional
+    public void addSlotFromAltPool(Long userId, Long bandId, com.sync.dto.schedule.ScheduleAddRequest request) {
+        loadActiveUser(userId);
+        Band band = loadBand(bandId);
+        requireEditPermission(bandId, userId);
+        if (band.getStatus() == BandStatus.DONE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "완료된 여행의 일정은 편집할 수 없습니다.");
+        }
+        requireEditingLock(band, userId);
+
+        // altPool에서 장소 확인
+        com.sync.domain.schedule.ScheduleAlt altEntry = scheduleAltRepository
+                .findByBandIdAndPlaceId(bandId, request.placeId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "예비 목록에 없는 장소입니다."));
+
+        // 해당 Day 기존 슬롯 임시 주차 (unique 제약 충돌 방지)
+        List<Schedule> existingSlots = new java.util.ArrayList<>(
+                scheduleRepository.findByBandIdAndDayNumberOrderBySlotOrderAsc(bandId, request.targetDayNumber()));
+        for (int i = 0; i < existingSlots.size(); i++) {
+            existingSlots.get(i).updateSlotOrderOnly(10000 + i);
+        }
+        if (!existingSlots.isEmpty()) {
+            scheduleRepository.saveAll(existingSlots);
+            entityManager.flush();
+        }
+
+        // 새 슬롯 생성 — 임시 slotOrder 1로 삽입 후 assignTimesInOrder로 재계산
+        Place place = altEntry.getPlace();
+        Schedule newSlot = Schedule.create(
+                band, place, request.targetDayNumber(), 1,
+                SimpleTsp.DEFAULT_DAY_START, place.getEstimatedDuration(), null,
+                false, false, false, false, false);
+        scheduleRepository.save(newSlot);
+        entityManager.flush();
+
+        // altPool에서 제거
+        scheduleAltRepository.delete(altEntry);
+
+        // 해당 Day 전체 시간 재계산
+        existingSlots.add(newSlot);
+        assignTimesInOrder(existingSlots, band);
+        scheduleRepository.saveAll(existingSlots);
+
+        messagingTemplate.convertAndSend(
+                "/topic/bands/" + bandId + "/schedule",
+                new ScheduleUpdatedEvent(bandId, userId));
+        notificationService.notifyAll(bandId, NotificationType.SCHEDULE_UPDATED,
+                band.getName() + " 여행 일정이 수정됐어요! 확인해보세요 🔄");
+    }
+
     @Transactional
     public void swapSchedulePlace(Long userId, Long bandId, Long scheduleId, Long newPlaceId) {
         loadActiveUser(userId);

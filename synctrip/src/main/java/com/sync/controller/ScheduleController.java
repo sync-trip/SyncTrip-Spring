@@ -1,6 +1,7 @@
 package com.sync.controller;
 
 import com.sync.common.annotation.LoginUser;
+import com.sync.dto.schedule.ScheduleAddRequest;
 import com.sync.dto.schedule.ScheduleAltResponse;
 import com.sync.dto.schedule.ScheduleMoveRequest;
 import com.sync.dto.schedule.ScheduleReorderRequest;
@@ -80,6 +81,15 @@ public class ScheduleController {
             @PathVariable Long bandId,
             @RequestBody ScheduleMoveRequest request) {
         scheduleService.moveSchedule(userId, bandId, request);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/add")
+    public ResponseEntity<Void> addToSchedule(
+            @LoginUser Long userId,
+            @PathVariable Long bandId,
+            @RequestBody ScheduleAddRequest request) {
+        scheduleService.addSlotFromAltPool(userId, bandId, request);
         return ResponseEntity.ok().build();
     }
 

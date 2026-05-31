@@ -1,5 +1,5 @@
 # SyncTrip 구현 현황 문서
-**인수인계 문서 기준:** v6 | **최신 DDL:** `SyncTrip_DDL_v13.sql`
+**인수인계 문서 기준:** v6 | **최신 DDL:** `SyncTrip_DDL_v14.sql`
 
 > 이 문서는 기능이 구현되거나 수정될 때마다 업데이트합니다.
 > 기준: `SyncTrip_인수인계문서_v6.md` + 실제 Spring Boot 코드 (`com.sync.*`)
@@ -43,7 +43,7 @@
 | USR-005 | 최대 인원 제한 (8명) | ✅ 구현 | 2026-05-12 | `BandService.joinBand()` | countByBand ≥ maxMembers 시 409 |
 | USR-006 | 초대 코드 재발급 | ✅ 구현 | 2026-05-12 | `BandService.getOrRefreshInviteCode()` | 만료 시 자동 재발급 |
 | USR-009 | Ready 상태 전환 | ✅ 구현 | 2026-05-16 | `BandService.markReady()` | 장바구니 1개 이상 필수 / `DELETE /api/bands/{bandId}/ready` 존재하나 항상 403 반환 (취소 불가) |
-| USR-014 | 투표 강제 시작/마감 | ✅ 구현 | 2026-05-16 ~ 05-23 | `BandService.advanceBandStatus()`, `VoteScheduler` | 방장 전용 강제 마감 / 전원 투표 완료 시 즉시 자동 마감 / 1시간 타임아웃 자동 마감 |
+| USR-014 | 투표 강제 시작/마감 | ✅ 구현 | 2026-05-16 ~ 05-31 | `BandService.advanceBandStatus()`, `VoteScheduler`, `VoteService` | 방장 전용 강제 마감 / 개인별 `voteCompleted` 플래그 기반 전원 완료 즉시 자동 마감(DDL v14) / 1시간 타임아웃 자동 마감 |
 | USR-028 | 여행 종료 처리 | ✅ 구현 | 2026-05-16 ~ 05-23 | `BandService.advanceBandStatus()` | DONE 전환 시 밴드 전원에게 `TRIP_ENDED` 알림 + 정산 유도 메시지 발송 + 여권 스탬프 자동 부여 |
 | — | 밴드 삭제 (Soft Delete) | ➕ 추가 구현 | 2026-05-12 | `BandService.deleteBand()` | `DELETE /api/bands/{bandId}` / 방장 전용 / is_deleted 마킹 |
 
@@ -285,7 +285,8 @@
 | 2026-05-30 | PlanB 이중 구현 통합: `algorithm/planb/` 패키지 전체 삭제(PlanBRecommender/PlanBInput/PlanBResult/PlanBCandidate), `ScheduleService.getPlanBRecommendations()`에 점수 정규화·CULTURE↔NATURE 카테고리 호환 반영. 관련 테스트(PlanBRecommenderTest, TokyoTripScenarioTest PlanB 케이스, TokyoTripResultOutputTest 표5) 정리. |
 | 2026-05-30 | UI/UX 백엔드 보완 5건: ①숙소를 TSP 출발점으로 반영(GroupInfo/Step3Input/SimpleTsp/ScheduleService) ②경고 플래그 5종 schedules 컬럼 저장·노출(DDL v13, Schedule 엔티티, ScheduleSlotResponse) ③DONE 상태 편집 차단(409) ④joined_after_voting 편집 금지(403) ⑤getSchedule 응답에 editingUserId/editingUserName/canEdit 추가. |
 | 2026-05-31 | `BandResponse`에 숙소 좌표 추가: `BandResponse.java` record에 `Double accommodationLat / accommodationLng` (nullable) 추가. `BandService.toBandResponse()`에서 `band.getAccommodationLat() / getAccommodationLng()` 반환. Android 일정 지도 숙소 핀 + 로비 "지도에서 보기" 버튼 연동 목적. DDL 변경 없음(Band 엔티티에 이미 컬럼 존재). |
+| 2026-05-31 | 투표 중 강제 화면 전환 버그 수정: 집계 기반 자동 마감(`totalVotesInBand >= eligibleVoters × totalPlaces`) → 개인별 `voteCompleted` 플래그 기반으로 교체. `BandMember.voteCompleted` 필드 추가, `markVoteCompleted()` 메서드, `VoteService.castVote()` 완료 판정 로직 변경, `getGroupVoteStatus()` `complete` 필드 DB 플래그 반영. DDL v14(`group_members.vote_completed` 컬럼). Android `VoteViewModel.loadVotePlaces()` auto-LIKE 장소도 `votedPlaces`에 포함해 진행률 분모 정확화. |
 
 ---
 
-**마지막 수정:** 2026-05-31 (BandResponse 숙소 좌표 추가) | **최신 DDL:** `SyncTrip_DDL_v13.sql`
+**마지막 수정:** 2026-05-31 (투표 완료 판정 로직 개선 — voteCompleted 플래그 도입) | **최신 DDL:** `SyncTrip_DDL_v14.sql`
