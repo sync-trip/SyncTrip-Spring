@@ -105,6 +105,7 @@
 | — | DONE 상태 편집 차단 | ➕ 추가 구현 | 2026-05-30 | `ScheduleService` | startEditing / reorderSchedule / swapSchedulePlace 진입 시 BandStatus.DONE이면 409 |
 | — | joined_after_voting 멤버 읽기전용 | ➕ 추가 구현 | 2026-05-30 | `ScheduleService.requireEditPermission()` | 투표 후 합류 멤버의 편집 API 호출 시 403 |
 | — | 편집자 정보 + canEdit 응답 노출 | ➕ 추가 구현 | 2026-05-30 | `ScheduleResponse`, `ScheduleService.getSchedule()` | editingUserId / editingUserName / canEdit = (status≠DONE) && (!joinedAfterVoting) && (락 없거나 본인) |
+| — | 장소 검색 결과 일정 직접 추가 | ➕ 추가 구현 | 2026-06-01 | `ScheduleService.addSlotFromSearch()`, `ScheduleController`, `ScheduleAddFromSearchRequest` | `POST /api/bands/{bandId}/schedule/add-search` / externalId 기반 Place upsert(syncMetadata 재사용) → Day 맨 끝 슬롯 생성 → `assignTimesInOrder` 재계산 / altPool 거치지 않으므로 검색 결과 어떤 장소든 추가 가능 / WebSocket 브로드캐스트 + 인앱 알림 |
 
 **보완할 점**
 - (없음)

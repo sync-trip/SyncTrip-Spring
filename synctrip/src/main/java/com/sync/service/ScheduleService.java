@@ -891,6 +891,69 @@ public class ScheduleService {
                 band.getName() + " 여행 일정이 수정됐어요! 확인해보세요 🔄");
     }
 
+    /**
+     * 장소 검색 결과를 특정 Day에 새 슬롯으로 추가한다.
+     * externalId로 Place를 조회하거나 신규 생성(upsert)한 뒤 슬롯을 생성한다.
+     * altPool을 거치지 않으므로 검색으로 찾은 모든 장소를 바로 일정에 추가할 수 있다.
+     */
+    @Transactional
+    public void addSlotFromSearch(Long userId, Long bandId, com.sync.dto.schedule.ScheduleAddFromSearchRequest request) {
+        loadActiveUser(userId);
+        Band band = loadBand(bandId);
+        requireEditPermission(bandId, userId);
+        if (band.getStatus() == BandStatus.DONE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "완료된 여행의 일정은 편집할 수 없습니다.");
+        }
+        requireEditingLock(band, userId);
+
+        // Place upsert — externalId가 이미 DB에 있으면 메타데이터만 갱신, 없으면 신규 생성
+        Place place = placeRepository.findByApiSourceAndExternalId(request.apiSource(), request.externalId())
+                .map(existing -> {
+                    existing.syncMetadata(
+                            request.name(), request.category(),
+                            request.latitude(), request.longitude(),
+                            request.address(), request.rating(),
+                            request.thumbnailUrl(), null, null);
+                    return placeRepository.save(existing);
+                })
+                .orElseGet(() -> placeRepository.save(Place.create(
+                        request.apiSource(), request.externalId(),
+                        request.name(), request.category(),
+                        request.latitude(), request.longitude(),
+                        request.address(), request.rating(),
+                        request.thumbnailUrl(), null, null)));
+
+        // 해당 Day 기존 슬롯 임시 주차 (unique 제약 충돌 방지)
+        List<Schedule> existingSlots = new java.util.ArrayList<>(
+                scheduleRepository.findByBandIdAndDayNumberOrderBySlotOrderAsc(bandId, request.targetDayNumber()));
+        for (int i = 0; i < existingSlots.size(); i++) {
+            existingSlots.get(i).updateSlotOrderOnly(10000 + i);
+        }
+        if (!existingSlots.isEmpty()) {
+            scheduleRepository.saveAll(existingSlots);
+            entityManager.flush();
+        }
+
+        // 새 슬롯 생성 — Day 맨 끝에 추가
+        Schedule newSlot = Schedule.create(
+                band, place, request.targetDayNumber(), 1,
+                SimpleTsp.DEFAULT_DAY_START, place.getEstimatedDuration(), null,
+                false, false, false, false, false);
+        scheduleRepository.save(newSlot);
+        entityManager.flush();
+
+        // 해당 Day 전체 시간 재계산
+        existingSlots.add(newSlot);
+        assignTimesInOrder(existingSlots, band);
+        scheduleRepository.saveAll(existingSlots);
+
+        messagingTemplate.convertAndSend(
+                "/topic/bands/" + bandId + "/schedule",
+                new ScheduleUpdatedEvent(bandId, userId));
+        notificationService.notifyAll(bandId, NotificationType.SCHEDULE_UPDATED,
+                band.getName() + " 여행 일정이 수정됐어요! 확인해보세요 🔄");
+    }
+
     @Transactional
     public void swapSchedulePlace(Long userId, Long bandId, Long scheduleId, Long newPlaceId) {
         loadActiveUser(userId);

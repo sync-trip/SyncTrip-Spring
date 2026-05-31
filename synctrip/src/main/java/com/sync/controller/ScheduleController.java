@@ -93,6 +93,15 @@ public class ScheduleController {
         return ResponseEntity.ok().build();
     }
 
+    @PostMapping("/add-search")
+    public ResponseEntity<Void> addFromSearch(
+            @LoginUser Long userId,
+            @PathVariable Long bandId,
+            @RequestBody com.sync.dto.schedule.ScheduleAddFromSearchRequest request) {
+        scheduleService.addSlotFromSearch(userId, bandId, request);
+        return ResponseEntity.ok().build();
+    }
+
     @PostMapping("/edit/start")
     public ResponseEntity<Void> startEditing(
             @LoginUser Long userId,
