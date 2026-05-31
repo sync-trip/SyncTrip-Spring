@@ -354,17 +354,14 @@ public class ScheduleService {
         }
 
         Map<Integer, List<Schedule>> byDay = schedules.stream()
-                .collect(Collectors.groupingBy(
-                        Schedule::getDayNumber,
-                        LinkedHashMap::new,
-                        Collectors.toList()
-                ));
+                .collect(Collectors.groupingBy(Schedule::getDayNumber, LinkedHashMap::new, Collectors.toList()));
 
-        List<ScheduleDayResponse> days = byDay.entrySet().stream()
-                .map(e -> {
-                    int dayNum = e.getKey();
+        // 슬롯이 없는 날도 포함 — 전체 일정을 옮기면 해당 day가 응답에서 사라져 헤더가 없어지는 문제 방지
+        long totalDays = java.time.temporal.ChronoUnit.DAYS.between(band.getStartDate(), band.getEndDate()) + 1;
+        List<ScheduleDayResponse> days = java.util.stream.IntStream.rangeClosed(1, (int) totalDays)
+                .mapToObj(dayNum -> {
                     LocalDate date = band.getStartDate().plusDays(dayNum - 1);
-                    List<ScheduleSlotResponse> slots = e.getValue().stream()
+                    List<ScheduleSlotResponse> slots = byDay.getOrDefault(dayNum, List.of()).stream()
                             .map(this::toSlotResponse)
                             .toList();
                     return new ScheduleDayResponse(dayNum, date, slots);
@@ -558,6 +555,14 @@ public class ScheduleService {
         List<Schedule> ordered = orderedIds.stream()
                 .map(byId::get)
                 .toList();
+
+        // 임시 주차 후 flush — Hibernate가 entity ID 순으로 UPDATE해 같은 day 내 slot_order 충돌 방지
+        for (int i = 0; i < ordered.size(); i++) {
+            ordered.get(i).updateSlotOrderOnly(10000 + i);
+        }
+        scheduleRepository.saveAll(ordered);
+        entityManager.flush();
+
         assignTimesInOrder(ordered, band);
         scheduleRepository.saveAll(ordered);
 
