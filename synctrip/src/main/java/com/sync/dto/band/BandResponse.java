@@ -21,6 +21,9 @@ public record BandResponse(
     String thumbnailUrl,
     // 여행지 좌표 — 앨범 지도 탭 초기 중심 위치에 사용
     double destinationLat,
-    double destinationLng
+    double destinationLng,
+    // 숙소 좌표 — 일정 지도 핀 표시용 (null = 숙소 미설정)
+    Double accommodationLat,
+    Double accommodationLng
 ) {
 }

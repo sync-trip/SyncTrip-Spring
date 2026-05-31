@@ -356,7 +356,8 @@ public class BandService {
                 band.getStatus(), isOwner, band.isOverseas(),
                 band.getTravelStyle(), band.getAccommodationName(), memberCount,
                 band.getThumbnailUrl(),
-                band.getDestinationLat(), band.getDestinationLng()
+                band.getDestinationLat(), band.getDestinationLng(),
+                band.getAccommodationLat(), band.getAccommodationLng()
         );
     }
 

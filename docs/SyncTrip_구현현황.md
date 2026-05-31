@@ -38,6 +38,7 @@
 | USR | 기능명 | 상태 | 구현일 | 구현 위치 | 비고 |
 |---|---|---|---|---|---|
 | USR-003 | 그룹 생성 (+ 숙소 입력) | ✅ 구현 | 2026-05-12 ~ 05-18 | `BandService.createBand()` | 숙소 좌표/이름 포함 생성, 수정(05-18) |
+| — | 숙소 좌표 BandResponse 노출 | ➕ 추가 구현 | 2026-05-31 | `BandResponse.java`, `BandService.toBandResponse()` | `accommodationLat / accommodationLng` (Double nullable) 필드 추가. Android 일정 지도 숙소 핀 표시용 |
 | USR-004 | 그룹 초대 / 참여 | ✅ 구현 | 2026-05-12 | `InviteController`, `BandService.joinBand()` | 초대 코드 기반 참여 |
 | USR-005 | 최대 인원 제한 (8명) | ✅ 구현 | 2026-05-12 | `BandService.joinBand()` | countByBand ≥ maxMembers 시 409 |
 | USR-006 | 초대 코드 재발급 | ✅ 구현 | 2026-05-12 | `BandService.getOrRefreshInviteCode()` | 만료 시 자동 재발급 |
@@ -283,7 +284,8 @@
 | 2026-05-30 | 알고리즘 코드 리뷰 반영 6개 항목 구현: (1) FOOD 시간 윈도우 끼워넣기 FIX-47 — 비FOOD NN 후 PACKED:점심+저녁/RELAXED:저녁 윈도우에 FOOD 삽입; (2) 경고 배지 3종 — mealWindowViolation/lateSchedule/openingHoursUnverified; (3) DAY_OVERLOADED 경고 — 마지막 슬롯 endTime > 22:00; (4) 이동시간 MIN_TRAVEL_MINUTES=3 하한; (5) PlanB priorityScore [-1.0,1.4]→[0,1] 정규화; (6) PlanB CULTURE↔NATURE 호환 그룹 + 2km fallback. |
 | 2026-05-30 | PlanB 이중 구현 통합: `algorithm/planb/` 패키지 전체 삭제(PlanBRecommender/PlanBInput/PlanBResult/PlanBCandidate), `ScheduleService.getPlanBRecommendations()`에 점수 정규화·CULTURE↔NATURE 카테고리 호환 반영. 관련 테스트(PlanBRecommenderTest, TokyoTripScenarioTest PlanB 케이스, TokyoTripResultOutputTest 표5) 정리. |
 | 2026-05-30 | UI/UX 백엔드 보완 5건: ①숙소를 TSP 출발점으로 반영(GroupInfo/Step3Input/SimpleTsp/ScheduleService) ②경고 플래그 5종 schedules 컬럼 저장·노출(DDL v13, Schedule 엔티티, ScheduleSlotResponse) ③DONE 상태 편집 차단(409) ④joined_after_voting 편집 금지(403) ⑤getSchedule 응답에 editingUserId/editingUserName/canEdit 추가. |
+| 2026-05-31 | `BandResponse`에 숙소 좌표 추가: `BandResponse.java` record에 `Double accommodationLat / accommodationLng` (nullable) 추가. `BandService.toBandResponse()`에서 `band.getAccommodationLat() / getAccommodationLng()` 반환. Android 일정 지도 숙소 핀 + 로비 "지도에서 보기" 버튼 연동 목적. DDL 변경 없음(Band 엔티티에 이미 컬럼 존재). |
 
 ---
 
-**마지막 수정:** 2026-05-30 (UI/UX 백엔드 보완 5건 구현) | **최신 DDL:** `SyncTrip_DDL_v13.sql`
+**마지막 수정:** 2026-05-31 (BandResponse 숙소 좌표 추가) | **최신 DDL:** `SyncTrip_DDL_v13.sql`
