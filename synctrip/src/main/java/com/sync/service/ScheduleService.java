@@ -511,7 +511,36 @@ public class ScheduleService {
             previousRadius = currentRadius;
         }
 
-        /* 12. 최종 추천 반환 */
+        /* 12. Fallback — 반경 탐색 결과가 없으면 거리 무관하게 카테고리 맞는 altPool 전체 반환
+           altPool 자체가 비어 있거나 모든 장소가 3km 밖에 있을 때 빈 결과 방지 */
+        if (recommendations.isEmpty()) {
+            for (ScheduleAlt alt : alts) {
+                if (recommendations.size() >= PLAN_B_MAX_RECOMMENDATIONS) break;
+                if (scheduledPlaceIds.contains(alt.getPlace().getId())) continue;
+                if (addedPlaceIds.contains(alt.getPlace().getId())) continue;
+                if (!isPlanBCompatibleCategory(alt.getCategory(), targetPlace.getCategory())) continue;
+                if (alt.getPriorityScore() < PLAN_B_MIN_PRIORITY_SCORE) continue;
+
+                double distKm = haversine(
+                        targetPlace.getLatitude(), targetPlace.getLongitude(),
+                        alt.getPlace().getLatitude(), alt.getPlace().getLongitude()
+                );
+                double normalizedPriority = (alt.getPriorityScore() + 1.0) / 2.4;
+                recommendations.add(new PlanBResponse(
+                        alt.getPlace().getId(),
+                        alt.getCategory(),
+                        normalizedPriority,
+                        distKm,
+                        -1.0,   // fallback임을 표시 (반경 없음)
+                        -1,     // stage -1 = fallback
+                        true,   // overflow = true (반경 초과 장소임을 클라이언트에 알림)
+                        toPlaceInfo(alt.getPlace())
+                ));
+                addedPlaceIds.add(alt.getPlace().getId());
+            }
+        }
+
+        /* 13. 최종 추천 반환 */
         return recommendations;
     }
 
