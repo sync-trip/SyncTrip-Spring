@@ -30,6 +30,7 @@ import com.sync.domain.user.User;
 import com.sync.dto.schedule.ScheduleAltResponse;
 import com.sync.dto.schedule.ScheduleDayResponse;
 import com.sync.dto.schedule.SchedulePlaceInfo;
+import com.sync.dto.schedule.ScheduleMoveRequest;
 import com.sync.dto.schedule.ScheduleReorderRequest;
 import com.sync.dto.schedule.ScheduleResponse;
 import com.sync.dto.schedule.ScheduleSlotResponse;
@@ -560,6 +561,64 @@ public class ScheduleService {
                 "/topic/bands/" + bandId + "/schedule",
                 new ScheduleUpdatedEvent(bandId, userId));
 
+        notificationService.notifyAll(bandId, NotificationType.SCHEDULE_UPDATED,
+                band.getName() + " 여행 일정 순서가 변경됐어요! 확인해보세요 🔀");
+    }
+
+    /** 슬롯을 다른 Day로 이동하고 소스·타겟 양쪽 Day의 시간을 재계산한다. */
+    @Transactional
+    public void moveSchedule(Long userId, Long bandId, ScheduleMoveRequest request) {
+        loadActiveUser(userId);
+        Band band = loadBand(bandId);
+        requireEditPermission(bandId, userId);
+        if (band.getStatus() == BandStatus.DONE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "완료된 여행의 일정은 편집할 수 없습니다.");
+        }
+        requireEditingLock(band, userId);
+
+        Schedule schedule = scheduleRepository.findById(request.scheduleId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "일정 슬롯을 찾을 수 없습니다."));
+        if (!schedule.getBand().getId().equals(bandId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "해당 밴드의 일정이 아닙니다.");
+        }
+
+        long totalDays = java.time.temporal.ChronoUnit.DAYS.between(band.getStartDate(), band.getEndDate()) + 1;
+        if (request.targetDayNumber() < 1 || request.targetDayNumber() > totalDays) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "유효하지 않은 일차입니다. 가능한 범위: 1 ~ " + totalDays);
+        }
+
+        int sourceDayNumber = schedule.getDayNumber();
+        int targetDayNumber = request.targetDayNumber();
+
+        List<Schedule> sourceSlots = new java.util.ArrayList<>(
+                scheduleRepository.findByBandIdAndDayNumberOrderBySlotOrderAsc(bandId, sourceDayNumber));
+        sourceSlots.remove(schedule);
+
+        schedule.updateDayNumber(targetDayNumber);
+
+        if (sourceDayNumber == targetDayNumber) {
+            int insertIndex = Math.max(0, Math.min(request.targetSlotOrder() - 1, sourceSlots.size()));
+            sourceSlots.add(insertIndex, schedule);
+            assignTimesInOrder(sourceSlots, band);
+            scheduleRepository.saveAll(sourceSlots);
+        } else {
+            List<Schedule> targetSlots = new java.util.ArrayList<>(
+                    scheduleRepository.findByBandIdAndDayNumberOrderBySlotOrderAsc(bandId, targetDayNumber));
+            int insertIndex = Math.max(0, Math.min(request.targetSlotOrder() - 1, targetSlots.size()));
+            targetSlots.add(insertIndex, schedule);
+
+            assignTimesInOrder(sourceSlots, band);
+            assignTimesInOrder(targetSlots, band);
+
+            List<Schedule> toSave = new java.util.ArrayList<>(sourceSlots);
+            toSave.addAll(targetSlots);
+            scheduleRepository.saveAll(toSave);
+        }
+
+        messagingTemplate.convertAndSend(
+                "/topic/bands/" + bandId + "/schedule",
+                new ScheduleUpdatedEvent(bandId, userId));
         notificationService.notifyAll(bandId, NotificationType.SCHEDULE_UPDATED,
                 band.getName() + " 여행 일정 순서가 변경됐어요! 확인해보세요 🔀");
     }

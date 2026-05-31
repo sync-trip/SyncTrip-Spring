@@ -114,6 +114,10 @@ public class Schedule {
         this.durationMinutes = newPlace.getEstimatedDuration();
     }
 
+    public void updateDayNumber(int newDayNumber) {
+        this.dayNumber = newDayNumber;
+    }
+
     public void updateTimes(int newSlotOrder, LocalTime newStartTime,
                             int newDuration, Integer newTravelTimeFromPrev) {
         this.slotOrder = newSlotOrder;
