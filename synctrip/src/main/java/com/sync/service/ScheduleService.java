@@ -571,8 +571,10 @@ public class ScheduleService {
                 "/topic/bands/" + bandId + "/schedule",
                 new ScheduleUpdatedEvent(bandId, userId));
 
-        notificationService.notifyAll(bandId, NotificationType.SCHEDULE_UPDATED,
-                band.getName() + " 여행 일정 순서가 변경됐어요! 확인해보세요 🔀");
+        if (request.shouldNotify()) {
+            notificationService.notifyAll(bandId, NotificationType.SCHEDULE_UPDATED,
+                    band.getName() + " 여행 일정 순서가 변경됐어요! 확인해보세요 🔀");
+        }
     }
 
     /** 슬롯을 다른 Day로 이동하고 소스·타겟 양쪽 Day의 시간을 재계산한다. */
@@ -649,8 +651,10 @@ public class ScheduleService {
         messagingTemplate.convertAndSend(
                 "/topic/bands/" + bandId + "/schedule",
                 new ScheduleUpdatedEvent(bandId, userId));
-        notificationService.notifyAll(bandId, NotificationType.SCHEDULE_UPDATED,
-                band.getName() + " 여행 일정 순서가 변경됐어요! 확인해보세요 🔀");
+        if (request.shouldNotify()) {
+            notificationService.notifyAll(bandId, NotificationType.SCHEDULE_UPDATED,
+                    band.getName() + " 여행 일정 순서가 변경됐어요! 확인해보세요 🔀");
+        }
     }
 
     /**

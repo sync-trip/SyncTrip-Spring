@@ -140,7 +140,7 @@
 | `MEMBER_JOINED` | 새 멤버 합류 | `BandService.joinBand()` | ➕ 추가 구현 | 2026-05-21 |
 | `VOTE_STARTED` | 투표 시작 | `BandService.markReady()` / `advanceBandStatus()` | ✅ 구현 | 2026-05-21 ~ 05-23 |
 | `TRIP_ENDED` | 여행 종료 | `BandService.advanceBandStatus()` (TRAVELLING→DONE) | ➕ 추가 구현 | 2026-05-23 |
-| `SCHEDULE_UPDATED` | 일정 변경 | `ScheduleService.generateInternal()` / `swapSchedulePlace()` | ✅ 구현 | 2026-05-21 |
+| `SCHEDULE_UPDATED` | 일정 변경 | `ScheduleService.generateInternal()` / `swapSchedulePlace()` / `reorderSchedule()` / `moveSchedule()` | ✅ 구현 | 2026-05-21 |
 | `SETTLEMENT_REQUEST` | 정산 요청 | `SettlementController` → `NotificationService.requestSettlement()` | ➕ 추가 구현 | 2026-05-21 |
 | `HOLIDAY_WARNING` | 현지 공휴일 안내 | `BandService.joinBand()` / `ScheduleService.generateInternal()` / `HolidayWarningScheduler` | ➕ 추가 구현 | 2026-05-23 |
 
@@ -286,7 +286,8 @@
 | 2026-05-30 | UI/UX 백엔드 보완 5건: ①숙소를 TSP 출발점으로 반영(GroupInfo/Step3Input/SimpleTsp/ScheduleService) ②경고 플래그 5종 schedules 컬럼 저장·노출(DDL v13, Schedule 엔티티, ScheduleSlotResponse) ③DONE 상태 편집 차단(409) ④joined_after_voting 편집 금지(403) ⑤getSchedule 응답에 editingUserId/editingUserName/canEdit 추가. |
 | 2026-05-31 | `BandResponse`에 숙소 좌표 추가: `BandResponse.java` record에 `Double accommodationLat / accommodationLng` (nullable) 추가. `BandService.toBandResponse()`에서 `band.getAccommodationLat() / getAccommodationLng()` 반환. Android 일정 지도 숙소 핀 + 로비 "지도에서 보기" 버튼 연동 목적. DDL 변경 없음(Band 엔티티에 이미 컬럼 존재). |
 | 2026-05-31 | 투표 중 강제 화면 전환 버그 수정: 집계 기반 자동 마감(`totalVotesInBand >= eligibleVoters × totalPlaces`) → 개인별 `voteCompleted` 플래그 기반으로 교체. `BandMember.voteCompleted` 필드 추가, `markVoteCompleted()` 메서드, `VoteService.castVote()` 완료 판정 로직 변경, `getGroupVoteStatus()` `complete` 필드 DB 플래그 반영. DDL v14(`group_members.vote_completed` 컬럼). Android `VoteViewModel.loadVotePlaces()` auto-LIKE 장소도 `votedPlaces`에 포함해 진행률 분모 정확화. |
+| 2026-06-01 | 알림 중복 발송 방지 — `notify` 플래그 도입: `ScheduleMoveRequest` / `ScheduleReorderRequest` DTO에 `Boolean notify` 필드 추가. `shouldNotify()` 헬퍼(null → true 기본값). `ScheduleService.reorderSchedule()` / `moveSchedule()` 내 `notifyAll()` 호출을 `if (request.shouldNotify())` 조건으로 감쌈. WebSocket `convertAndSend`는 notify 무관 유지(실시간 동기화 목적). Android `saveScheduleChanges()`가 마지막 API 호출에만 `notify=true` 전달해 저장 시 알림 1건으로 집약. DDL 변경 없음. |
 
 ---
 
-**마지막 수정:** 2026-05-31 (투표 완료 판정 로직 개선 — voteCompleted 플래그 도입) | **최신 DDL:** `SyncTrip_DDL_v14.sql`
+**마지막 수정:** 2026-06-01 (알림 중복 방지 notify 플래그 도입) | **최신 DDL:** `SyncTrip_DDL_v14.sql`
