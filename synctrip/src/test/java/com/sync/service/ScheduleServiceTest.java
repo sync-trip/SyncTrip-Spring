@@ -21,6 +21,7 @@ import com.sync.repository.ScheduleAltRepository;
 import com.sync.repository.ScheduleRepository;
 import com.sync.repository.UserRepository;
 import com.sync.repository.VoteRepository;
+import com.sync.service.GoogleDistanceService;
 import com.sync.service.HolidayService;
 import com.sync.service.NotificationService;
 import org.springframework.http.HttpStatus;
@@ -83,7 +84,8 @@ class ScheduleServiceTest {
                 new ObjectMapper(),
                 messagingTemplate,
                 notificationService,
-                mock(HolidayService.class)
+                mock(HolidayService.class),
+                mock(GoogleDistanceService.class)
         );
     }
 
