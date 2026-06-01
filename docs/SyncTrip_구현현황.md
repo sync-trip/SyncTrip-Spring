@@ -1,5 +1,5 @@
 # SyncTrip 구현 현황 문서
-**인수인계 문서 기준:** v6 | **최신 DDL:** `SyncTrip_DDL_v14.sql`
+**인수인계 문서 기준:** v6 | **최신 DDL:** `SyncTrip_DDL_v15.sql`
 
 > 이 문서는 기능이 구현되거나 수정될 때마다 업데이트합니다.
 > 기준: `SyncTrip_인수인계문서_v6.md` + 실제 Spring Boot 코드 (`com.sync.*`)
@@ -106,6 +106,7 @@
 | — | joined_after_voting 멤버 읽기전용 | ➕ 추가 구현 | 2026-05-30 | `ScheduleService.requireEditPermission()` | 투표 후 합류 멤버의 편집 API 호출 시 403 |
 | — | 편집자 정보 + canEdit 응답 노출 | ➕ 추가 구현 | 2026-05-30 | `ScheduleResponse`, `ScheduleService.getSchedule()` | editingUserId / editingUserName / canEdit = (status≠DONE) && (!joinedAfterVoting) && (락 없거나 본인) |
 | — | 장소 검색 결과 일정 직접 추가 | ➕ 추가 구현 | 2026-06-01 | `ScheduleService.addSlotFromSearch()`, `ScheduleController`, `ScheduleAddFromSearchRequest` | `POST /api/bands/{bandId}/schedule/add-search` / externalId 기반 Place upsert(syncMetadata 재사용) → Day 맨 끝 슬롯 생성 → `assignTimesInOrder` 재계산 / altPool 거치지 않으므로 검색 결과 어떤 장소든 추가 가능 / WebSocket 브로드캐스트 + 인앱 알림 / **버그 수정(2026-06-01)**: 기존 슬롯 있는 Day에 추가 시 unique constraint `(bandId, dayNumber, slotOrder)` 충돌 — 신규 슬롯 선저장 방식 → `existingSlots + newSlot` 리스트 구성 후 `assignTimesInOrder` → `saveAll` 일괄 저장으로 변경 |
+| — | Google Directions API 이동시간 + 노선 정보 | ➕ 추가 구현 | 2026-06-02 | `GoogleDistanceService`, `TravelInfo`, `Schedule.transitSummary`, `ScheduleSlotResponse.transitSummary` | 하버사인 직선거리(25km/h 고정) → **Google Directions API transit 모드** 교체 / 실제 대중교통 이동시간 + 노선 요약(예: "丸ノ内線 → 日比谷線") 저장 / API 실패 시 haversine fallback / `schedules.transit_summary` VARCHAR(100) 컬럼 추가 (DDL v15) / `saveSchedules` · `assignTimesInOrder` · `recalculateDayTsp` 3곳 적용 |
 
 **보완할 점**
 - (없음)
