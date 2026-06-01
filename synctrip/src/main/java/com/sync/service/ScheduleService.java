@@ -368,8 +368,10 @@ public class ScheduleService {
                 })
                 .toList();
 
-        // 편집자 정보: 5분 만료된 락은 null 처리 (Band.getCurrentlyEditingUserId가 만료 체크)
-        Long editingUserId = band.getCurrentlyEditingUserId();
+        // 편집자 정보: 타임아웃(EDIT_LOCK_TIMEOUT_MINUTES) 만료된 락은 null 처리.
+        // raw getCurrentlyEditingUserId()는 만료를 적용하지 않아 배너가 영구 지속되던 버그가 있었음
+        // → 만료 반영하는 getActiveEditingUserId() 사용 (isEditingByOther와 동일 기준).
+        Long editingUserId = band.getActiveEditingUserId();
         String editingUserName = null;
         if (editingUserId != null) {
             editingUserName = userRepository.findByIdAndIsDeletedFalse(editingUserId)
