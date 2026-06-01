@@ -1131,16 +1131,13 @@ public class ScheduleService {
 
     /**
      * 여행 시작일 + dayNumber + 출발 시각 → Unix timestamp (UTC 기준, 대중교통 경로 조회용).
-     * Google Transit API는 6일 이상 미래 스케줄 데이터를 미제공하는 경우가 있으므로,
-     * 실제 여행일이 6일 초과 미래이면 오늘 같은 시각으로 대체한다.
-     * 도쿄 등 대도시 노선은 요일·날짜 무관하게 거의 동일하므로 실용적으로 동일한 결과.
+     * 신형 Routes API(transit)는 과거 7일~미래 100일까지의 스케줄을 지원하므로,
+     * 실제 여행일을 그대로 사용한다. 지원 범위를 벗어나면 API가 오류를 반환하고
+     * GoogleDistanceService가 하버사인 추정으로 자동 fallback 하므로 안전하다.
      */
     private static long toDepartureUnix(LocalDate startDate, int dayNumber, LocalTime departureTime) {
         LocalDate tripDay = startDate.plusDays(dayNumber - 1L);
-        LocalDate today   = LocalDate.now(ZoneOffset.UTC);
-        // 6일 이상 미래이면 오늘 날짜로 대체 — transit 스케줄 데이터 공백 방지
-        LocalDate queryDay = tripDay.isAfter(today.plusDays(6)) ? today : tripDay;
-        return queryDay.atTime(departureTime).toEpochSecond(ZoneOffset.UTC);
+        return tripDay.atTime(departureTime).toEpochSecond(ZoneOffset.UTC);
     }
 
     private static double haversine(double lat1, double lng1, double lat2, double lng2) {
