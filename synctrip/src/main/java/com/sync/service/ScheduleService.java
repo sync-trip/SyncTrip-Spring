@@ -46,7 +46,6 @@ import com.sync.domain.notification.NotificationType;
 import com.sync.dto.holiday.HolidayInfo;
 import com.sync.dto.ws.ScheduleUpdatedEvent;
 import com.sync.repository.VoteRepository;
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
@@ -92,6 +91,7 @@ public class ScheduleService {
     private final VoteRepository voteRepository;
     private final ObjectMapper objectMapper;
     private final SimpMessagingTemplate messagingTemplate;
+    private final GoogleDistanceService googleDistanceService;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -109,7 +109,8 @@ public class ScheduleService {
                            ObjectMapper objectMapper,
                            SimpMessagingTemplate messagingTemplate,
                            NotificationService notificationService,
-                           HolidayService holidayService) {
+                           HolidayService holidayService,
+                           GoogleDistanceService googleDistanceService) {
         this.scheduleRepository = scheduleRepository;
         this.scheduleAltRepository = scheduleAltRepository;
         this.bandRepository = bandRepository;
@@ -122,6 +123,7 @@ public class ScheduleService {
         this.messagingTemplate = messagingTemplate;
         this.notificationService = notificationService;
         this.holidayService = holidayService;
+        this.googleDistanceService = googleDistanceService;
     }
 
     /**
@@ -258,34 +260,38 @@ public class ScheduleService {
         List<Schedule> schedules = new ArrayList<>();
         for (DaySchedule day : result.step3Result().daySchedules()) {
             List<ScheduledPlace> slots = day.places();
+            // SimpleTsp 결과에서 장소 순서만 사용하고, 시작시각·이동시간은 Google API로 재계산
+            LocalTime current = SimpleTsp.DEFAULT_DAY_START;
             for (int i = 0; i < slots.size(); i++) {
                 ScheduledPlace sp = slots.get(i);
                 Place place = placeById.get(sp.placeId());
                 if (place == null) continue;
 
-                Integer travelTime;
-                if (i == 0) {
-                    // 숙소 좌표가 있으면 숙소→첫 장소 이동시간 저장
-                    if (band.getAccommodationLat() != null) {
-                        double distKm = haversine(
-                                band.getAccommodationLat(), band.getAccommodationLng(),
-                                sp.latitude(), sp.longitude());
-                        long minutes = Math.round(
-                                distKm / com.sync.algorithm.AlgorithmConstants.TRAVEL_SPEED_KMH * 60.0);
-                        travelTime = (int) Math.max(
-                                com.sync.algorithm.AlgorithmConstants.MIN_TRAVEL_MINUTES, minutes);
-                    } else {
-                        travelTime = null;
-                    }
-                } else {
-                    travelTime = (int) Duration.between(slots.get(i - 1).endTime(), sp.startTime()).toMinutes();
+                Integer travelTime = null;
+                if (i == 0 && band.getAccommodationLat() != null) {
+                    // 숙소→첫 장소 이동시간 (Google API)
+                    int travelMin = googleDistanceService.getTravelMinutes(
+                            band.getAccommodationLat(), band.getAccommodationLng(),
+                            sp.latitude(), sp.longitude());
+                    current = current.plusMinutes(travelMin);
+                    travelTime = travelMin;
+                } else if (i > 0) {
+                    // 이전 장소→현재 장소 이동시간 (Google API)
+                    ScheduledPlace prev = slots.get(i - 1);
+                    int travelMin = googleDistanceService.getTravelMinutes(
+                            prev.latitude(), prev.longitude(),
+                            sp.latitude(), sp.longitude());
+                    current = current.plusMinutes(travelMin);
+                    travelTime = travelMin;
                 }
 
                 schedules.add(Schedule.create(
                         band, place, sp.day(), sp.orderInDay(),
-                        sp.startTime(), sp.estimatedDuration(), travelTime,
+                        current, sp.estimatedDuration(), travelTime,
                         sp.isOutlierCandidate(), sp.openingHoursViolation(),
                         sp.mealWindowViolation(), sp.lateSchedule(), sp.openingHoursUnverified()));
+
+                current = current.plusMinutes(sp.estimatedDuration());
             }
         }
         scheduleRepository.saveAll(schedules);
@@ -712,23 +718,19 @@ public class ScheduleService {
 
             Integer travelTime = null;
             if (i == 0 && accommLat != null) {
-                // 숙소→첫 장소 이동시간
-                double distKm = haversine(
+                // 숙소→첫 장소 이동시간 (Google Distance Matrix API)
+                int travelMin = googleDistanceService.getTravelMinutes(
                         accommLat, accommLng,
                         s.getPlace().getLatitude(), s.getPlace().getLongitude());
-                long travelMin = Math.max(
-                        com.sync.algorithm.AlgorithmConstants.MIN_TRAVEL_MINUTES,
-                        Math.round(distKm / com.sync.algorithm.AlgorithmConstants.TRAVEL_SPEED_KMH * 60.0));
                 current = current.plusMinutes(travelMin);
-                travelTime = (int) travelMin;
+                travelTime = travelMin;
             } else if (i > 0 && ordered.get(i - 1).getPlace() != null) {
                 Place prev = ordered.get(i - 1).getPlace();
-                double distKm = haversine(
+                int travelMin = googleDistanceService.getTravelMinutes(
                         prev.getLatitude(), prev.getLongitude(),
                         s.getPlace().getLatitude(), s.getPlace().getLongitude());
-                long travelMin = Math.round(distKm / com.sync.algorithm.AlgorithmConstants.TRAVEL_SPEED_KMH * 60.0);
                 current = current.plusMinutes(travelMin);
-                travelTime = (int) travelMin;
+                travelTime = travelMin;
             }
 
             int duration = s.getPlace().getEstimatedDuration();
@@ -1053,33 +1055,36 @@ public class ScheduleService {
                 .filter(s -> s.getPlace() != null)
                 .collect(Collectors.toMap(s -> s.getPlace().getId(), s -> s));
 
+        // SimpleTsp 결과에서 순서만 사용하고, 시작시각·이동시간은 Google API로 재계산
+        LocalTime current = SimpleTsp.DEFAULT_DAY_START;
         for (int i = 0; i < newSlots.size(); i++) {
             ScheduledPlace sp = newSlots.get(i);
             Schedule s = byPlaceId.get(sp.placeId());
             if (s == null) continue;
 
-            Integer travelTime;
-            if (i == 0) {
-                // 숙소 좌표가 있으면 숙소→첫 장소 이동시간 저장
-                if (band.getAccommodationLat() != null) {
-                    double distKm = haversine(
-                            band.getAccommodationLat(), band.getAccommodationLng(),
-                            sp.latitude(), sp.longitude());
-                    long minutes = Math.round(
-                            distKm / com.sync.algorithm.AlgorithmConstants.TRAVEL_SPEED_KMH * 60.0);
-                    travelTime = (int) Math.max(
-                            com.sync.algorithm.AlgorithmConstants.MIN_TRAVEL_MINUTES, minutes);
-                } else {
-                    travelTime = null;
-                }
-            } else {
-                travelTime = (int) Duration.between(newSlots.get(i - 1).endTime(), sp.startTime()).toMinutes();
+            Integer travelTime = null;
+            if (i == 0 && band.getAccommodationLat() != null) {
+                // 숙소→첫 장소 이동시간 (Google Distance Matrix API)
+                int travelMin = googleDistanceService.getTravelMinutes(
+                        band.getAccommodationLat(), band.getAccommodationLng(),
+                        sp.latitude(), sp.longitude());
+                current = current.plusMinutes(travelMin);
+                travelTime = travelMin;
+            } else if (i > 0) {
+                ScheduledPlace prev = newSlots.get(i - 1);
+                int travelMin = googleDistanceService.getTravelMinutes(
+                        prev.latitude(), prev.longitude(),
+                        sp.latitude(), sp.longitude());
+                current = current.plusMinutes(travelMin);
+                travelTime = travelMin;
             }
 
-            s.updateTimes(i + 1, sp.startTime(), sp.estimatedDuration(), travelTime);
+            s.updateTimes(i + 1, current, sp.estimatedDuration(), travelTime);
             // 위반 플래그 갱신 — outlier는 Step2 값 보존, 나머지는 새 TSP 결과 반영
             s.updateFlags(sp.isOutlierCandidate(), sp.openingHoursViolation(),
                     sp.mealWindowViolation(), sp.lateSchedule(), sp.openingHoursUnverified());
+
+            current = current.plusMinutes(sp.estimatedDuration());
         }
         scheduleRepository.saveAll(daySchedules);
     }
