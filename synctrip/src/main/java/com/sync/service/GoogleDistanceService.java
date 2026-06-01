@@ -2,23 +2,25 @@ package com.sync.service;
 
 import com.sync.algorithm.AlgorithmConstants;
 import com.sync.config.GoogleMapsProperties;
-import com.sync.dto.google.DistanceMatrixResponse;
+import com.sync.dto.google.DirectionsResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * Google Distance Matrix API를 사용해 두 좌표 간 실제 이동 시간(분)을 조회한다.
- * driving 모드 기준 (도로 기반, 교통 정보 반영 없음).
- * API 호출 실패 또는 경로 없음 시 하버사인 공식으로 fallback.
+ * Google Directions API(transit 모드)로 두 좌표 간 실제 이동 시간과 노선 정보를 조회한다.
+ * API 실패 시 하버사인 공식으로 fallback.
  */
 @Service
 public class GoogleDistanceService {
 
     private static final Logger log = LoggerFactory.getLogger(GoogleDistanceService.class);
-    private static final String DISTANCE_MATRIX_URL =
-            "https://maps.googleapis.com/maps/api/distancematrix/json";
+    private static final String DIRECTIONS_URL =
+            "https://maps.googleapis.com/maps/api/directions/json";
 
     private final RestTemplate restTemplate;
     private final GoogleMapsProperties properties;
@@ -29,40 +31,70 @@ public class GoogleDistanceService {
     }
 
     /**
-     * 두 좌표 간 실제 이동 시간(분)을 반환한다.
-     * Google Distance Matrix API(driving 모드) 호출 → 실패 시 하버사인 fallback.
+     * 두 좌표 간 대중교통 이동 정보(시간 + 노선)를 반환한다.
+     * Google Directions API(transit) 호출 → 실패 시 하버사인 fallback.
+     *
+     * @param departureTimeUnix 출발 시각 (Unix timestamp, UTC). transit 모드에 필수.
      */
-    public int getTravelMinutes(double fromLat, double fromLng, double toLat, double toLng) {
+    public TravelInfo getTravelInfo(double fromLat, double fromLng,
+                                    double toLat, double toLng,
+                                    long departureTimeUnix) {
         try {
-            String url = DISTANCE_MATRIX_URL
-                    + "?origins=" + fromLat + "," + fromLng
-                    + "&destinations=" + toLat + "," + toLng
-                    + "&mode=driving"
+            String url = DIRECTIONS_URL
+                    + "?origin=" + fromLat + "," + fromLng
+                    + "&destination=" + toLat + "," + toLng
+                    + "&mode=transit"
+                    + "&departure_time=" + departureTimeUnix
+                    + "&language=ko"
                     + "&key=" + properties.apiKey();
 
-            DistanceMatrixResponse response = restTemplate.getForObject(url, DistanceMatrixResponse.class);
+            DirectionsResponse response = restTemplate.getForObject(url, DirectionsResponse.class);
 
             if (response != null
                     && "OK".equals(response.status())
-                    && response.rows() != null
-                    && !response.rows().isEmpty()
-                    && response.rows().get(0).elements() != null
-                    && !response.rows().get(0).elements().isEmpty()) {
+                    && response.routes() != null
+                    && !response.routes().isEmpty()
+                    && !response.routes().get(0).legs().isEmpty()) {
 
-                DistanceMatrixResponse.Element element = response.rows().get(0).elements().get(0);
-                if ("OK".equals(element.status()) && element.duration() != null) {
-                    // duration.value()는 초 단위 → 분으로 변환 후 MIN_TRAVEL_MINUTES 하한 적용
-                    int minutes = (int) Math.ceil(element.duration().value() / 60.0);
-                    return Math.max(AlgorithmConstants.MIN_TRAVEL_MINUTES, minutes);
-                }
+                DirectionsResponse.Leg leg = response.routes().get(0).legs().get(0);
+                int minutes = (int) Math.ceil(leg.duration().value() / 60.0);
+                minutes = Math.max(AlgorithmConstants.MIN_TRAVEL_MINUTES, minutes);
+
+                String summary = buildTransitSummary(leg.steps());
+                return new TravelInfo(minutes, summary);
             }
 
-            log.warn("Distance Matrix API 경로 없음, fallback: ({},{})→({},{})",
+            log.warn("Directions API 경로 없음, fallback: ({},{})→({},{})",
                     fromLat, fromLng, toLat, toLng);
         } catch (Exception e) {
-            log.warn("Distance Matrix API 호출 실패, fallback: {}", e.getMessage());
+            log.warn("Directions API 호출 실패, fallback: {}", e.getMessage());
         }
-        return haversineFallback(fromLat, fromLng, toLat, toLng);
+        return TravelInfo.fallback(haversineFallback(fromLat, fromLng, toLat, toLng));
+    }
+
+    /**
+     * 경로 스텝에서 대중교통 노선 요약 문자열을 만든다.
+     * TRANSIT 스텝이 없으면(도보만) null 반환.
+     * 예: "丸ノ内線 → 日比谷線", "2호선", null
+     */
+    private String buildTransitSummary(List<DirectionsResponse.Step> steps) {
+        if (steps == null || steps.isEmpty()) return null;
+
+        List<String> lines = new ArrayList<>();
+        for (DirectionsResponse.Step step : steps) {
+            if (!"TRANSIT".equals(step.travelMode())) continue;
+            if (step.transitDetails() == null || step.transitDetails().line() == null) continue;
+
+            DirectionsResponse.Line line = step.transitDetails().line();
+            // short_name 우선(예: "丸ノ内線"), 없으면 full name
+            String name = line.shortName() != null ? line.shortName() : line.name();
+            if (name != null && !lines.contains(name)) {
+                lines.add(name);
+            }
+        }
+
+        if (lines.isEmpty()) return null;
+        return String.join(" → ", lines);
     }
 
     /** 하버사인 직선거리 기반 이동 시간 추정 (fallback 전용) */

@@ -48,6 +48,7 @@ import com.sync.dto.ws.ScheduleUpdatedEvent;
 import com.sync.repository.VoteRepository;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.HashMap;
@@ -268,28 +269,35 @@ public class ScheduleService {
                 if (place == null) continue;
 
                 Integer travelTime = null;
+                String transitSummary = null;
                 if (i == 0 && band.getAccommodationLat() != null) {
-                    // 숙소→첫 장소 이동시간 (Google API)
-                    int travelMin = googleDistanceService.getTravelMinutes(
+                    // 숙소→첫 장소 이동시간 (Google Directions API, transit 모드)
+                    long deptUnix = toDepartureUnix(band.getStartDate(), sp.day(), current);
+                    TravelInfo info = googleDistanceService.getTravelInfo(
                             band.getAccommodationLat(), band.getAccommodationLng(),
-                            sp.latitude(), sp.longitude());
-                    current = current.plusMinutes(travelMin);
-                    travelTime = travelMin;
+                            sp.latitude(), sp.longitude(), deptUnix);
+                    current = current.plusMinutes(info.minutes());
+                    travelTime = info.minutes();
+                    transitSummary = info.transitSummary();
                 } else if (i > 0) {
-                    // 이전 장소→현재 장소 이동시간 (Google API)
+                    // 이전 장소→현재 장소 이동시간 (Google Directions API, transit 모드)
                     ScheduledPlace prev = slots.get(i - 1);
-                    int travelMin = googleDistanceService.getTravelMinutes(
+                    long deptUnix = toDepartureUnix(band.getStartDate(), sp.day(), current);
+                    TravelInfo info = googleDistanceService.getTravelInfo(
                             prev.latitude(), prev.longitude(),
-                            sp.latitude(), sp.longitude());
-                    current = current.plusMinutes(travelMin);
-                    travelTime = travelMin;
+                            sp.latitude(), sp.longitude(), deptUnix);
+                    current = current.plusMinutes(info.minutes());
+                    travelTime = info.minutes();
+                    transitSummary = info.transitSummary();
                 }
 
-                schedules.add(Schedule.create(
+                Schedule slot = Schedule.create(
                         band, place, sp.day(), sp.orderInDay(),
                         current, sp.estimatedDuration(), travelTime,
                         sp.isOutlierCandidate(), sp.openingHoursViolation(),
-                        sp.mealWindowViolation(), sp.lateSchedule(), sp.openingHoursUnverified()));
+                        sp.mealWindowViolation(), sp.lateSchedule(), sp.openingHoursUnverified());
+                slot.setTransitSummary(transitSummary);
+                schedules.add(slot);
 
                 current = current.plusMinutes(sp.estimatedDuration());
             }
@@ -716,25 +724,32 @@ public class ScheduleService {
             Schedule s = ordered.get(i);
             if (s.getPlace() == null) continue;
 
+            int dayNumber = ordered.isEmpty() ? 1 : ordered.get(0).getDayNumber();
             Integer travelTime = null;
+            String transitSummary = null;
             if (i == 0 && accommLat != null) {
-                // 숙소→첫 장소 이동시간 (Google Distance Matrix API)
-                int travelMin = googleDistanceService.getTravelMinutes(
+                // 숙소→첫 장소 이동시간 (Google Directions API, transit 모드)
+                long deptUnix = toDepartureUnix(band.getStartDate(), dayNumber, current);
+                TravelInfo info = googleDistanceService.getTravelInfo(
                         accommLat, accommLng,
-                        s.getPlace().getLatitude(), s.getPlace().getLongitude());
-                current = current.plusMinutes(travelMin);
-                travelTime = travelMin;
+                        s.getPlace().getLatitude(), s.getPlace().getLongitude(), deptUnix);
+                current = current.plusMinutes(info.minutes());
+                travelTime = info.minutes();
+                transitSummary = info.transitSummary();
             } else if (i > 0 && ordered.get(i - 1).getPlace() != null) {
                 Place prev = ordered.get(i - 1).getPlace();
-                int travelMin = googleDistanceService.getTravelMinutes(
+                long deptUnix = toDepartureUnix(band.getStartDate(), dayNumber, current);
+                TravelInfo info = googleDistanceService.getTravelInfo(
                         prev.getLatitude(), prev.getLongitude(),
-                        s.getPlace().getLatitude(), s.getPlace().getLongitude());
-                current = current.plusMinutes(travelMin);
-                travelTime = travelMin;
+                        s.getPlace().getLatitude(), s.getPlace().getLongitude(), deptUnix);
+                current = current.plusMinutes(info.minutes());
+                travelTime = info.minutes();
+                transitSummary = info.transitSummary();
             }
 
             int duration = s.getPlace().getEstimatedDuration();
             s.updateTimes(i + 1, current, duration, travelTime);
+            s.setTransitSummary(transitSummary);
 
             // 재배치 후 시각 기준 플래그 재계산 — outlier는 K-Means 값 보존
             LocalTime startTime = current;
@@ -1063,23 +1078,29 @@ public class ScheduleService {
             if (s == null) continue;
 
             Integer travelTime = null;
+            String transitSummary = null;
             if (i == 0 && band.getAccommodationLat() != null) {
-                // 숙소→첫 장소 이동시간 (Google Distance Matrix API)
-                int travelMin = googleDistanceService.getTravelMinutes(
+                // 숙소→첫 장소 이동시간 (Google Directions API, transit 모드)
+                long deptUnix = toDepartureUnix(band.getStartDate(), dayNumber, current);
+                TravelInfo info = googleDistanceService.getTravelInfo(
                         band.getAccommodationLat(), band.getAccommodationLng(),
-                        sp.latitude(), sp.longitude());
-                current = current.plusMinutes(travelMin);
-                travelTime = travelMin;
+                        sp.latitude(), sp.longitude(), deptUnix);
+                current = current.plusMinutes(info.minutes());
+                travelTime = info.minutes();
+                transitSummary = info.transitSummary();
             } else if (i > 0) {
                 ScheduledPlace prev = newSlots.get(i - 1);
-                int travelMin = googleDistanceService.getTravelMinutes(
+                long deptUnix = toDepartureUnix(band.getStartDate(), dayNumber, current);
+                TravelInfo info = googleDistanceService.getTravelInfo(
                         prev.latitude(), prev.longitude(),
-                        sp.latitude(), sp.longitude());
-                current = current.plusMinutes(travelMin);
-                travelTime = travelMin;
+                        sp.latitude(), sp.longitude(), deptUnix);
+                current = current.plusMinutes(info.minutes());
+                travelTime = info.minutes();
+                transitSummary = info.transitSummary();
             }
 
             s.updateTimes(i + 1, current, sp.estimatedDuration(), travelTime);
+            s.setTransitSummary(transitSummary);
             // 위반 플래그 갱신 — outlier는 Step2 값 보존, 나머지는 새 TSP 결과 반영
             s.updateFlags(sp.isOutlierCandidate(), sp.openingHoursViolation(),
                     sp.mealWindowViolation(), sp.lateSchedule(), sp.openingHoursUnverified());
@@ -1106,6 +1127,13 @@ public class ScheduleService {
     private static boolean isPlanBCompatibleCategory(PlaceCategory candidate, PlaceCategory target) {
         if (candidate == target) return true;
         return PLAN_B_CULTURE_NATURE_GROUP.contains(candidate) && PLAN_B_CULTURE_NATURE_GROUP.contains(target);
+    }
+
+    /** 여행 시작일 + dayNumber + 출발 시각 → Unix timestamp (UTC 기준, 대중교통 경로 조회용) */
+    private static long toDepartureUnix(LocalDate startDate, int dayNumber, LocalTime departureTime) {
+        return startDate.plusDays(dayNumber - 1L)
+                .atTime(departureTime)
+                .toEpochSecond(ZoneOffset.UTC);
     }
 
     private static double haversine(double lat1, double lng1, double lat2, double lng2) {
@@ -1195,6 +1223,7 @@ public class ScheduleService {
                 s.getStartTime(),
                 s.getDurationMinutes(),
                 s.getTravelTimeFromPrev(),
+                s.getTransitSummary(),
                 toPlaceInfo(s.getPlace()),
                 s.isOutlierCandidate(),
                 s.isOpeningHoursViolation(),

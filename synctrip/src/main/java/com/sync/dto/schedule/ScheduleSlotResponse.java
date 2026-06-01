@@ -8,6 +8,7 @@ public record ScheduleSlotResponse(
         LocalTime startTime,
         Integer durationMinutes,
         Integer travelTimeFromPrev,
+        String transitSummary,
         SchedulePlaceInfo place,
         // 알고리즘 경고 플래그
         boolean isOutlierCandidate,

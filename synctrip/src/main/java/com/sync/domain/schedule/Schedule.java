@@ -50,6 +50,10 @@ public class Schedule {
     @Column(name = "travel_time_from_prev")
     private Integer travelTimeFromPrev;
 
+    /** 이전 장소에서 이 장소까지 대중교통 노선 요약 (예: "丸ノ内線 → 日比谷線") */
+    @Column(name = "transit_summary", length = 100)
+    private String transitSummary;
+
     // 알고리즘 경고 플래그 (생성 시점 값 보존, 재계산 시 갱신)
     @Column(name = "is_outlier_candidate", nullable = false)
     private boolean outlierCandidate = false;
@@ -140,6 +144,8 @@ public class Schedule {
     public LocalTime getStartTime() { return startTime; }
     public Integer getDurationMinutes() { return durationMinutes; }
     public Integer getTravelTimeFromPrev() { return travelTimeFromPrev; }
+    public String getTransitSummary() { return transitSummary; }
+    public void setTransitSummary(String transitSummary) { this.transitSummary = transitSummary; }
     public boolean isOutlierCandidate() { return outlierCandidate; }
     public boolean isOpeningHoursViolation() { return openingHoursViolation; }
     public boolean isMealWindowViolation() { return mealWindowViolation; }
