@@ -1129,11 +1129,18 @@ public class ScheduleService {
         return PLAN_B_CULTURE_NATURE_GROUP.contains(candidate) && PLAN_B_CULTURE_NATURE_GROUP.contains(target);
     }
 
-    /** 여행 시작일 + dayNumber + 출발 시각 → Unix timestamp (UTC 기준, 대중교통 경로 조회용) */
+    /**
+     * 여행 시작일 + dayNumber + 출발 시각 → Unix timestamp (UTC 기준, 대중교통 경로 조회용).
+     * Google Transit API는 6일 이상 미래 스케줄 데이터를 미제공하는 경우가 있으므로,
+     * 실제 여행일이 6일 초과 미래이면 오늘 같은 시각으로 대체한다.
+     * 도쿄 등 대도시 노선은 요일·날짜 무관하게 거의 동일하므로 실용적으로 동일한 결과.
+     */
     private static long toDepartureUnix(LocalDate startDate, int dayNumber, LocalTime departureTime) {
-        return startDate.plusDays(dayNumber - 1L)
-                .atTime(departureTime)
-                .toEpochSecond(ZoneOffset.UTC);
+        LocalDate tripDay = startDate.plusDays(dayNumber - 1L);
+        LocalDate today   = LocalDate.now(ZoneOffset.UTC);
+        // 6일 이상 미래이면 오늘 날짜로 대체 — transit 스케줄 데이터 공백 방지
+        LocalDate queryDay = tripDay.isAfter(today.plusDays(6)) ? today : tripDay;
+        return queryDay.atTime(departureTime).toEpochSecond(ZoneOffset.UTC);
     }
 
     private static double haversine(double lat1, double lng1, double lat2, double lng2) {
