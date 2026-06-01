@@ -8,6 +8,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -39,6 +42,13 @@ public class GoogleDistanceService {
     public TravelInfo getTravelInfo(double fromLat, double fromLng,
                                     double toLat, double toLng,
                                     long departureTimeUnix) {
+        // departure_time을 사람이 읽기 쉬운 UTC 문자열로 변환해 로그에 표시
+        String deptReadable = Instant.ofEpochSecond(departureTimeUnix)
+                .atOffset(ZoneOffset.UTC)
+                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        log.info("[Directions] 호출: ({},{})→({},{}) dept={} (unix={})",
+                fromLat, fromLng, toLat, toLng, deptReadable, departureTimeUnix);
+
         try {
             String url = DIRECTIONS_URL
                     + "?origin=" + fromLat + "," + fromLng
@@ -50,8 +60,16 @@ public class GoogleDistanceService {
 
             DirectionsResponse response = restTemplate.getForObject(url, DirectionsResponse.class);
 
-            if (response != null
-                    && "OK".equals(response.status())
+            if (response == null) {
+                log.warn("[Directions] 응답 null, fallback");
+                return TravelInfo.fallback(haversineFallback(fromLat, fromLng, toLat, toLng));
+            }
+
+            log.info("[Directions] 응답 status={} routes={}",
+                    response.status(),
+                    response.routes() == null ? "null" : response.routes().size());
+
+            if ("OK".equals(response.status())
                     && response.routes() != null
                     && !response.routes().isEmpty()
                     && !response.routes().get(0).legs().isEmpty()) {
@@ -60,14 +78,25 @@ public class GoogleDistanceService {
                 int minutes = (int) Math.ceil(leg.duration().value() / 60.0);
                 minutes = Math.max(AlgorithmConstants.MIN_TRAVEL_MINUTES, minutes);
 
+                // 각 step의 travel_mode 로그 — TRANSIT 스텝이 없으면 summary가 null임을 추적
+                if (leg.steps() != null) {
+                    List<String> modes = leg.steps().stream()
+                            .map(s -> s.travelMode() != null ? s.travelMode() : "?")
+                            .toList();
+                    log.info("[Directions] {}분, steps modes={}", minutes, modes);
+                }
+
                 String summary = buildTransitSummary(leg.steps());
+                log.info("[Directions] transitSummary={}", summary);
                 return new TravelInfo(minutes, summary);
             }
 
-            log.warn("Directions API 경로 없음, fallback: ({},{})→({},{})",
-                    fromLat, fromLng, toLat, toLng);
+            // OK가 아닌 status — 원인 파악용 상세 로그
+            log.warn("[Directions] 비정상 status={}, 좌표: ({},{})→({},{}), dept={}",
+                    response.status(), fromLat, fromLng, toLat, toLng, deptReadable);
         } catch (Exception e) {
-            log.warn("Directions API 호출 실패, fallback: {}", e.getMessage());
+            log.warn("[Directions] 호출 예외: {} — ({},{})→({},{})",
+                    e.getMessage(), fromLat, fromLng, toLat, toLng);
         }
         return TravelInfo.fallback(haversineFallback(fromLat, fromLng, toLat, toLng));
     }
