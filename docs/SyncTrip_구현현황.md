@@ -106,6 +106,8 @@
 | — | joined_after_voting 멤버 읽기전용 | ➕ 추가 구현 | 2026-05-30 | `ScheduleService.requireEditPermission()` | 투표 후 합류 멤버의 편집 API 호출 시 403 |
 | — | 편집자 정보 + canEdit 응답 노출 | ➕ 추가 구현 | 2026-05-30 | `ScheduleResponse`, `ScheduleService.getSchedule()` | editingUserId / editingUserName / canEdit = (status≠DONE) && (!joinedAfterVoting) && (락 없거나 본인) |
 | — | 장소 검색 결과 일정 직접 추가 | ➕ 추가 구현 | 2026-06-01 | `ScheduleService.addSlotFromSearch()`, `ScheduleController`, `ScheduleAddFromSearchRequest` | `POST /api/bands/{bandId}/schedule/add-search` / externalId 기반 Place upsert(syncMetadata 재사용) → Day 맨 끝 슬롯 생성 → `assignTimesInOrder` 재계산 / altPool 거치지 않으므로 검색 결과 어떤 장소든 추가 가능 / WebSocket 브로드캐스트 + 인앱 알림 / **버그 수정(2026-06-01)**: 기존 슬롯 있는 Day에 추가 시 unique constraint `(bandId, dayNumber, slotOrder)` 충돌 — 신규 슬롯 선저장 방식 → `existingSlots + newSlot` 리스트 구성 후 `assignTimesInOrder` → `saveAll` 일괄 저장으로 변경 |
+| — | 일정 슬롯(장소) 삭제 | ➕ 추가 구현 | 2026-06-02 | `ScheduleService.deleteSchedulePlace()`, `ScheduleController` | `DELETE /api/bands/{bandId}/schedule/{scheduleId}` / 편집 락·DONE·멤버십 검증 → 슬롯 삭제 후 flush(삭제된 slot_order 자리 비움) → 같은 Day 남은 슬롯 임시 주차(10000+i) flush → `assignTimesInOrder` 순서·시간 재계산 → WebSocket 브로드캐스트 + 인앱 알림 / reorder의 unique constraint `(bandId, dayNumber, slotOrder)` 충돌 방지 패턴 재사용 |
+| — | 국내 일정 영업시간 위반 체크 활성화 | ➕ 추가 구현 | 2026-06-02 | `ScheduleService`(generateInternal·assignTimesInOrder·recalculateDayTsp·buildOpeningHoursMapFromPlaces), `SimpleTsp.assignTimes` | 기존엔 `is_overseas=true`만 영업시간 맵 구성·위반 체크 → 국내 일정엔 `opening_hours_violation`이 항상 false였음. 국내 장소도 Google Places에서 `opening_hours`를 캐싱하므로 `isOverseas` 게이트 제거(국내·해외 공통, 영업시간 데이터 있는 장소만 체크). **해외 동작 불변** — 해외는 이미 맵 구성·체크가 동일하게 실행됐고 결과 변화 없음. `opening_hours_unverified`(영업미확인)는 정의상 해외 전용 유지. 추가로 자정 마감(`"00:00"`) → `LocalTime.MAX` 보정으로 심야 영업 장소 오탐 제거(해외 false-positive도 함께 개선). ⚠ 플래그는 생성/재계산 시점 저장이라 기존 일정은 재생성·편집 후 반영 |
 | — | Google Routes API 이동시간 + 노선 정보 | ➕ 추가 구현 | 2026-06-02 | `GoogleDistanceService`, `RoutesResponse`, `TravelInfo`, `Schedule.transitSummary`, `ScheduleSlotResponse.transitSummary` | 하버사인 직선거리(25km/h 고정) → **Google Routes API transit 모드** 교체 / 실제 대중교통 이동시간 + 노선 요약(예: "丸ノ内線 → 日比谷線") 저장 / API 실패 시 haversine fallback / `schedules.transit_summary` VARCHAR(100) 컬럼 추가 (DDL v15) / `saveSchedules` · `assignTimesInOrder` · `recalculateDayTsp` 3곳 적용 / **2026-06-02 신형 Routes API 마이그레이션**: 구형 Directions API(GET, `mode=transit`) → Routes API(POST `directions/v2:computeRoutes`, FieldMask + RFC3339 departureTime) 교체. `getTravelInfo()`/`TravelInfo` 계약 불변이라 프론트 변경 없음. 구형 `DirectionsResponse` DTO 삭제, `RoutesResponse` 신규. `toDepartureUnix`의 6일 초과 미래→오늘 대체 제약 제거(Routes transit은 과거 7일~미래 100일 지원, 실제 여행일 사용) |
 
 **보완할 점**
@@ -211,7 +213,7 @@
 | Plan B 최대 추천 수 | §7.7 인수인계 문서 기준 불명확 | **최대 7개** (`PLAN_B_MAX_RECOMMENDATIONS = 7`) — DebugController 주석의 "최대 3개"는 오기재 | 2026-05-19 |
 | 공유 앨범 사진 저장 방식 | "사진 저장 방식 미정" | **Base64 LONGTEXT MySQL 저장** — 외부 스토리지(S3 등) 없이 DB에 직접 저장 / 졸업 프로젝트 범위 고려 | 2026-05-23 |
 | 과거 여행 기록(USR-025) | 별도 아카이브 뷰 API 필요 | **프론트 클라이언트에서 처리** — 기존 `GET /api/bands` 응답의 `status`/날짜 기준으로 다가오는/지난 여행 분류 / 백엔드 추가 불필요 | 2026-05-23 |
-| 블라인드 장바구니 장소 검색 API | 국내 = 카카오맵 API, 해외 = Google Places API | **국내/해외 모두 Google Places Text Search 사용** — Kakao API는 rating/thumbnail 미제공으로 UX 불가. KakaoPlacesService는 장소 탐색에서 미사용(카카오 로그인은 별개). `is_overseas` 플래그는 영업시간·알고리즘에서 유지 | 2026-05-26 |
+| 블라인드 장바구니 장소 검색 API | 국내 = 카카오맵 API, 해외 = Google Places API | **국내/해외 모두 Google Places Text Search 사용** — Kakao API는 rating/thumbnail 미제공으로 UX 불가. KakaoPlacesService는 장소 탐색에서 미사용(카카오 로그인은 별개). `is_overseas` 플래그는 알고리즘·공휴일 알림에서 유지하나, **영업시간 위반 체크는 2026-06-02부터 국내·해외 공통**(Google `opening_hours` 캐싱 데이터 기반)으로 전환 — `opening_hours_unverified`만 해외 전용 유지 | 2026-05-26 (영업시간 부분 2026-06-02 갱신) |
 
 ---
 
@@ -290,7 +292,9 @@
 | 2026-05-31 | 투표 중 강제 화면 전환 버그 수정: 집계 기반 자동 마감(`totalVotesInBand >= eligibleVoters × totalPlaces`) → 개인별 `voteCompleted` 플래그 기반으로 교체. `BandMember.voteCompleted` 필드 추가, `markVoteCompleted()` 메서드, `VoteService.castVote()` 완료 판정 로직 변경, `getGroupVoteStatus()` `complete` 필드 DB 플래그 반영. DDL v14(`group_members.vote_completed` 컬럼). Android `VoteViewModel.loadVotePlaces()` auto-LIKE 장소도 `votedPlaces`에 포함해 진행률 분모 정확화. |
 | 2026-06-01 | Plan B fallback 추가 — 3km 반경 탐색 결과 없을 때 거리 무관 카테고리 매칭 altPool 전체 반환. `getPlanBRecommendations()` 12단계에 fallback 블록 추가. `overflow=true`, `stage=-1`, `searchRadiusKmUsed=-1.0` 으로 클라이언트에 fallback 여부 전달. |
 | 2026-06-01 | 알림 중복 발송 방지 — `notify` 플래그 도입: `ScheduleMoveRequest` / `ScheduleReorderRequest` DTO에 `Boolean notify` 필드 추가. `shouldNotify()` 헬퍼(null → true 기본값). `ScheduleService.reorderSchedule()` / `moveSchedule()` 내 `notifyAll()` 호출을 `if (request.shouldNotify())` 조건으로 감쌈. WebSocket `convertAndSend`는 notify 무관 유지(실시간 동기화 목적). Android `saveScheduleChanges()`가 마지막 API 호출에만 `notify=true` 전달해 저장 시 알림 1건으로 집약. DDL 변경 없음. |
+| 2026-06-02 | 일정 슬롯(장소) 삭제 API 추가 — `DELETE /api/bands/{bandId}/schedule/{scheduleId}` / `ScheduleController.deleteSchedulePlace()` + `ScheduleService.deleteSchedulePlace()`. 편집 락·DONE·멤버십 검증 → 슬롯 삭제 후 flush → 같은 Day 남은 슬롯 임시 주차(10000+i) flush → `assignTimesInOrder` 재계산 → WebSocket 브로드캐스트 + `SCHEDULE_UPDATED` 인앱 알림. DDL 변경 없음. |
+| 2026-06-02 | 국내 일정 영업시간 위반 체크 활성화 — `ScheduleService`(generateInternal·assignTimesInOrder·recalculateDayTsp) 및 `SimpleTsp.assignTimes`의 영업시간 맵 구성·위반 체크에서 `isOverseas` 게이트 제거(국내·해외 공통, 데이터 있는 장소만). 해외 동작 불변(맵·체크 동일 실행, 결과 변화 없음). `buildOpeningHoursMapFromPlaces`에서 자정 마감(`"00:00"`)→`LocalTime.MAX` 보정으로 심야 영업 오탐 제거. `opening_hours_unverified`는 해외 전용 유지. DDL 변경 없음(기존 `opening_hours_violation` 컬럼 재사용, 일정 재생성·편집 시 반영). |
 
 ---
 
-**마지막 수정:** 2026-06-01 (알림 중복 방지 notify 플래그 도입) | **최신 DDL:** `SyncTrip_DDL_v14.sql`
+**마지막 수정:** 2026-06-02 (일정 장소 삭제 API · 국내 영업시간 위반 체크) | **최신 DDL:** `SyncTrip_DDL_v14.sql`

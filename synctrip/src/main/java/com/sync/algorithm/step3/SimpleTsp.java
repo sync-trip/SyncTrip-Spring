@@ -268,13 +268,11 @@ public final class SimpleTsp {
             LocalTime start = current;
             LocalTime end   = current.plusMinutes(p.estimatedDuration());
 
-            // 영업시간 위반 (해외 전용)
+            // 영업시간 위반 — 국내·해외 모두 (영업시간 데이터가 있는 장소만 체크)
             boolean violation = false;
-            if (isOverseas) {
-                OpeningHours oh = openingHoursById.get(p.placeId());
-                if (oh != null) {
-                    violation = start.isBefore(oh.open()) || end.isAfter(oh.close());
-                }
+            OpeningHours oh = openingHoursById.get(p.placeId());
+            if (oh != null) {
+                violation = start.isBefore(oh.open()) || end.isAfter(oh.close());
             }
 
             // 식사 윈도우 외 배치 경고 (FOOD 슬롯만)
@@ -285,8 +283,7 @@ public final class SimpleTsp {
             boolean lateSchedule = !start.isBefore(AlgorithmConstants.LATE_WARN_TIME);
 
             // 해외이고 영업시간 데이터 없음
-            boolean openingHoursUnverified = isOverseas
-                    && openingHoursById.get(p.placeId()) == null;
+            boolean openingHoursUnverified = isOverseas && oh == null;
 
             result.add(new ScheduledPlace(
                     p.placeId(), day, i + 1,

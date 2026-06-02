@@ -218,9 +218,10 @@ public class ScheduleService {
             }
         }
 
-        Map<Long, OpeningHours> openingHoursById = band.isOverseas()
-                ? buildOpeningHoursMap(bookmarks)
-                : Map.of();
+        // 영업시간 위반 체크는 국내·해외 모두 적용 — 국내 장소도 Google Places에서
+        // opening_hours를 받아 캐싱하므로 데이터가 있으면 위반을 표시한다.
+        // (이전엔 해외 전용이라 국내 일정에 위반 배지가 전혀 뜨지 않았음)
+        Map<Long, OpeningHours> openingHoursById = buildOpeningHoursMap(bookmarks);
 
         AlgorithmInput input = new AlgorithmInput(
                 group, memberInfos, placeInfos, voteInfos, null, openingHoursById);
@@ -344,7 +345,10 @@ public class ScheduleService {
                         .findFirst()
                         .ifPresent(period -> {
                             LocalTime open = LocalTime.parse(period.get("open"));
-                            LocalTime close = LocalTime.parse(period.get("close"));
+                            // 자정 마감("00:00")은 익일 0시까지 영업한다는 의미 → 23:59로 보정해
+                            // 심야 영업 장소가 영업시간 위반으로 오탐되는 것을 막는다.
+                            String closeStr = period.get("close");
+                            LocalTime close = "00:00".equals(closeStr) ? LocalTime.MAX : LocalTime.parse(closeStr);
                             result.put(p.getId(), new OpeningHours(open, close));
                         });
             } catch (Exception e) {
@@ -702,6 +706,52 @@ public class ScheduleService {
         }
     }
 
+    /** 일정 슬롯(장소)을 삭제하고 같은 Day의 남은 슬롯 순서·시간을 재계산한다. */
+    @Transactional
+    public void deleteSchedulePlace(Long userId, Long bandId, Long scheduleId) {
+        loadActiveUser(userId);
+        Band band = loadBand(bandId);
+        requireEditPermission(bandId, userId);
+        if (band.getStatus() == BandStatus.DONE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "완료된 여행의 일정은 편집할 수 없습니다.");
+        }
+        requireEditingLock(band, userId);
+
+        Schedule schedule = scheduleRepository.findById(scheduleId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "일정 슬롯을 찾을 수 없습니다."));
+        if (!schedule.getBand().getId().equals(bandId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "해당 밴드의 일정이 아닙니다.");
+        }
+
+        int dayNumber = schedule.getDayNumber();
+        List<Schedule> remaining = new java.util.ArrayList<>(
+                scheduleRepository.findByBandIdAndDayNumberOrderBySlotOrderAsc(bandId, dayNumber));
+        remaining.remove(schedule);
+
+        // 슬롯 삭제 후 flush — 삭제된 slot_order 자리를 비워 재정렬 시 unique 제약 충돌 방지
+        scheduleRepository.delete(schedule);
+        entityManager.flush();
+
+        if (!remaining.isEmpty()) {
+            // 임시 주차 후 flush — reorder와 동일 패턴으로 slot_order unique 제약 충돌 방지
+            for (int i = 0; i < remaining.size(); i++) {
+                remaining.get(i).updateSlotOrderOnly(10000 + i);
+            }
+            scheduleRepository.saveAll(remaining);
+            entityManager.flush();
+
+            // 남은 슬롯 순서 고정 후 시작 시각·이동 시간·경고 플래그 재계산
+            assignTimesInOrder(remaining, band);
+            scheduleRepository.saveAll(remaining);
+        }
+
+        messagingTemplate.convertAndSend(
+                "/topic/bands/" + bandId + "/schedule",
+                new ScheduleUpdatedEvent(bandId, userId));
+        notificationService.notifyAll(bandId, NotificationType.SCHEDULE_UPDATED,
+                band.getName() + " 일정에서 장소가 삭제됐어요.");
+    }
+
     /**
      * 사용자 지정 순서 그대로 이동 시간·시작 시각을 재계산하고 경고 플래그를 갱신한다.
      * TSP 재정렬 없이 입력된 리스트 순서를 그대로 사용한다.
@@ -713,11 +763,10 @@ public class ScheduleService {
         com.sync.algorithm.TravelStyle algStyle =
                 com.sync.algorithm.TravelStyle.valueOf(band.getTravelStyle().name());
 
-        // 해외이면 해당 day 장소의 영업시간 맵 구성
+        // 해당 day 장소의 영업시간 맵 구성 — 국내·해외 모두 (데이터 있으면 위반 체크)
         List<Place> places = ordered.stream()
                 .map(Schedule::getPlace).filter(java.util.Objects::nonNull).toList();
-        Map<Long, OpeningHours> openingHours = isOverseas
-                ? buildOpeningHoursMapFromPlaces(places) : Map.of();
+        Map<Long, OpeningHours> openingHours = buildOpeningHoursMapFromPlaces(places);
 
         LocalTime current = SimpleTsp.DEFAULT_DAY_START;
         for (int i = 0; i < ordered.size(); i++) {
@@ -755,11 +804,9 @@ public class ScheduleService {
             LocalTime startTime = current;
             LocalTime endTime   = current.plusMinutes(duration);
             boolean ohViolation = false;
-            if (isOverseas) {
-                OpeningHours oh = openingHours.get(s.getPlace().getId());
-                if (oh != null) {
-                    ohViolation = startTime.isBefore(oh.open()) || endTime.isAfter(oh.close());
-                }
+            OpeningHours oh = openingHours.get(s.getPlace().getId());
+            if (oh != null) {
+                ohViolation = startTime.isBefore(oh.open()) || endTime.isAfter(oh.close());
             }
             com.sync.domain.place.PlaceCategory cat = s.getPlace().getCategory();
             boolean mealViolation = cat == com.sync.domain.place.PlaceCategory.FOOD
@@ -1052,9 +1099,8 @@ public class ScheduleService {
                 .map(Schedule::getPlace)
                 .filter(java.util.Objects::nonNull)
                 .toList();
-        Map<Long, OpeningHours> openingHours = band.isOverseas()
-                ? buildOpeningHoursMapFromPlaces(dayPlaces)
-                : Map.of();
+        // 영업시간 맵은 국내·해외 모두 구성 (데이터 있으면 위반 체크)
+        Map<Long, OpeningHours> openingHours = buildOpeningHoursMapFromPlaces(dayPlaces);
 
         // band.getTravelStyle()은 도메인 enum이므로 이름 기반으로 알고리즘 enum으로 변환
         com.sync.algorithm.TravelStyle algStyle =

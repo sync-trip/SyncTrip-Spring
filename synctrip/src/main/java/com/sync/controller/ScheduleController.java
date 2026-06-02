@@ -9,6 +9,7 @@ import com.sync.dto.schedule.ScheduleResponse;
 import com.sync.service.ScheduleService;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -99,6 +100,15 @@ public class ScheduleController {
             @PathVariable Long bandId,
             @RequestBody com.sync.dto.schedule.ScheduleAddFromSearchRequest request) {
         scheduleService.addSlotFromSearch(userId, bandId, request);
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/{scheduleId}")
+    public ResponseEntity<Void> deleteSchedulePlace(
+            @LoginUser Long userId,
+            @PathVariable Long bandId,
+            @PathVariable Long scheduleId) {
+        scheduleService.deleteSchedulePlace(userId, bandId, scheduleId);
         return ResponseEntity.ok().build();
     }
 

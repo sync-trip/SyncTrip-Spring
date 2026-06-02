@@ -15,7 +15,8 @@ public interface GroupVoteInfoRepository extends JpaRepository<GroupVoteInfo, Lo
     /**
      * 1시간 타임아웃 초과 + 아직 마감되지 않은 투표 조회
      * VoteScheduler가 주기적으로 호출한다.
+     * 삭제된 밴드(isDeleted)는 finishVoting이 건너뛰어 매분 반복 로깅되므로 쿼리에서 제외한다.
      */
-    @Query("SELECT gvi FROM GroupVoteInfo gvi JOIN FETCH gvi.band b WHERE b.status = :status AND gvi.voteStartedAt <= :deadline AND gvi.voteEndedAt IS NULL")
+    @Query("SELECT gvi FROM GroupVoteInfo gvi JOIN FETCH gvi.band b WHERE b.status = :status AND b.isDeleted = false AND gvi.voteStartedAt <= :deadline AND gvi.voteEndedAt IS NULL")
     List<GroupVoteInfo> findTimedOutVotes(@Param("status") BandStatus status, @Param("deadline") LocalDateTime deadline);
 }

@@ -18,7 +18,10 @@ logging:
   level:
     root: INFO
     com.sync: DEBUG
-    org.springframework.web: DEBUG
+    # org.springframework.web을 DEBUG로 두면 RestTemplate이 외부 API 요청 URL/헤더
+    # (Google/Gemini API 키 포함)와 응답 본문(사진 base64 등)을 통째로 로깅한다.
+    # 키 노출·로그 폭증 방지를 위해 INFO로 유지한다.
+    org.springframework.web: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
 
