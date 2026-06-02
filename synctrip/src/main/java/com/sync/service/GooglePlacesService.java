@@ -32,7 +32,8 @@ public class GooglePlacesService {
 
     private static final String NEARBY_SEARCH_PATH = "/v1/places:searchNearby";
     private static final String TEXT_SEARCH_PATH = "/v1/places:searchText";
-    private static final double TEXT_SEARCH_BIAS_RADIUS_METERS = 50_000;
+    // 텍스트 검색 시 목적지 좌표 기준 결과 제한 반경 (미터, 최대 50,000)
+    private static final double TEXT_SEARCH_RADIUS_METERS = 50_000;
     
     // API 응답에서 받아올 데이터 필드 정의 (필요한 필드만 선택하여 비용 최적화)
     private static final String FIELD_MASK =
@@ -108,23 +109,15 @@ public class GooglePlacesService {
      * @param lng          목적지 경도
      * @param textQuery    검색 키워드
      * @param includedType 포함할 장소 타입 (예: "lodging"). null이면 전체 타입 검색.
-     *                     null → locationBias(선호), non-null → locationRestriction(엄격 제한)
      */
     public NearbySearchResponse searchText(double lat, double lng, String textQuery, String includedType) {
-        TextSearchRequest.LocationBias bias = null;
-        TextSearchRequest.LocationRestriction restriction = null;
-
-        if (includedType != null) {
-            // 숙소 등 타입 지정 검색: rectangle restriction으로 반경 밖 결과를 완전히 제외
-            restriction = buildRectangleRestriction(lat, lng, TEXT_SEARCH_BIAS_RADIUS_METERS);
-        } else {
-            bias = new TextSearchRequest.LocationBias(
-                    new TextSearchRequest.Circle(
-                            new TextSearchRequest.LatLng(lat, lng), TEXT_SEARCH_BIAS_RADIUS_METERS));
-        }
+        // includedType 유무와 무관하게 항상 rectangle restriction으로 목적지 반경 밖 결과를 완전히 제외한다.
+        // (locationBias는 "선호"일 뿐 제한이 아니어서, 동명의 타 도시 장소가 섞여 나오는 문제를 막을 수 없음)
+        TextSearchRequest.LocationRestriction restriction =
+                buildRectangleRestriction(lat, lng, TEXT_SEARCH_RADIUS_METERS);
 
         TextSearchRequest body = new TextSearchRequest(
-                textQuery, bias, restriction, MAX_RESULT_COUNT, "ko", includedType);
+                textQuery, null, restriction, MAX_RESULT_COUNT, "ko", includedType);
 
         HttpHeaders headers = buildHeaders();
         HttpEntity<TextSearchRequest> request = new HttpEntity<>(body, headers);
