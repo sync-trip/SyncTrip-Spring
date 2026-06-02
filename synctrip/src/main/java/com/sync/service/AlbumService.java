@@ -13,6 +13,8 @@ import com.sync.repository.BandRepository;
 import com.sync.repository.UserRepository;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +23,9 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 @Transactional
 public class AlbumService {
+
+    // 사진 업로드 시 프론트가 보낸 EXIF 좌표·촬영시각을 확인하기 위한 진단 로거
+    private static final Logger log = LoggerFactory.getLogger(AlbumService.class);
 
     private final AlbumPhotoRepository albumPhotoRepository;
     private final BandRepository bandRepository;
@@ -42,6 +47,12 @@ public class AlbumService {
         User user = findUser(userId);
         Band band = findBand(bandId);
         requireMember(bandId, userId);
+
+        // [진단] 프론트가 EXIF에서 추출해 보낸 좌표·촬영시각·이미지 크기 기록
+        // lat/lng가 null이면 EXIF 위치 미추출, 0.0이면 갤러리/포토피커의 위치 redact 의심
+        log.info("[앨범 업로드] userId={}, bandId={}, latitude={}, longitude={}, takenAt={}, photoDataLength={}",
+                userId, bandId, request.latitude(), request.longitude(), request.takenAt(),
+                request.photoData() == null ? 0 : request.photoData().length());
 
         AlbumPhoto photo = AlbumPhoto.create(
                 band, user,
