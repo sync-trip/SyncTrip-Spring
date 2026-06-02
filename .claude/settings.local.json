@@ -15,7 +15,9 @@
       "Bash(.\\\\gradlew.bat test *)",
       "Bash(Get-ChildItem \"C:\\\\Users\\\\Min\\\\StudioProjects\\\\SyncTrip-kt\\\\app\\\\src\\\\main\\\\java\\\\com\" -Recurse -Directory)",
       "Bash(Select-Object FullName)",
-      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\Min\\\\StudioProjects\\\\SyncTrip-kt\\\\app\\\\src\\\\main\\\\java\\\\com\\\\synctrip\\\\app\" -Recurse | Select-Object -ExpandProperty FullName | ForEach-Object { $_.Replace\\(\"C:\\\\Users\\\\Min\\\\StudioProjects\\\\SyncTrip-kt\\\\app\\\\src\\\\main\\\\java\\\\com\\\\synctrip\\\\app\\\\\", \"\"\\) })"
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\Min\\\\StudioProjects\\\\SyncTrip-kt\\\\app\\\\src\\\\main\\\\java\\\\com\\\\synctrip\\\\app\" -Recurse | Select-Object -ExpandProperty FullName | ForEach-Object { $_.Replace\\(\"C:\\\\Users\\\\Min\\\\StudioProjects\\\\SyncTrip-kt\\\\app\\\\src\\\\main\\\\java\\\\com\\\\synctrip\\\\app\\\\\", \"\"\\) })",
+      "Read(//c/c/SyncTrip-Spring/**)",
+      "Read(//c/c/SyncTrip-Spring/evaluation/**)"
     ]
   },
   "spinnerTipsEnabled": true
