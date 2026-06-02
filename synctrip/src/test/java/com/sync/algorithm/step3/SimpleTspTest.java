@@ -237,8 +237,10 @@ class SimpleTspTest {
     }
 
     @Test
-    void 국내_isOverseas_false면_violation_항상_false() {
-        // 영업시간 데이터가 있어도 국내면 체크 안 함
+    void 국내도_영업시간_데이터_있으면_violation_체크함() {
+        // 국내(isOverseas=false)도 영업시간 데이터가 있으면 위반을 체크한다.
+        // 09:00 시작 방문, 영업 10:00~18:00 → 오픈 전 시작이므로 violation=true.
+        // (국내 장소도 Google Places에서 opening_hours를 캐싱하므로 해외와 동일 적용)
         AssignedPlace p = ap(1, 0.0, 0.0, 60);
         OpeningHours oh = new OpeningHours(LocalTime.of(10, 0), LocalTime.of(18, 0));
 
@@ -246,8 +248,10 @@ class SimpleTspTest {
                 List.of(new DayGroup(1, List.of(p))),
                 false, SimpleTsp.DEFAULT_DAY_START, Map.of(1L, oh));
 
-        assertThat(result.daySchedules().get(0).places().get(0).openingHoursViolation())
-                .isFalse();
+        ScheduledPlace sp = result.daySchedules().get(0).places().get(0);
+        assertThat(sp.openingHoursViolation()).isTrue();
+        // 영업미확인 플래그는 정의상 해외 전용 — 국내는 데이터 유무와 무관하게 false
+        assertThat(sp.openingHoursUnverified()).isFalse();
     }
 
     // ── ScheduledPlace 필드 전달 ─────────────────────────────────────────

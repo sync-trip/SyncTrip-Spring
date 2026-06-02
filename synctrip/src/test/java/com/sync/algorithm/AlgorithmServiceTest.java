@@ -86,7 +86,7 @@ class AlgorithmServiceTest {
             assertThat(sp.get(i).startTime()).isAfterOrEqualTo(sp.get(i - 1).endTime());
         }
 
-        // 국내 → 영업시간 위반 없음
+        // 영업시간 데이터 미제공(Map.of()) → 위반 체크 대상 없음
         assertThat(sp).allMatch(p -> !p.openingHoursViolation());
     }
 
