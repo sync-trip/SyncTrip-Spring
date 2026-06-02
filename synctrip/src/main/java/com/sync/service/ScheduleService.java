@@ -260,6 +260,15 @@ public class ScheduleService {
 
     private void saveSchedules(Band band, AlgorithmResult result, Map<Long, Place> placeById) {
         List<Schedule> schedules = new ArrayList<>();
+        // 경고 플래그를 Google 재계산 시각 기준으로 다시 산정하기 위한 준비.
+        // SimpleTsp가 매긴 플래그는 haversine 추정 시각 기준이라 화면 표시 시각(Google)과
+        // 어긋나 첫 생성 화면에서만 영업위반·식사윈도우·늦은일정 배지가 오탐/누락되던 문제 수정.
+        Map<Long, OpeningHours> openingHoursById =
+                buildOpeningHoursMapFromPlaces(new ArrayList<>(placeById.values()));
+        boolean isOverseas = band.isOverseas();
+        com.sync.algorithm.TravelStyle algStyle =
+                com.sync.algorithm.TravelStyle.valueOf(band.getTravelStyle().name());
+
         for (DaySchedule day : result.step3Result().daySchedules()) {
             List<ScheduledPlace> slots = day.places();
             // SimpleTsp 결과에서 장소 순서만 사용하고, 시작시각·이동시간은 Google API로 재계산
@@ -292,11 +301,26 @@ public class ScheduleService {
                     transitSummary = info.transitSummary();
                 }
 
+                // 경고 플래그 재계산 — 화면 표시 시각(Google)과 동일 기준으로 산정.
+                // outlier는 K-Means 결과(SimpleTsp 값) 보존, 나머지 3종은 재계산
+                // (assignTimesInOrder의 편집 경로와 동일 로직 → 첫 생성/편집 결과 일관성 확보).
+                LocalTime startTime = current;
+                LocalTime endTime   = current.plusMinutes(sp.estimatedDuration());
+                boolean ohViolation = false;
+                OpeningHours oh = openingHoursById.get(sp.placeId());
+                if (oh != null) {
+                    ohViolation = startTime.isBefore(oh.open()) || endTime.isAfter(oh.close());
+                }
+                boolean mealViolation = place.getCategory() == com.sync.domain.place.PlaceCategory.FOOD
+                        && !isInMealWindow(startTime, algStyle);
+                boolean late = !startTime.isBefore(com.sync.algorithm.AlgorithmConstants.LATE_WARN_TIME);
+                boolean ohUnverified = isOverseas && oh == null;
+
                 Schedule slot = Schedule.create(
                         band, place, sp.day(), sp.orderInDay(),
                         current, sp.estimatedDuration(), travelTime,
-                        sp.isOutlierCandidate(), sp.openingHoursViolation(),
-                        sp.mealWindowViolation(), sp.lateSchedule(), sp.openingHoursUnverified());
+                        sp.isOutlierCandidate(), ohViolation,
+                        mealViolation, late, ohUnverified);
                 slot.setTransitSummary(transitSummary);
                 schedules.add(slot);
 
@@ -975,11 +999,14 @@ public class ScheduleService {
         // Place upsert — externalId가 이미 DB에 있으면 메타데이터만 갱신, 없으면 신규 생성
         Place place = placeRepository.findByApiSourceAndExternalId(request.apiSource(), request.externalId())
                 .map(existing -> {
+                    // 검색추가 요청엔 영업시간·소요시간이 없으므로 기존 값을 보존한다.
+                    // (null로 넘기면 이미 캐싱된 영업시간이 지워져 영업위반 체크가 불가능해짐)
                     existing.syncMetadata(
                             request.name(), request.category(),
                             request.latitude(), request.longitude(),
                             request.address(), request.rating(),
-                            request.thumbnailUrl(), null, null);
+                            request.thumbnailUrl(),
+                            existing.getOpeningHoursJson(), existing.getEstimatedDuration());
                     return placeRepository.save(existing);
                 })
                 .orElseGet(() -> placeRepository.save(Place.create(
