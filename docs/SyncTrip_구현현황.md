@@ -294,7 +294,8 @@
 | 2026-06-01 | 알림 중복 발송 방지 — `notify` 플래그 도입: `ScheduleMoveRequest` / `ScheduleReorderRequest` DTO에 `Boolean notify` 필드 추가. `shouldNotify()` 헬퍼(null → true 기본값). `ScheduleService.reorderSchedule()` / `moveSchedule()` 내 `notifyAll()` 호출을 `if (request.shouldNotify())` 조건으로 감쌈. WebSocket `convertAndSend`는 notify 무관 유지(실시간 동기화 목적). Android `saveScheduleChanges()`가 마지막 API 호출에만 `notify=true` 전달해 저장 시 알림 1건으로 집약. DDL 변경 없음. |
 | 2026-06-02 | 일정 슬롯(장소) 삭제 API 추가 — `DELETE /api/bands/{bandId}/schedule/{scheduleId}` / `ScheduleController.deleteSchedulePlace()` + `ScheduleService.deleteSchedulePlace()`. 편집 락·DONE·멤버십 검증 → 슬롯 삭제 후 flush → 같은 Day 남은 슬롯 임시 주차(10000+i) flush → `assignTimesInOrder` 재계산 → WebSocket 브로드캐스트 + `SCHEDULE_UPDATED` 인앱 알림. DDL 변경 없음. |
 | 2026-06-02 | 국내 일정 영업시간 위반 체크 활성화 — `ScheduleService`(generateInternal·assignTimesInOrder·recalculateDayTsp) 및 `SimpleTsp.assignTimes`의 영업시간 맵 구성·위반 체크에서 `isOverseas` 게이트 제거(국내·해외 공통, 데이터 있는 장소만). 해외 동작 불변(맵·체크 동일 실행, 결과 변화 없음). `buildOpeningHoursMapFromPlaces`에서 자정 마감(`"00:00"`)→`LocalTime.MAX` 보정으로 심야 영업 오탐 제거. `opening_hours_unverified`는 해외 전용 유지. DDL 변경 없음(기존 `opening_hours_violation` 컬럼 재사용, 일정 재생성·편집 시 반영). |
+| 2026-06-02 | 첫 일정 생성 시 경고 배지 시각 기준 불일치 버그 수정 — `ScheduleService.saveSchedules()`가 `SimpleTsp`의 haversine 추정 시각 기준 플래그를 그대로 저장하던 것을, Google Directions 재계산 시각 기준으로 영업위반·식사윈도우·늦은일정 3종을 다시 산정하도록 변경(outlier는 K-Means 값 보존). 편집 경로(`assignTimesInOrder`)와 동일 로직 → 첫 생성/편집 결과 일관성 확보. 추가로 `addSlotFromSearch`의 `syncMetadata` 호출이 기존 장소 영업시간·소요시간을 `null`로 덮어쓰던 문제 수정(기존 값 보존 → 검색추가 후 영업위반 체크 가능). DDL 변경 없음. |
 
 ---
 
-**마지막 수정:** 2026-06-02 (일정 장소 삭제 API · 국내 영업시간 위반 체크) | **최신 DDL:** `SyncTrip_DDL_v14.sql`
+**마지막 수정:** 2026-06-02 (첫 생성 경고 배지 시각 기준 일치 · 검색추가 영업시간 보존) | **최신 DDL:** `SyncTrip_DDL_v14.sql`
