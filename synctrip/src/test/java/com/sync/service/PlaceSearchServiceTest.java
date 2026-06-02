@@ -1,18 +1,14 @@
 package com.sync.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sync.domain.band.Band;
-import com.sync.domain.band.BandMember;
-import com.sync.domain.band.BandRole;
 import com.sync.domain.place.Place;
 import com.sync.domain.place.PlaceApiSource;
+import com.sync.domain.place.PlaceBookmark;
 import com.sync.domain.place.PlaceCategory;
 import com.sync.domain.user.User;
-import com.sync.dto.google.NearbySearchResponse;
 import com.sync.dto.place.PlaceSearchResult;
 import com.sync.repository.BandRepository;
 import com.sync.repository.PlaceBookmarkRepository;
-import com.sync.repository.PlaceRepository;
 import com.sync.repository.UserRepository;
 import java.lang.reflect.Field;
 import java.time.LocalDate;
@@ -26,7 +22,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.server.ResponseStatusException;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -36,16 +34,13 @@ class PlaceSearchServiceTest {
     private BandRepository bandRepository;
 
     @Mock
-    private PlaceRepository placeRepository;
-
-    @Mock
     private PlaceBookmarkRepository placeBookmarkRepository;
 
     @Mock
     private UserRepository userRepository;
 
     @Mock
-    private GooglePlacesService googlePlacesService;
+    private PlaceLookupService placeLookupService;
 
     private PlaceSearchService placeSearchService;
 
@@ -53,56 +48,43 @@ class PlaceSearchServiceTest {
     void setUp() {
         placeSearchService = new PlaceSearchService(
                 bandRepository,
-                placeRepository,
                 placeBookmarkRepository,
                 userRepository,
-                googlePlacesService,
-                new ObjectMapper()
+                placeLookupService
         );
     }
 
-    // 국내 밴드도 Google Places를 사용하여 장소를 검색하고 캐싱한다.
+    // 검색 위임 결과에 사용자별 북마크 여부가 매핑된다.
     @Test
-    void searchPlaces_domesticUsesGoogleAndCachesPlace() {
+    void searchPlaces_mapsUserBookmark() {
         User user = createUser(1L);
-        Band band = createBand(10L); // is_overseas = false
+        Band band = createBand(10L);
 
-        NearbySearchResponse.Place gPlace = new NearbySearchResponse.Place(
-                "google-abc",
-                List.of("tourist_attraction", "point_of_interest"),
-                new NearbySearchResponse.LocalizedText("경복궁", "ko"),
-                new NearbySearchResponse.LatLng(37.5796, 126.9770),
-                4.5,
-                "서울 종로구 사직로 161",
-                null,
-                null,
-                null
-        );
-        NearbySearchResponse response = new NearbySearchResponse(List.of(gPlace));
+        // 캐시 위임 결과는 북마크 미포함(false)
+        PlaceSearchResult cached = new PlaceSearchResult(
+                300L, PlaceApiSource.GOOGLE, "google-abc", "경복궁", PlaceCategory.CULTURE,
+                37.5796, 126.9770, "서울 종로구 사직로 161", 4.5f, null, false);
+
+        // 사용자가 placeId 300L을 북마크한 상태
+        PlaceBookmark bookmark = mock(PlaceBookmark.class);
+        Place bookmarkedPlace = mock(Place.class);
+        when(bookmark.getPlace()).thenReturn(bookmarkedPlace);
+        when(bookmarkedPlace.getId()).thenReturn(300L);
 
         when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
         when(bandRepository.findByIdAndIsDeletedFalse(10L)).thenReturn(Optional.of(band));
-        when(placeBookmarkRepository.findByBandIdAndUserIdOrderByCreatedAtDesc(10L, 1L)).thenReturn(List.of());
-        when(googlePlacesService.searchText(37.5665, 126.9780, "경복궁", null))
-                .thenReturn(response);
-        when(placeRepository.findByApiSourceAndExternalId(PlaceApiSource.GOOGLE, "google-abc"))
-                .thenReturn(Optional.empty());
-        when(placeRepository.save(any(Place.class))).thenAnswer(invocation -> {
-            Place place = invocation.getArgument(0);
-            setId(place, 300L);
-            return place;
-        });
+        when(placeBookmarkRepository.findByBandIdAndUserIdOrderByCreatedAtDesc(10L, 1L))
+                .thenReturn(List.of(bookmark));
+        when(placeLookupService.searchAndCache(eq(10L), anyDouble(), anyDouble(),
+                eq("경복궁"), eq(PlaceCategory.CULTURE)))
+                .thenReturn(List.of(cached));
 
         List<PlaceSearchResult> results = placeSearchService.searchPlaces(1L, 10L, "경복궁", PlaceCategory.CULTURE);
 
         assertThat(results).hasSize(1);
-        assertThat(results.get(0).apiSource()).isEqualTo(PlaceApiSource.GOOGLE);
-        assertThat(results.get(0).externalId()).isEqualTo("google-abc");
-        assertThat(results.get(0).name()).isEqualTo("경복궁");
-        assertThat(results.get(0).category()).isEqualTo(PlaceCategory.CULTURE);
-        assertThat(results.get(0).rating()).isEqualTo(4.5f);
-        assertThat(results.get(0).isBookmarked()).isFalse();
         assertThat(results.get(0).placeId()).isEqualTo(300L);
+        // 북마크 매핑이 적용되어 true
+        assertThat(results.get(0).isBookmarked()).isTrue();
     }
 
     @Test
@@ -124,7 +106,6 @@ class PlaceSearchServiceTest {
 
         when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
         when(bandRepository.findByIdAndIsDeletedFalse(10L)).thenReturn(Optional.of(band));
-        when(placeBookmarkRepository.findByBandIdAndUserIdOrderByCreatedAtDesc(10L, 1L)).thenReturn(List.of());
 
         ResponseStatusException ex = org.junit.jupiter.api.Assertions.assertThrows(
                 ResponseStatusException.class,
@@ -142,7 +123,6 @@ class PlaceSearchServiceTest {
 
         when(userRepository.findByIdAndIsDeletedFalse(1L)).thenReturn(Optional.of(user));
         when(bandRepository.findByIdAndIsDeletedFalse(20L)).thenReturn(Optional.of(band));
-        when(placeBookmarkRepository.findByBandIdAndUserIdOrderByCreatedAtDesc(20L, 1L)).thenReturn(List.of());
 
         ResponseStatusException ex = org.junit.jupiter.api.Assertions.assertThrows(
                 ResponseStatusException.class,
