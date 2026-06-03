@@ -9,6 +9,7 @@
   데이터: synctrip_pipeline.js (Java AlgorithmService 실제 출력을 AlgorithmVizExportTest가 추출)
   - JS에서 알고리즘을 재구현하지 않고 "재생"만 하므로 화면 결과 = Java 실제 출력
   - file:// 로 더블클릭해서 바로 실행 가능 (서버 불필요)
+  - Round-Robin(기준선) → K-Means(알고리즘)를 별도 스테이지로 분리해 "다음"으로 비교
 -->
 <script src="synctrip_pipeline.js"></script>
 <style>
@@ -59,9 +60,11 @@
   /* ── SVG 요소 트랜지션 ─────────────────────────── */
   .place{transition:transform .9s cubic-bezier(.4,0,.2,1);cursor:default}
   .place circle{transition:r .9s,fill .9s,opacity .9s,stroke .9s,stroke-width .9s}
-  .place text{transition:opacity .6s,fill .6s;font-size:9px;paint-order:stroke;
-    stroke:#ffffff;stroke-width:2.6px;font-weight:600;pointer-events:none}
-  .place .ord{font-size:10px;font-weight:800;fill:#fff;stroke:none;text-anchor:middle;dominant-baseline:central}
+  /* [글자 크기] 원 크기(10~20)에 맞춰 라벨 11px / 외곽선 3px */
+  .place text{transition:opacity .6s,fill .6s;font-size:11px;paint-order:stroke;
+    stroke:#ffffff;stroke-width:3px;font-weight:600;pointer-events:none}
+  /* [글자 크기] 순서 번호 13px */
+  .place .ord{font-size:13px;font-weight:800;fill:#fff;stroke:none;text-anchor:middle;dominant-baseline:central}
   #overlay path.route{fill:none;stroke-width:2.4;opacity:.85;transition:opacity .6s}
   #overlay circle.halo{transition:opacity .8s}
   .maplabel{fill:#5b6a86;font-size:11px;font-weight:700;stroke:none}
@@ -102,6 +105,7 @@
   const DAY_COLORS=['#E74C3C','#3498DB','#2ECC71','#F39C12'];
   const CAT_COLORS={CULTURE:'#8E44AD',ACTIVITY:'#16A085',FOOD:'#E67E22',NATURE:'#27AE60',SHOPPING:'#2980B9'};
   const CAT_KO={CULTURE:'문화',ACTIVITY:'액티비티',FOOD:'음식',NATURE:'자연',SHOPPING:'쇼핑'};
+  const GRAY='#7c8aa5';                              // 정제 전/색 미적용 공통 회색
 
   // ── 장소별 통합 상태 맵 구성 ──────────────────────────────────────────
   const dayById={}, ordById={}, timeById={}, flagById={};
@@ -112,9 +116,6 @@
   D.step1.mainPool.forEach(p=>{prioById[p.id]=p.priorityScore; outlierById[p.id]=p.isOutlier;});
   const altRankById={};
   D.step1.altPool.forEach(p=>{altRankById[p.id]=p.altRank; prioById[p.id]=p.priorityScore;});
-  const mainIds=new Set(D.step1.mainPool.map(p=>p.id));
-  const altIds=new Set(D.step1.altPool.map(p=>p.id));
-  const droppedIds=new Set(D.step1.dropped.map(p=>p.id));
 
   // ── 좌표 투영 (outlier 제외 bbox + 클램프) ────────────────────────────
   const outIds=new Set(D.step1.mainPool.filter(p=>p.isOutlier).map(p=>p.id));
@@ -132,10 +133,19 @@
   }
   const geo={}; D.candidates.forEach(c=>geo[c.id]=proj(c.lat,c.lng));
 
-  // 우선순위 → 반지름 스케일
+  // ── 우선순위 → 반지름 (모든 원 공통) ──────────────────────────────────
+  // [원 크기 조절] 10=최소반지름, 10=가변폭 → 최대 10+10=20
+  // t는 0~1로 clamp (altPool 점수가 mainPool 최저점보다 낮아도 원이 사라지지 않게)
   const prios=D.step1.mainPool.map(p=>p.priorityScore);
   const pMin=Math.min(...prios), pMax=Math.max(...prios);
-  const rOf=p=>{const t=(pMax-pMin)<1e-9?1:(p-pMin)/(pMax-pMin);return 7+t*9;};
+  const rOf=p=>{let t=(pMax-pMin)<1e-9?1:(p-pMin)/(pMax-pMin);t=Math.max(0,Math.min(1,t));return 10+t*10;};
+  const rId=id=>rOf(prioById[id]!==undefined?prioById[id]:pMin);   // id 기준 반지름
+
+  // ── Round-Robin 비교 데이터 (우선순위 내림차순 → i%K 순환 배정) ───────
+  const rrDayById={}, rrDayPlaces={};
+  for(let d=1;d<=D.K;d++) rrDayPlaces[d]=[];
+  [...D.step1.mainPool].sort((a,b)=>b.priorityScore-a.priorityScore)
+    .forEach((p,i)=>{ const d=(i%D.K)+1; rrDayById[p.id]=d; rrDayPlaces[d].push(p.id); });
 
   // ── 정적 배경 (지도 테두리, 범례) ─────────────────────────────────────
   function el(tag,attrs,parent){const e=document.createElementNS(SVG_NS,tag);
@@ -150,42 +160,46 @@
   const overlay=el('g',{id:'overlay'},svg);   // 동선/halo (단계마다 재생성)
   const placeLayer=el('g',{},svg);
 
-  // ── 장소 노드 생성 ────────────────────────────────────────────────────
+  // ── 장소 노드 생성 (초기 회색, rOf 크기) ─────────────────────────────
   const nodes={};
   D.candidates.forEach(c=>{
     const g=el('g',{class:'place',transform:`translate(${geo[c.id][0]},${geo[c.id][1]})`},placeLayer);
-    const circle=el('circle',{r:8,fill:'#7c8aa5',opacity:1,stroke:'none','stroke-width':0},g);
+    const circle=el('circle',{r:rId(c.id),fill:GRAY,opacity:1,stroke:'none','stroke-width':0},g);
     const ord=el('text',{class:'ord',opacity:0},g);
-    const label=el('text',{x:0,y:24,'text-anchor':'middle',fill:'#2c3a57'},g);
+    const label=el('text',{x:0,y:30,'text-anchor':'middle',fill:'#2c3a57'},g);
     label.textContent=c.name;
     nodes[c.id]={g,circle,ord,label,c};
   });
 
-  // ── 범례 (카테고리/날짜 전환) ─────────────────────────────────────────
+  // ── 범례 ──────────────────────────────────────────────────────────────
   const legend=el('g',{class:'legend',transform:`translate(${MAP.x-6},${MAP.y+MAP.h+22})`},svg);
   function drawLegend(mode){
     legend.innerHTML='';
-    let items;
     if(mode==='day'){
-      items=[];for(let i=0;i<D.K;i++)items.push([DAY_COLORS[i],`Day ${i+1}`]);
-    }else{
-      items=Object.keys(CAT_COLORS).map(k=>[CAT_COLORS[k],CAT_KO[k]]);
+      for(let i=0;i<D.K;i++){
+        const gx=i*92;
+        el('circle',{cx:gx+8,cy:0,r:8,fill:DAY_COLORS[i]},legend);
+        el('text',{x:gx+22,y:4},legend).textContent='Day '+(i+1);
+      }
+    }else{ // 'gray' — 색 미적용 단계: 원 크기 의미 안내
+      el('circle',{cx:8,cy:0,r:6,fill:GRAY},legend);
+      el('circle',{cx:30,cy:0,r:10,fill:GRAY},legend);
+      el('text',{x:48,y:4},legend).textContent='원 크기 = 투표 우선순위 점수 (클수록 인기)';
     }
-    items.forEach(([col,txt],i)=>{
-      const gx=i*92;
-      el('circle',{cx:gx+6,cy:0,r:6,fill:col},legend);
-      el('text',{x:gx+18,y:4},legend).textContent=txt;
-    });
   }
 
-  // 동선/halo 헬퍼
+  // ── 동선/halo 헬퍼 ───────────────────────────────────────────────────
   function clearOverlay(){while(overlay.firstChild)overlay.removeChild(overlay.firstChild);}
   function drawHalo(day){
     const ids=D.step3.daySchedules.find(d=>d.day===day).places.map(p=>p.id);
+    drawHaloForIds(ids, DAY_COLORS[day-1]);
+  }
+  function drawHaloForIds(ids, color){
+    if(!ids||ids.length===0)return;
     const pts=ids.map(id=>geo[id]);
     const cx=pts.reduce((s,p)=>s+p[0],0)/pts.length, cy=pts.reduce((s,p)=>s+p[1],0)/pts.length;
     let rad=0;pts.forEach(p=>rad=Math.max(rad,Math.hypot(p[0]-cx,p[1]-cy)));
-    const c=el('circle',{class:'halo',cx,cy,r:rad+26,fill:DAY_COLORS[day-1],opacity:0},overlay);
+    const c=el('circle',{class:'halo',cx,cy,r:Math.max(rad+28,22),fill:color,opacity:0},overlay);
     requestAnimationFrame(()=>c.setAttribute('opacity',0.12));
   }
   function drawRoute(day){
@@ -197,6 +211,20 @@
     path.style.strokeDasharray=len;path.style.strokeDashoffset=len;
     path.style.transition='stroke-dashoffset 1.1s ease';
     requestAnimationFrame(()=>{path.style.strokeDashoffset=0;});
+  }
+  function drawRouteForIds(ids, color){
+    if(!ids||ids.length<2)return;
+    let d='M';ids.forEach((id,i)=>{const[x,y]=geo[id];d+=(i?'L':'')+x+' '+y+' ';});
+    const path=el('path',{class:'route',d,stroke:color},overlay);
+    const len=path.getTotalLength();
+    path.style.strokeDasharray=len;path.style.strokeDashoffset=len;
+    path.style.transition='stroke-dashoffset 1.1s ease';
+    requestAnimationFrame(()=>{path.style.strokeDashoffset=0;});
+  }
+  function modeLabel(txt,color){
+    const t=el('text',{x:MAP.x+MAP.w-4,y:MAP.y-12,'text-anchor':'end',
+      fill:color,'font-size':'13','font-weight':'800',stroke:'#fff','stroke-width':'3','paint-order':'stroke'},overlay);
+    t.textContent=txt;
   }
 
   // ── 노드 상태 적용 ────────────────────────────────────────────────────
@@ -210,116 +238,135 @@
     n.circle.setAttribute('stroke-width',sw||0);
     if(labelText!==undefined)n.label.textContent=labelText;
     n.label.setAttribute('opacity',labelOp===undefined?1:labelOp);
-    if(ord){n.ord.textContent=ord;n.ord.setAttribute('opacity',1);n.label.setAttribute('y',26);}
-    else{n.ord.setAttribute('opacity',0);n.label.setAttribute('y',24);}
+    if(ord){n.ord.textContent=ord;n.ord.setAttribute('opacity',1);n.label.setAttribute('y',32);}
+    else{n.ord.setAttribute('opacity',0);n.label.setAttribute('y',30);}
   }
 
-  // 제약 충족률 계산 (방안 B 보너스)
+  // 제약 충족률 계산
   let viol=0, daysOver=0;
   D.step3.daySchedules.forEach(ds=>{
     if(ds.dayOverloaded)daysOver++;
     ds.places.forEach(p=>{if(p.flags.openingHoursViolation||p.flags.mealWindowViolation||p.flags.lateSchedule)viol++;});
   });
+  function pct(){const total=D.step3.daySchedules.reduce((s,d)=>s+d.places.length,0);
+    return total?Math.round((1-(viol+daysOver)/total)*1000)/10:100;}
 
-  // ════════════════════════════════════════════════════════════════════
-  // 스테이지 정의
-  // ════════════════════════════════════════════════════════════════════
   const cl=D.travelDistanceMetrics.clustering, rq=D.travelDistanceMetrics.routingQuality;
 
+  // ════════════════════════════════════════════════════════════════════
+  // 스테이지 정의 — Round-Robin / K-Means 를 별도 스테이지로 분리
+  // ════════════════════════════════════════════════════════════════════
   const STAGES=[
-    { tag:'STAGE 0', title:'후보 장소 수집', mode:'cat',
-      desc:'그룹원들이 블라인드 장바구니에 담은 <b>'+D.candidates.length+'곳</b>의 후보 장소입니다. 아직 정제 전 — 어디를 며칠에 갈지 정해지지 않았습니다.',
+    // STAGE 0 — 후보 수집 (회색)
+    { tag:'STAGE 0', title:'후보 장소 수집', mode:'gray',
+      desc:'그룹원들이 블라인드 장바구니에 담은 <b>'+D.candidates.length+'곳</b>의 후보 장소입니다. 원 크기는 투표 우선순위(인기)를 뜻합니다. 아직 어디를 며칠에 갈지 정해지지 않았습니다.',
       render(){
-        drawLegend('cat'); clearOverlay();
+        drawLegend('gray'); clearOverlay();
         D.candidates.forEach(c=>{
           const[x,y]=geo[c.id];
-          setNode(c.id,{x,y,r:8,fill:'#7c8aa5',opacity:.92,labelText:c.name,labelOp:.85});
+          setNode(c.id,{x,y,r:rId(c.id),fill:GRAY,opacity:.92,labelText:c.name,labelOp:.85});
         });
       },
       stats:[['후보 장소',D.candidates.length+'곳'],['여행 일수','K = '+D.K]],
       metric:metricIntro },
 
-    { tag:'STAGE 1 · Weighted Cost', title:'투표 점수로 정제', mode:'cat',
+    // STAGE 1 — 투표 정제 (회색 유지)
+    { tag:'STAGE 1 · Weighted Cost', title:'투표 점수로 정제', mode:'gray',
       desc:'투표를 집계해 <b>우선순위 점수</b>(원 크기)를 매기고, 과반(≥'+D.step1.passedThreshold+'표) 통과 장소를 <b>mainPool</b>로 확정합니다. 표가 모자란 장소는 <b>Plan B 대기열(altPool)</b>로 분리됩니다.',
       render(){
-        drawLegend('cat'); clearOverlay();
-        // mainPool — 제자리 유지, 카테고리색, 우선순위∝반지름, outlier 점선링
+        drawLegend('gray'); clearOverlay();
+        // mainPool — 제자리 유지, 회색, 우선순위∝반지름, outlier 점선링
         D.step1.mainPool.forEach(p=>{
           const[x,y]=geo[p.id];
-          setNode(p.id,{x,y,r:rOf(p.priorityScore),fill:CAT_COLORS[p.category],opacity:1,
+          setNode(p.id,{x,y,r:rId(p.id),fill:GRAY,opacity:1,
             stroke:p.isOutlier?'#E69500':'none',sw:p.isOutlier?3:0,
             labelText:p.name+(p.isOutlier?' ⚠':''),labelOp:1});
         });
         // altPool — 오른쪽 대기 컬럼으로 이동(갈라짐), 점선 외곽
         D.step1.altPool.forEach((p,i)=>{
-          setNode(p.id,{x:ALT_X,y:ALT_Y0+i*ALT_DY,r:8,fill:CAT_COLORS[p.category],opacity:.55,
+          setNode(p.id,{x:ALT_X,y:ALT_Y0+i*ALT_DY,r:rId(p.id),fill:GRAY,opacity:.5,
             stroke:'#5b6a86',sw:1.5,labelText:p.name,labelOp:.8});
         });
-        // dropped(있으면) — 페이드아웃
         D.step1.dropped.forEach(p=>setNode(p.id,{opacity:.06,r:5,fill:'#555',labelOp:0}));
       },
       stats:[['mainPool',D.step1.mainPool.length+'곳'],['altPool',D.step1.altPool.length+'곳'],
              ['완전 탈락',D.step1.dropped.length+'곳'],['통과 기준','≥'+D.step1.passedThreshold+'표']],
       metric:metricStep1 },
 
-    { tag:'STAGE 2 · K-Means', title:'날짜별 지리적 군집화', mode:'day',
-      desc:'mainPool을 <b>K-Means</b>로 묶어 가까운 장소끼리 같은 날에 배정합니다. 색이 <b>날짜</b>를 뜻합니다. 130km 떨어진 <b>닛코는 별도의 날(Day 2)</b>로 격리돼 도심 동선을 오염시키지 않습니다.',
+    // STAGE 2 — Round-Robin 배정 (기준선, 색이 처음 등장)
+    { tag:'STAGE 2 · 기준선', title:'날짜 배정 ① Round-Robin', mode:'day',
+      desc:'먼저 <b>알고리즘 없이</b> 우선순위 순서대로 Day 1→2→3→4→1… 으로 <b>Round-Robin</b> 배정해 봅니다. 색이 <b>날짜</b>입니다. 130km 떨어진 <b>닛코가 도쿄 시내와 같은 날(Day 4)</b>에 섞여 동선이 전국으로 흩어집니다.',
       render(){
         drawLegend('day'); clearOverlay();
+        modeLabel('▲ Round-Robin (알고리즘 없음)','#c0392b');
+        for(let d=1;d<=D.K;d++)if((rrDayPlaces[d]||[]).length>0)drawHaloForIds(rrDayPlaces[d],DAY_COLORS[d-1]);
+        D.step1.mainPool.forEach(p=>{
+          const[x,y]=geo[p.id],day=rrDayById[p.id];
+          setNode(p.id,{x,y,r:rId(p.id),fill:DAY_COLORS[day-1],opacity:1,
+            stroke:p.isOutlier?'#E69500':'none',sw:p.isOutlier?3:0,labelText:p.name,labelOp:1});
+        });
+        for(let d=1;d<=D.K;d++)drawRouteForIds(rrDayPlaces[d]||[],DAY_COLORS[d-1]);
+        D.step1.altPool.forEach((p,i)=>setNode(p.id,{x:ALT_X,y:ALT_Y0+i*ALT_DY,r:rId(p.id)*.7,opacity:.3,labelOp:.3}));
+      },
+      stats:[['비교 모드','Round-Robin'],['총 이동거리',cl.roundRobinTotalKm+' km'],
+             ['Day 4 (닛코 포함)',cl.perDay[3].roundRobinKm+' km'],['닛코 격리','미적용']],
+      metric:metricRR },
+
+    // STAGE 3 — K-Means 배정 (알고리즘)
+    { tag:'STAGE 3 · K-Means', title:'날짜 배정 ② K-Means 군집화', mode:'day',
+      desc:'이제 <b>K-Means</b>로 가까운 장소끼리 같은 날에 배정합니다. 130km 떨어진 <b>닛코는 Day 2로 자동 격리</b>돼 도심 동선을 오염시키지 않습니다. 같은 날 묶음이 지리적으로 뭉칩니다.',
+      render(){
+        drawLegend('day'); clearOverlay();
+        modeLabel('✓ K-Means (알고리즘 결과)','#1a9b54');
         for(let d=1;d<=D.K;d++)drawHalo(d);
         D.step1.mainPool.forEach(p=>{
-          const[x,y]=geo[p.id], day=dayById[p.id];
-          setNode(p.id,{x,y,r:rOf(p.priorityScore),
-            fill:day?DAY_COLORS[day-1]:'#7c8aa5',opacity:1,
-            stroke:p.isOutlier?'#E69500':'none',sw:p.isOutlier?3:0,
-            labelText:p.name,labelOp:1});
+          const[x,y]=geo[p.id],day=dayById[p.id];
+          setNode(p.id,{x,y,r:rId(p.id),fill:day?DAY_COLORS[day-1]:GRAY,opacity:1,
+            stroke:p.isOutlier?'#E69500':'none',sw:p.isOutlier?3:0,labelText:p.name,labelOp:1});
         });
-        D.step1.altPool.forEach((p,i)=>setNode(p.id,{x:ALT_X,y:ALT_Y0+i*ALT_DY,r:7,opacity:.3,labelOp:.3}));
+        for(let d=1;d<=D.K;d++)drawRoute(d);
+        D.step1.altPool.forEach((p,i)=>setNode(p.id,{x:ALT_X,y:ALT_Y0+i*ALT_DY,r:rId(p.id)*.7,opacity:.3,labelOp:.3}));
       },
-      stats:clusterStats(),
-      metric:metricClustering },
+      stats:(function(){const sizes=D.step3.daySchedules.map(d=>d.places.length);
+        return [['군집 수','K = '+D.K],['날짜별 장소',sizes.join(' / ')],
+                ['K-Means 총거리',cl.kmeansTotalKm+' km'],['절감 효과','-'+cl.savingPct+'%']];})(),
+      metric:metricKM },
 
-    { tag:'STAGE 3 · TSP', title:'동선 최적화 + 시간 배정', mode:'day',
+    // STAGE 4 — TSP 동선 + 시간
+    { tag:'STAGE 4 · TSP', title:'동선 최적화 + 시간 배정', mode:'day',
       desc:'각 날짜 안에서 <b>Nearest Neighbor TSP</b>로 방문 순서를 정하고(번호), 이동시간·체류시간으로 <b>시간표</b>를 만듭니다. 음식점은 점심·저녁 식사 시간대에 끼워넣습니다.',
       render(){
         drawLegend('day'); clearOverlay();
         for(let d=1;d<=D.K;d++){drawHalo(d);drawRoute(d);}
         D.step1.mainPool.forEach(p=>{
           const[x,y]=geo[p.id], day=dayById[p.id];
-          setNode(p.id,{x,y,r:11,fill:day?DAY_COLORS[day-1]:'#7c8aa5',opacity:1,
+          setNode(p.id,{x,y,r:rId(p.id),fill:day?DAY_COLORS[day-1]:GRAY,opacity:1,
             stroke:p.isOutlier?'#E69500':'#0f1420',sw:p.isOutlier?3:1.5,
             labelText:timeById[p.id]||p.name,labelOp:1,ord:ordById[p.id]});
         });
-        D.step1.altPool.forEach((p,i)=>setNode(p.id,{x:ALT_X,y:ALT_Y0+i*ALT_DY,r:7,opacity:.25,labelOp:.25}));
+        D.step1.altPool.forEach((p,i)=>setNode(p.id,{x:ALT_X,y:ALT_Y0+i*ALT_DY,r:rId(p.id)*.7,opacity:.25,labelOp:.25}));
       },
       stats:[['총 동선(NN)',rq.nnTotalKm+' km'],['이론 최적해',rq.optimalTotalKm+' km'],
              ['일정 위반',viol+'건'],['초과 일자',daysOver+'일']],
       metric:metricRouting },
 
+    // STAGE 5 — 요약
     { tag:'요약', title:'알고리즘 정확성 요약', mode:'day',
-      desc:'세 단계가 의도대로 동작했습니다. 핵심 지표로 정리하면 다음과 같습니다.',
+      desc:'단계가 의도대로 동작했습니다. 핵심 지표로 정리하면 다음과 같습니다.',
       render(){
         drawLegend('day'); clearOverlay();
         for(let d=1;d<=D.K;d++){drawHalo(d);drawRoute(d);}
         D.step1.mainPool.forEach(p=>{
           const[x,y]=geo[p.id], day=dayById[p.id];
-          setNode(p.id,{x,y,r:10,fill:day?DAY_COLORS[day-1]:'#7c8aa5',opacity:1,
+          setNode(p.id,{x,y,r:rId(p.id),fill:day?DAY_COLORS[day-1]:GRAY,opacity:1,
             stroke:'#0f1420',sw:1.5,labelText:'',labelOp:0,ord:ordById[p.id]});
         });
-        D.step1.altPool.forEach((p,i)=>setNode(p.id,{x:ALT_X,y:ALT_Y0+i*ALT_DY,r:6,opacity:.2,labelOp:0}));
+        D.step1.altPool.forEach((p,i)=>setNode(p.id,{x:ALT_X,y:ALT_Y0+i*ALT_DY,r:rId(p.id)*.6,opacity:.2,labelOp:0}));
       },
       stats:[['이동거리 단축',cl.savingPct+'%'],['최적해 격차','+'+rq.gapToOptimalPct+'%'],
              ['제약 충족률',pct()+'%'],['결정론성','100%']],
       metric:metricSummary },
   ];
-
-  function clusterStats(){
-    const sizes=D.step3.daySchedules.map(d=>d.places.length);
-    return [['군집 수','K = '+D.K],['날짜별 장소',sizes.join(' / ')],
-            ['K-Means 총거리',cl.kmeansTotalKm+' km'],['Round-Robin',cl.roundRobinTotalKm+' km']];
-  }
-  function pct(){const total=D.step3.daySchedules.reduce((s,d)=>s+d.places.length,0);
-    return total?Math.round((1-(viol+daysOver)/ (total))*1000)/10:100;}
 
   // ── 메트릭 패널 렌더러들 ──────────────────────────────────────────────
   function bar(label,color,widthPct,valTxt){
@@ -342,17 +389,27 @@
       ${bar('탈락','#444c5e',Math.round(dr/t*100),dr+'곳')}
       <div class="headline">싫어요 우세 장소는 altPool 진입이 차단됩니다(테러 방지). ⚠ = 거리 이상치(닛코).</div>`;}
 
-  function metricClustering(){
+  // STAGE 2 — Round-Robin 기준선
+  function metricRR(){
     const k=cl.kmeansTotalKm,r=cl.roundRobinTotalKm,mx=Math.max(k,r);
-    return `<h3>📏 방안 A — 군집 품질 (총 이동거리)</h3>
+    return `<h3>⚠️ Round-Robin (알고리즘 없음)</h3>
+      ${bar('Round-Robin','#E74C3C',Math.round(r/mx*100),r+'km')}
+      ${bar('K-Means','#2ECC71',Math.round(k/mx*100),k+'km')}
+      <div class="headline">닛코(130km)가 Day 4에 섞여 총 <b>${r}km</b> 이동 필요.<br>
+      다음 단계에서 K-Means를 적용해 비교합니다. →</div>`;}
+
+  // STAGE 3 — K-Means 결과
+  function metricKM(){
+    const k=cl.kmeansTotalKm,r=cl.roundRobinTotalKm,mx=Math.max(k,r);
+    return `<h3>✅ K-Means (알고리즘 결과)</h3>
       ${bar('K-Means','#2ECC71',Math.round(k/mx*100),k+'km')}
       ${bar('Round-Robin','#E74C3C',Math.round(r/mx*100),r+'km')}
-      <div class="headline">가까운 곳을 같은 날에 묶어 이동거리 <b>${cl.savingPct}% 단축</b>.
-      (라우팅은 양쪽 동일 조건으로 고정해 순수 군집 효과만 비교)</div>`;}
+      <div class="headline">가까운 곳끼리 같은 날로 묶어 이동거리 <b>-${cl.savingPct}%</b> 단축.<br>
+      (라우팅은 양쪽 동일 조건으로 순수 군집 효과만 비교)</div>`;}
 
   function metricRouting(){
     const n=rq.nnTotalKm,o=rq.optimalTotalKm,mx=Math.max(n,o);
-    return `<h3>🧭 방안 A — 라우팅 휴리스틱 품질</h3>
+    return `<h3>🧭 라우팅 휴리스틱 품질</h3>
       ${bar('NN-TSP (우리)','#3498DB',Math.round(n/mx*100),n+'km')}
       ${bar('완전탐색 최적','#F39C12',Math.round(o/mx*100),o+'km')}
       <div class="headline">Nearest Neighbor가 이론적 최적해 대비 <b>+${rq.gapToOptimalPct}%</b>로
