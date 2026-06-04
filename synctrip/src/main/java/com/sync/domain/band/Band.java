@@ -27,7 +27,10 @@ import org.hibernate.annotations.UpdateTimestamp;
 @Table(name = "user_groups")
 public class Band {
     private static final long INVITE_CODE_TTL_SECONDS = 86400;  // 24 시간
-    private static final int EDIT_LOCK_TIMEOUT_MINUTES = 5;
+    // 락 자동 만료 시간 — 마지막 편집 활동(lastEditingAt) 이후 이 시간이 지나면 락 무효.
+    // 프론트가 편집 화면에서 30초마다 /edit/start 하트비트로 lastEditingAt을 갱신하므로,
+    // 앱 강제 종료·네트워크 단절 등으로 finishEditing이 누락돼도 최대 1분 안에 자동 해제된다.
+    private static final int EDIT_LOCK_TIMEOUT_MINUTES = 1;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -258,12 +261,25 @@ public class Band {
         this.lastEditingAt = null;
     }
 
-    public boolean isEditingByOther(Long userId) {
-        if (currentlyEditingUserId == null) return false;
+    /**
+     * 만료 시간을 적용한 실효 편집 락 보유자 ID.
+     * lastEditingAt 이후 EDIT_LOCK_TIMEOUT_MINUTES 분이 지났으면 락을 만료로 보고 null 반환한다.
+     * (배너 표시 editingUserId·canEdit 판정·isEditingByOther 모두 이 메서드를 공유해 만료 기준을 일치시킨다)
+     *
+     * 주의: currentlyEditingUserId 필드 자체는 finishEditing 전까지 비워지지 않으므로,
+     * 만료 여부를 반영하려면 반드시 이 메서드를 거쳐야 한다 (raw getter는 만료 미적용).
+     */
+    public Long getActiveEditingUserId() {
+        if (currentlyEditingUserId == null) return null;
         if (lastEditingAt != null && lastEditingAt.isBefore(LocalDateTime.now().minusMinutes(EDIT_LOCK_TIMEOUT_MINUTES))) {
-            return false;
+            return null;
         }
-        return !currentlyEditingUserId.equals(userId);
+        return currentlyEditingUserId;
+    }
+
+    public boolean isEditingByOther(Long userId) {
+        Long active = getActiveEditingUserId();
+        return active != null && !active.equals(userId);
     }
 
     public void delete() {

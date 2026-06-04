@@ -23,12 +23,14 @@ import com.sync.domain.band.BandMember;
 import com.sync.domain.band.BandStatus;
 import com.sync.domain.place.Place;
 import com.sync.domain.place.PlaceBookmark;
+import com.sync.domain.place.PlaceCategory;
 import com.sync.domain.schedule.Schedule;
 import com.sync.domain.schedule.ScheduleAlt;
 import com.sync.domain.user.User;
 import com.sync.dto.schedule.ScheduleAltResponse;
 import com.sync.dto.schedule.ScheduleDayResponse;
 import com.sync.dto.schedule.SchedulePlaceInfo;
+import com.sync.dto.schedule.ScheduleMoveRequest;
 import com.sync.dto.schedule.ScheduleReorderRequest;
 import com.sync.dto.schedule.ScheduleResponse;
 import com.sync.dto.schedule.ScheduleSlotResponse;
@@ -44,9 +46,9 @@ import com.sync.domain.notification.NotificationType;
 import com.sync.dto.holiday.HolidayInfo;
 import com.sync.dto.ws.ScheduleUpdatedEvent;
 import com.sync.repository.VoteRepository;
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.HashMap;
@@ -57,6 +59,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -74,6 +78,9 @@ public class ScheduleService {
     private static final int PLAN_B_MAX_RECOMMENDATIONS = 7;
     /* 추천 후보에 포함되기 위한 최소 우선순위 점수 (0.3 이상) */
     private static final double PLAN_B_MIN_PRIORITY_SCORE = 0.3;
+    // CULTURE↔NATURE 상호 교환 가능 — 같은 분위기 장소로 대체 허용
+    private static final Set<PlaceCategory> PLAN_B_CULTURE_NATURE_GROUP =
+            Set.of(PlaceCategory.CULTURE, PlaceCategory.NATURE);
 
     private final ScheduleRepository scheduleRepository;
     private final ScheduleAltRepository scheduleAltRepository;
@@ -85,6 +92,10 @@ public class ScheduleService {
     private final VoteRepository voteRepository;
     private final ObjectMapper objectMapper;
     private final SimpMessagingTemplate messagingTemplate;
+    private final GoogleDistanceService googleDistanceService;
+
+    @PersistenceContext
+    private EntityManager entityManager;
     private final NotificationService notificationService;
     private final HolidayService holidayService;
 
@@ -99,7 +110,8 @@ public class ScheduleService {
                            ObjectMapper objectMapper,
                            SimpMessagingTemplate messagingTemplate,
                            NotificationService notificationService,
-                           HolidayService holidayService) {
+                           HolidayService holidayService,
+                           GoogleDistanceService googleDistanceService) {
         this.scheduleRepository = scheduleRepository;
         this.scheduleAltRepository = scheduleAltRepository;
         this.bandRepository = bandRepository;
@@ -112,6 +124,7 @@ public class ScheduleService {
         this.messagingTemplate = messagingTemplate;
         this.notificationService = notificationService;
         this.holidayService = holidayService;
+        this.googleDistanceService = googleDistanceService;
     }
 
     /**
@@ -158,7 +171,8 @@ public class ScheduleService {
         GroupInfo group = new GroupInfo(
                 band.getId(), band.getDestinationLat(), band.getDestinationLng(),
                 com.sync.algorithm.TravelStyle.valueOf(band.getTravelStyle().name()),
-                band.getStartDate(), band.getEndDate(), band.isOverseas()
+                band.getStartDate(), band.getEndDate(), band.isOverseas(),
+                band.getAccommodationLat(), band.getAccommodationLng()  // 숙소 좌표 (null이면 미입력)
         );
 
         List<MemberInfo> memberInfos = members.stream()
@@ -204,9 +218,10 @@ public class ScheduleService {
             }
         }
 
-        Map<Long, OpeningHours> openingHoursById = band.isOverseas()
-                ? buildOpeningHoursMap(bookmarks)
-                : Map.of();
+        // 영업시간 위반 체크는 국내·해외 모두 적용 — 국내 장소도 Google Places에서
+        // opening_hours를 받아 캐싱하므로 데이터가 있으면 위반을 표시한다.
+        // (이전엔 해외 전용이라 국내 일정에 위반 배지가 전혀 뜨지 않았음)
+        Map<Long, OpeningHours> openingHoursById = buildOpeningHoursMap(bookmarks);
 
         AlgorithmInput input = new AlgorithmInput(
                 group, memberInfos, placeInfos, voteInfos, null, openingHoursById);
@@ -245,20 +260,71 @@ public class ScheduleService {
 
     private void saveSchedules(Band band, AlgorithmResult result, Map<Long, Place> placeById) {
         List<Schedule> schedules = new ArrayList<>();
+        // 경고 플래그를 Google 재계산 시각 기준으로 다시 산정하기 위한 준비.
+        // SimpleTsp가 매긴 플래그는 haversine 추정 시각 기준이라 화면 표시 시각(Google)과
+        // 어긋나 첫 생성 화면에서만 영업위반·식사윈도우·늦은일정 배지가 오탐/누락되던 문제 수정.
+        Map<Long, OpeningHours> openingHoursById =
+                buildOpeningHoursMapFromPlaces(new ArrayList<>(placeById.values()));
+        boolean isOverseas = band.isOverseas();
+        com.sync.algorithm.TravelStyle algStyle =
+                com.sync.algorithm.TravelStyle.valueOf(band.getTravelStyle().name());
+
         for (DaySchedule day : result.step3Result().daySchedules()) {
             List<ScheduledPlace> slots = day.places();
+            // SimpleTsp 결과에서 장소 순서만 사용하고, 시작시각·이동시간은 Google API로 재계산
+            LocalTime current = SimpleTsp.DEFAULT_DAY_START;
             for (int i = 0; i < slots.size(); i++) {
                 ScheduledPlace sp = slots.get(i);
                 Place place = placeById.get(sp.placeId());
                 if (place == null) continue;
 
-                Integer travelTime = i > 0
-                        ? (int) Duration.between(slots.get(i - 1).endTime(), sp.startTime()).toMinutes()
-                        : null;
+                Integer travelTime = null;
+                String transitSummary = null;
+                if (i == 0 && band.getAccommodationLat() != null) {
+                    // 숙소→첫 장소 이동시간 (Google Directions API, transit 모드)
+                    long deptUnix = toDepartureUnix(band.getStartDate(), sp.day(), current);
+                    TravelInfo info = googleDistanceService.getTravelInfo(
+                            band.getAccommodationLat(), band.getAccommodationLng(),
+                            sp.latitude(), sp.longitude(), deptUnix);
+                    current = current.plusMinutes(info.minutes());
+                    travelTime = info.minutes();
+                    transitSummary = info.transitSummary();
+                } else if (i > 0) {
+                    // 이전 장소→현재 장소 이동시간 (Google Directions API, transit 모드)
+                    ScheduledPlace prev = slots.get(i - 1);
+                    long deptUnix = toDepartureUnix(band.getStartDate(), sp.day(), current);
+                    TravelInfo info = googleDistanceService.getTravelInfo(
+                            prev.latitude(), prev.longitude(),
+                            sp.latitude(), sp.longitude(), deptUnix);
+                    current = current.plusMinutes(info.minutes());
+                    travelTime = info.minutes();
+                    transitSummary = info.transitSummary();
+                }
 
-                schedules.add(Schedule.create(
+                // 경고 플래그 재계산 — 화면 표시 시각(Google)과 동일 기준으로 산정.
+                // outlier는 K-Means 결과(SimpleTsp 값) 보존, 나머지 3종은 재계산
+                // (assignTimesInOrder의 편집 경로와 동일 로직 → 첫 생성/편집 결과 일관성 확보).
+                LocalTime startTime = current;
+                LocalTime endTime   = current.plusMinutes(sp.estimatedDuration());
+                boolean ohViolation = false;
+                OpeningHours oh = openingHoursById.get(sp.placeId());
+                if (oh != null) {
+                    ohViolation = startTime.isBefore(oh.open()) || endTime.isAfter(oh.close());
+                }
+                boolean mealViolation = place.getCategory() == com.sync.domain.place.PlaceCategory.FOOD
+                        && !isInMealWindow(startTime, algStyle);
+                boolean late = !startTime.isBefore(com.sync.algorithm.AlgorithmConstants.LATE_WARN_TIME);
+                boolean ohUnverified = isOverseas && oh == null;
+
+                Schedule slot = Schedule.create(
                         band, place, sp.day(), sp.orderInDay(),
-                        sp.startTime(), sp.estimatedDuration(), travelTime));
+                        current, sp.estimatedDuration(), travelTime,
+                        sp.isOutlierCandidate(), ohViolation,
+                        mealViolation, late, ohUnverified);
+                slot.setTransitSummary(transitSummary);
+                schedules.add(slot);
+
+                current = current.plusMinutes(sp.estimatedDuration());
             }
         }
         scheduleRepository.saveAll(schedules);
@@ -303,7 +369,10 @@ public class ScheduleService {
                         .findFirst()
                         .ifPresent(period -> {
                             LocalTime open = LocalTime.parse(period.get("open"));
-                            LocalTime close = LocalTime.parse(period.get("close"));
+                            // 자정 마감("00:00")은 익일 0시까지 영업한다는 의미 → 23:59로 보정해
+                            // 심야 영업 장소가 영업시간 위반으로 오탐되는 것을 막는다.
+                            String closeStr = period.get("close");
+                            LocalTime close = "00:00".equals(closeStr) ? LocalTime.MAX : LocalTime.parse(closeStr);
                             result.put(p.getId(), new OpeningHours(open, close));
                         });
             } catch (Exception e) {
@@ -317,7 +386,7 @@ public class ScheduleService {
     public ScheduleResponse getSchedule(Long userId, Long bandId) {
         loadActiveUser(userId);
         Band band = loadBand(bandId);
-        requireMembership(bandId, userId);
+        BandMember member = requireMembership(bandId, userId);
 
         List<Schedule> schedules =
                 scheduleRepository.findByBandIdOrderByDayNumberAscSlotOrderAsc(bandId);
@@ -327,24 +396,38 @@ public class ScheduleService {
         }
 
         Map<Integer, List<Schedule>> byDay = schedules.stream()
-                .collect(Collectors.groupingBy(
-                        Schedule::getDayNumber,
-                        LinkedHashMap::new,
-                        Collectors.toList()
-                ));
+                .collect(Collectors.groupingBy(Schedule::getDayNumber, LinkedHashMap::new, Collectors.toList()));
 
-        List<ScheduleDayResponse> days = byDay.entrySet().stream()
-                .map(e -> {
-                    int dayNum = e.getKey();
+        // 슬롯이 없는 날도 포함 — 전체 일정을 옮기면 해당 day가 응답에서 사라져 헤더가 없어지는 문제 방지
+        long totalDays = java.time.temporal.ChronoUnit.DAYS.between(band.getStartDate(), band.getEndDate()) + 1;
+        List<ScheduleDayResponse> days = java.util.stream.IntStream.rangeClosed(1, (int) totalDays)
+                .mapToObj(dayNum -> {
                     LocalDate date = band.getStartDate().plusDays(dayNum - 1);
-                    List<ScheduleSlotResponse> slots = e.getValue().stream()
+                    List<ScheduleSlotResponse> slots = byDay.getOrDefault(dayNum, List.of()).stream()
                             .map(this::toSlotResponse)
                             .toList();
                     return new ScheduleDayResponse(dayNum, date, slots);
                 })
                 .toList();
 
-        return new ScheduleResponse(bandId, band.getStartDate(), band.getEndDate(), days);
+        // 편집자 정보: 타임아웃(EDIT_LOCK_TIMEOUT_MINUTES) 만료된 락은 null 처리.
+        // raw getCurrentlyEditingUserId()는 만료를 적용하지 않아 배너가 영구 지속되던 버그가 있었음
+        // → 만료 반영하는 getActiveEditingUserId() 사용 (isEditingByOther와 동일 기준).
+        Long editingUserId = band.getActiveEditingUserId();
+        String editingUserName = null;
+        if (editingUserId != null) {
+            editingUserName = userRepository.findByIdAndIsDeletedFalse(editingUserId)
+                    .map(com.sync.domain.user.User::getName)
+                    .orElse(null);
+        }
+
+        // canEdit: DONE 아님 + joined_after_voting 아님 + (편집 락 없거나 본인이 보유)
+        boolean canEdit = band.getStatus() != BandStatus.DONE
+                && !member.isJoinedAfterVoting()
+                && (editingUserId == null || editingUserId.equals(userId));
+
+        return new ScheduleResponse(bandId, band.getStartDate(), band.getEndDate(), days,
+                editingUserId, editingUserName, canEdit);
     }
 
     @Transactional(readOnly = true)
@@ -406,8 +489,8 @@ public class ScheduleService {
                 if (scheduledPlaceIds.contains(alt.getPlace().getId())) continue;
                 /* 이번 루프에서 이미 추가한 장소면 중복 방지 */
                 if (addedPlaceIds.contains(alt.getPlace().getId())) continue;
-                /* 카테고리 다르면 제외 (음식점을 음식점으로만 교체) */
-                if (alt.getCategory() != com.sync.domain.place.PlaceCategory.valueOf(targetPlace.getCategory().name())) continue;
+                /* 카테고리 호환 확인: exact match 또는 CULTURE↔NATURE 그룹 내 교체만 허용 */
+                if (!isPlanBCompatibleCategory(alt.getCategory(), targetPlace.getCategory())) continue;
                 /* 우선순위 점수가 너무 낮으면 제외 */
                 if (alt.getPriorityScore() < PLAN_B_MIN_PRIORITY_SCORE) continue;
 
@@ -432,9 +515,9 @@ public class ScheduleService {
                    거리가 0이면 1.0, 최대 반경(3km)이면 0.0 */
                 double geoScore = Math.max(0.0, 1.0 - distKm / PLAN_B_STAGE_RADII_KM.get(PLAN_B_STAGE_RADII_KM.size() - 1));
                 /* 최종 추천 점수 = 투표점수 60% + 거리점수 40%
-                   투표점수(priorityScore): 알고리즘에서 계산한 이 장소의 선호도
-                   거리점수(geoScore): 거리가 가까울수록 높음 */
-                double recommendScore = alt.getPriorityScore() * 0.6 + geoScore * 0.4;
+                   priorityScore ∈ [-1.0, 1.4] → (score+1.0)/2.4 로 [0,1] 정규화 후 가중합 */
+                double normalizedPriority = (alt.getPriorityScore() + 1.0) / 2.4;
+                double recommendScore = normalizedPriority * 0.6 + geoScore * 0.4;
 
                 /* 이 단계의 후보 리스트에 추가 */
                 stageCandidates.add(new PlanBResponse(
@@ -472,7 +555,36 @@ public class ScheduleService {
             previousRadius = currentRadius;
         }
 
-        /* 12. 최종 추천 반환 */
+        /* 12. Fallback — 반경 탐색 결과가 없으면 거리 무관하게 카테고리 맞는 altPool 전체 반환
+           altPool 자체가 비어 있거나 모든 장소가 3km 밖에 있을 때 빈 결과 방지 */
+        if (recommendations.isEmpty()) {
+            for (ScheduleAlt alt : alts) {
+                if (recommendations.size() >= PLAN_B_MAX_RECOMMENDATIONS) break;
+                if (scheduledPlaceIds.contains(alt.getPlace().getId())) continue;
+                if (addedPlaceIds.contains(alt.getPlace().getId())) continue;
+                if (!isPlanBCompatibleCategory(alt.getCategory(), targetPlace.getCategory())) continue;
+                if (alt.getPriorityScore() < PLAN_B_MIN_PRIORITY_SCORE) continue;
+
+                double distKm = haversine(
+                        targetPlace.getLatitude(), targetPlace.getLongitude(),
+                        alt.getPlace().getLatitude(), alt.getPlace().getLongitude()
+                );
+                double normalizedPriority = (alt.getPriorityScore() + 1.0) / 2.4;
+                recommendations.add(new PlanBResponse(
+                        alt.getPlace().getId(),
+                        alt.getCategory(),
+                        normalizedPriority,
+                        distKm,
+                        -1.0,   // fallback임을 표시 (반경 없음)
+                        -1,     // stage -1 = fallback
+                        true,   // overflow = true (반경 초과 장소임을 클라이언트에 알림)
+                        toPlaceInfo(alt.getPlace())
+                ));
+                addedPlaceIds.add(alt.getPlace().getId());
+            }
+        }
+
+        /* 13. 최종 추천 반환 */
         return recommendations;
     }
 
@@ -485,7 +597,11 @@ public class ScheduleService {
     public void reorderSchedule(Long userId, Long bandId, ScheduleReorderRequest request) {
         loadActiveUser(userId);
         Band band = loadBand(bandId);
-        requireMembership(bandId, userId);
+        requireEditPermission(bandId, userId);  // 멤버십 + joined_after_voting 동시 체크
+        // DONE 상태 편집 차단
+        if (band.getStatus() == BandStatus.DONE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "완료된 여행의 일정은 편집할 수 없습니다.");
+        }
         requireEditingLock(band, userId);
 
         List<Long> orderedIds = request.orderedScheduleIds();
@@ -512,7 +628,15 @@ public class ScheduleService {
         List<Schedule> ordered = orderedIds.stream()
                 .map(byId::get)
                 .toList();
-        assignTimesInOrder(ordered, band.isOverseas());
+
+        // 임시 주차 후 flush — Hibernate가 entity ID 순으로 UPDATE해 같은 day 내 slot_order 충돌 방지
+        for (int i = 0; i < ordered.size(); i++) {
+            ordered.get(i).updateSlotOrderOnly(10000 + i);
+        }
+        scheduleRepository.saveAll(ordered);
+        entityManager.flush();
+
+        assignTimesInOrder(ordered, band);
         scheduleRepository.saveAll(ordered);
 
         // 그룹 전원에게 일정 변경 알림
@@ -520,35 +644,213 @@ public class ScheduleService {
                 "/topic/bands/" + bandId + "/schedule",
                 new ScheduleUpdatedEvent(bandId, userId));
 
+        if (request.shouldNotify()) {
+            notificationService.notifyAll(bandId, NotificationType.SCHEDULE_UPDATED,
+                    band.getName() + " 여행 일정 순서가 변경됐어요! 확인해보세요 🔀");
+        }
+    }
+
+    /** 슬롯을 다른 Day로 이동하고 소스·타겟 양쪽 Day의 시간을 재계산한다. */
+    @Transactional
+    public void moveSchedule(Long userId, Long bandId, ScheduleMoveRequest request) {
+        loadActiveUser(userId);
+        Band band = loadBand(bandId);
+        requireEditPermission(bandId, userId);
+        if (band.getStatus() == BandStatus.DONE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "완료된 여행의 일정은 편집할 수 없습니다.");
+        }
+        requireEditingLock(band, userId);
+
+        Schedule schedule = scheduleRepository.findById(request.scheduleId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "일정 슬롯을 찾을 수 없습니다."));
+        if (!schedule.getBand().getId().equals(bandId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "해당 밴드의 일정이 아닙니다.");
+        }
+
+        long totalDays = java.time.temporal.ChronoUnit.DAYS.between(band.getStartDate(), band.getEndDate()) + 1;
+        if (request.targetDayNumber() < 1 || request.targetDayNumber() > totalDays) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "유효하지 않은 일차입니다. 가능한 범위: 1 ~ " + totalDays);
+        }
+
+        int sourceDayNumber = schedule.getDayNumber();
+        int targetDayNumber = request.targetDayNumber();
+
+        List<Schedule> sourceSlots = new java.util.ArrayList<>(
+                scheduleRepository.findByBandIdAndDayNumberOrderBySlotOrderAsc(bandId, sourceDayNumber));
+        sourceSlots.remove(schedule);
+
+        if (sourceDayNumber == targetDayNumber) {
+            // 같은 Day 이동: updateDayNumber 불필요
+            int insertIndex = Math.max(0, Math.min(request.targetSlotOrder() - 1, sourceSlots.size()));
+            sourceSlots.add(insertIndex, schedule);
+            assignTimesInOrder(sourceSlots, band);
+            scheduleRepository.saveAll(sourceSlots);
+        } else {
+            // Hibernate는 flush 시 EntityUpdateAction을 entity ID 오름차순으로 실행하므로
+            // saveAll 리스트 역순은 순서 보장 불가 — 임시 주차(10000+i) 방식으로 unique 제약 충돌 방지
+            List<Schedule> existingTargetSlots = new java.util.ArrayList<>(
+                    scheduleRepository.findByBandIdAndDayNumberOrderBySlotOrderAsc(bandId, targetDayNumber));
+
+            // 1단계: targetDay 기존 슬롯들을 충돌 없는 임시 번호로 주차
+            for (int i = 0; i < existingTargetSlots.size(); i++) {
+                existingTargetSlots.get(i).updateSlotOrderOnly(10000 + i);
+            }
+            if (!existingTargetSlots.isEmpty()) {
+                scheduleRepository.saveAll(existingTargetSlots);
+                entityManager.flush();
+            }
+
+            // 2단계: 이동할 슬롯을 targetDay로 옮기고 임시 번호 부여 → flush로 sourceDay 자리 비움
+            schedule.updateDayNumber(targetDayNumber);
+            schedule.updateSlotOrderOnly(10000 + existingTargetSlots.size());
+            scheduleRepository.save(schedule);
+            entityManager.flush();
+
+            // 3단계: 삽입 위치 결정 후 targetSlots 구성 (schedule이 이미 targetDay 소속)
+            int insertIndex = Math.max(0, Math.min(request.targetSlotOrder() - 1, existingTargetSlots.size()));
+            existingTargetSlots.add(insertIndex, schedule);
+
+            // 4단계: 시간 재계산
+            assignTimesInOrder(sourceSlots, band);
+            assignTimesInOrder(existingTargetSlots, band);
+
+            // 5단계: 최종 순서로 저장 (모든 충돌 자리가 비워진 상태)
+            scheduleRepository.saveAll(sourceSlots);
+            entityManager.flush();
+            scheduleRepository.saveAll(existingTargetSlots);
+        }
+
+        messagingTemplate.convertAndSend(
+                "/topic/bands/" + bandId + "/schedule",
+                new ScheduleUpdatedEvent(bandId, userId));
+        if (request.shouldNotify()) {
+            notificationService.notifyAll(bandId, NotificationType.SCHEDULE_UPDATED,
+                    band.getName() + " 여행 일정 순서가 변경됐어요! 확인해보세요 🔀");
+        }
+    }
+
+    /** 일정 슬롯(장소)을 삭제하고 같은 Day의 남은 슬롯 순서·시간을 재계산한다. */
+    @Transactional
+    public void deleteSchedulePlace(Long userId, Long bandId, Long scheduleId) {
+        loadActiveUser(userId);
+        Band band = loadBand(bandId);
+        requireEditPermission(bandId, userId);
+        if (band.getStatus() == BandStatus.DONE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "완료된 여행의 일정은 편집할 수 없습니다.");
+        }
+        requireEditingLock(band, userId);
+
+        Schedule schedule = scheduleRepository.findById(scheduleId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "일정 슬롯을 찾을 수 없습니다."));
+        if (!schedule.getBand().getId().equals(bandId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "해당 밴드의 일정이 아닙니다.");
+        }
+
+        int dayNumber = schedule.getDayNumber();
+        List<Schedule> remaining = new java.util.ArrayList<>(
+                scheduleRepository.findByBandIdAndDayNumberOrderBySlotOrderAsc(bandId, dayNumber));
+        remaining.remove(schedule);
+
+        // 슬롯 삭제 후 flush — 삭제된 slot_order 자리를 비워 재정렬 시 unique 제약 충돌 방지
+        scheduleRepository.delete(schedule);
+        entityManager.flush();
+
+        if (!remaining.isEmpty()) {
+            // 임시 주차 후 flush — reorder와 동일 패턴으로 slot_order unique 제약 충돌 방지
+            for (int i = 0; i < remaining.size(); i++) {
+                remaining.get(i).updateSlotOrderOnly(10000 + i);
+            }
+            scheduleRepository.saveAll(remaining);
+            entityManager.flush();
+
+            // 남은 슬롯 순서 고정 후 시작 시각·이동 시간·경고 플래그 재계산
+            assignTimesInOrder(remaining, band);
+            scheduleRepository.saveAll(remaining);
+        }
+
+        messagingTemplate.convertAndSend(
+                "/topic/bands/" + bandId + "/schedule",
+                new ScheduleUpdatedEvent(bandId, userId));
         notificationService.notifyAll(bandId, NotificationType.SCHEDULE_UPDATED,
-                band.getName() + " 여행 일정 순서가 변경됐어요! 확인해보세요 🔀");
+                band.getName() + " 일정에서 장소가 삭제됐어요.");
     }
 
     /**
-     * 사용자 지정 순서 그대로 이동 시간·시작 시각을 재계산한다.
+     * 사용자 지정 순서 그대로 이동 시간·시작 시각을 재계산하고 경고 플래그를 갱신한다.
      * TSP 재정렬 없이 입력된 리스트 순서를 그대로 사용한다.
      */
-    private void assignTimesInOrder(List<Schedule> ordered, boolean isOverseas) {
+    private void assignTimesInOrder(List<Schedule> ordered, Band band) {
+        boolean isOverseas = band.isOverseas();
+        Double accommLat = band.getAccommodationLat();
+        Double accommLng = band.getAccommodationLng();
+        com.sync.algorithm.TravelStyle algStyle =
+                com.sync.algorithm.TravelStyle.valueOf(band.getTravelStyle().name());
+
+        // 해당 day 장소의 영업시간 맵 구성 — 국내·해외 모두 (데이터 있으면 위반 체크)
+        List<Place> places = ordered.stream()
+                .map(Schedule::getPlace).filter(java.util.Objects::nonNull).toList();
+        Map<Long, OpeningHours> openingHours = buildOpeningHoursMapFromPlaces(places);
+
         LocalTime current = SimpleTsp.DEFAULT_DAY_START;
         for (int i = 0; i < ordered.size(); i++) {
             Schedule s = ordered.get(i);
             if (s.getPlace() == null) continue;
 
+            int dayNumber = ordered.isEmpty() ? 1 : ordered.get(0).getDayNumber();
             Integer travelTime = null;
-            if (i > 0 && ordered.get(i - 1).getPlace() != null) {
+            String transitSummary = null;
+            if (i == 0 && accommLat != null) {
+                // 숙소→첫 장소 이동시간 (Google Directions API, transit 모드)
+                long deptUnix = toDepartureUnix(band.getStartDate(), dayNumber, current);
+                TravelInfo info = googleDistanceService.getTravelInfo(
+                        accommLat, accommLng,
+                        s.getPlace().getLatitude(), s.getPlace().getLongitude(), deptUnix);
+                current = current.plusMinutes(info.minutes());
+                travelTime = info.minutes();
+                transitSummary = info.transitSummary();
+            } else if (i > 0 && ordered.get(i - 1).getPlace() != null) {
                 Place prev = ordered.get(i - 1).getPlace();
-                double distKm = haversine(
+                long deptUnix = toDepartureUnix(band.getStartDate(), dayNumber, current);
+                TravelInfo info = googleDistanceService.getTravelInfo(
                         prev.getLatitude(), prev.getLongitude(),
-                        s.getPlace().getLatitude(), s.getPlace().getLongitude());
-                long travelMin = Math.round(distKm / com.sync.algorithm.AlgorithmConstants.TRAVEL_SPEED_KMH * 60.0);
-                current = current.plusMinutes(travelMin);
-                travelTime = (int) travelMin;
+                        s.getPlace().getLatitude(), s.getPlace().getLongitude(), deptUnix);
+                current = current.plusMinutes(info.minutes());
+                travelTime = info.minutes();
+                transitSummary = info.transitSummary();
             }
 
             int duration = s.getPlace().getEstimatedDuration();
             s.updateTimes(i + 1, current, duration, travelTime);
+            s.setTransitSummary(transitSummary);
+
+            // 재배치 후 시각 기준 플래그 재계산 — outlier는 K-Means 값 보존
+            LocalTime startTime = current;
+            LocalTime endTime   = current.plusMinutes(duration);
+            boolean ohViolation = false;
+            OpeningHours oh = openingHours.get(s.getPlace().getId());
+            if (oh != null) {
+                ohViolation = startTime.isBefore(oh.open()) || endTime.isAfter(oh.close());
+            }
+            com.sync.domain.place.PlaceCategory cat = s.getPlace().getCategory();
+            boolean mealViolation = cat == com.sync.domain.place.PlaceCategory.FOOD
+                    && !isInMealWindow(startTime, algStyle);
+            boolean late = !startTime.isBefore(com.sync.algorithm.AlgorithmConstants.LATE_WARN_TIME);
+            boolean ohUnverified = isOverseas && !openingHours.containsKey(s.getPlace().getId());
+            s.updateFlags(s.isOutlierCandidate(), ohViolation, mealViolation, late, ohUnverified);
+
             current = current.plusMinutes(duration);
         }
+    }
+
+    /** FOOD 슬롯의 startTime이 식사 윈도우 안에 있으면 true (SimpleTsp.isInAnyMealWindow와 동일 로직). */
+    private static boolean isInMealWindow(LocalTime time, com.sync.algorithm.TravelStyle style) {
+        boolean inDinner = !time.isBefore(LocalTime.of(17, 0)) && time.isBefore(LocalTime.of(20, 0));
+        if (style == com.sync.algorithm.TravelStyle.PACKED) {
+            boolean inLunch = !time.isBefore(LocalTime.of(11, 0)) && time.isBefore(LocalTime.of(14, 0));
+            return inLunch || inDinner;
+        }
+        return inDinner;
     }
 
     /**
@@ -598,7 +900,12 @@ public class ScheduleService {
     public void startEditing(Long userId, Long bandId) {
         loadActiveUser(userId);
         Band band = loadBand(bandId);
-        requireMembership(bandId, userId);
+        requireEditPermission(bandId, userId);  // 멤버십 + joined_after_voting 동시 체크
+
+        // DONE 상태 편집 차단
+        if (band.getStatus() == BandStatus.DONE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "완료된 여행의 일정은 편집할 수 없습니다.");
+        }
 
         if (band.isEditingByOther(userId)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "다른 사용자가 편집 중입니다.");
@@ -620,11 +927,134 @@ public class ScheduleService {
         }
     }
 
+    /**
+     * altPool 장소를 특정 Day에 새 슬롯으로 추가한다.
+     * 해당 Day의 기존 슬롯들을 임시 주차 후 추가하여 unique 제약 충돌을 방지한다.
+     */
+    @Transactional
+    public void addSlotFromAltPool(Long userId, Long bandId, com.sync.dto.schedule.ScheduleAddRequest request) {
+        loadActiveUser(userId);
+        Band band = loadBand(bandId);
+        requireEditPermission(bandId, userId);
+        if (band.getStatus() == BandStatus.DONE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "완료된 여행의 일정은 편집할 수 없습니다.");
+        }
+        requireEditingLock(band, userId);
+
+        // altPool에서 장소 확인
+        com.sync.domain.schedule.ScheduleAlt altEntry = scheduleAltRepository
+                .findByBandIdAndPlaceId(bandId, request.placeId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "예비 목록에 없는 장소입니다."));
+
+        // 해당 Day 기존 슬롯 임시 주차 (unique 제약 충돌 방지)
+        List<Schedule> existingSlots = new java.util.ArrayList<>(
+                scheduleRepository.findByBandIdAndDayNumberOrderBySlotOrderAsc(bandId, request.targetDayNumber()));
+        for (int i = 0; i < existingSlots.size(); i++) {
+            existingSlots.get(i).updateSlotOrderOnly(10000 + i);
+        }
+        if (!existingSlots.isEmpty()) {
+            scheduleRepository.saveAll(existingSlots);
+            entityManager.flush();
+        }
+
+        // 새 슬롯 생성 — 임시 slotOrder 1로 삽입 후 assignTimesInOrder로 재계산
+        Place place = altEntry.getPlace();
+        Schedule newSlot = Schedule.create(
+                band, place, request.targetDayNumber(), 1,
+                SimpleTsp.DEFAULT_DAY_START, place.getEstimatedDuration(), null,
+                false, false, false, false, false);
+        scheduleRepository.save(newSlot);
+        entityManager.flush();
+
+        // altPool에서 제거
+        scheduleAltRepository.delete(altEntry);
+
+        // 해당 Day 전체 시간 재계산
+        existingSlots.add(newSlot);
+        assignTimesInOrder(existingSlots, band);
+        scheduleRepository.saveAll(existingSlots);
+
+        messagingTemplate.convertAndSend(
+                "/topic/bands/" + bandId + "/schedule",
+                new ScheduleUpdatedEvent(bandId, userId));
+        notificationService.notifyAll(bandId, NotificationType.SCHEDULE_UPDATED,
+                band.getName() + " 여행 일정이 수정됐어요! 확인해보세요 🔄");
+    }
+
+    /**
+     * 장소 검색 결과를 특정 Day에 새 슬롯으로 추가한다.
+     * externalId로 Place를 조회하거나 신규 생성(upsert)한 뒤 슬롯을 생성한다.
+     * altPool을 거치지 않으므로 검색으로 찾은 모든 장소를 바로 일정에 추가할 수 있다.
+     */
+    @Transactional
+    public void addSlotFromSearch(Long userId, Long bandId, com.sync.dto.schedule.ScheduleAddFromSearchRequest request) {
+        loadActiveUser(userId);
+        Band band = loadBand(bandId);
+        requireEditPermission(bandId, userId);
+        if (band.getStatus() == BandStatus.DONE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "완료된 여행의 일정은 편집할 수 없습니다.");
+        }
+        requireEditingLock(band, userId);
+
+        // Place upsert — externalId가 이미 DB에 있으면 메타데이터만 갱신, 없으면 신규 생성
+        Place place = placeRepository.findByApiSourceAndExternalId(request.apiSource(), request.externalId())
+                .map(existing -> {
+                    // 검색추가 요청엔 영업시간·소요시간이 없으므로 기존 값을 보존한다.
+                    // (null로 넘기면 이미 캐싱된 영업시간이 지워져 영업위반 체크가 불가능해짐)
+                    existing.syncMetadata(
+                            request.name(), request.category(),
+                            request.latitude(), request.longitude(),
+                            request.address(), request.rating(),
+                            request.thumbnailUrl(),
+                            existing.getOpeningHoursJson(), existing.getEstimatedDuration());
+                    return placeRepository.save(existing);
+                })
+                .orElseGet(() -> placeRepository.save(Place.create(
+                        request.apiSource(), request.externalId(),
+                        request.name(), request.category(),
+                        request.latitude(), request.longitude(),
+                        request.address(), request.rating(),
+                        request.thumbnailUrl(), null, null)));
+
+        // 해당 Day 기존 슬롯 임시 주차 (unique 제약 충돌 방지)
+        List<Schedule> existingSlots = new java.util.ArrayList<>(
+                scheduleRepository.findByBandIdAndDayNumberOrderBySlotOrderAsc(bandId, request.targetDayNumber()));
+        for (int i = 0; i < existingSlots.size(); i++) {
+            existingSlots.get(i).updateSlotOrderOnly(10000 + i);
+        }
+        if (!existingSlots.isEmpty()) {
+            scheduleRepository.saveAll(existingSlots);
+            entityManager.flush();
+        }
+
+        // 새 슬롯 생성 — 저장 전에 리스트에 추가해 assignTimesInOrder로 최종 slotOrder 결정
+        // (먼저 저장하면 slotOrder=1이 기존 슬롯과 충돌 → 기존 슬롯과 함께 한 번에 저장)
+        Schedule newSlot = Schedule.create(
+                band, place, request.targetDayNumber(), existingSlots.size() + 1,
+                SimpleTsp.DEFAULT_DAY_START, place.getEstimatedDuration(), null,
+                false, false, false, false, false);
+
+        // 해당 Day 전체 시간 재계산 후 INSERT(newSlot) + UPDATE(기존 슬롯) 일괄 저장
+        existingSlots.add(newSlot);
+        assignTimesInOrder(existingSlots, band);
+        scheduleRepository.saveAll(existingSlots);
+
+        messagingTemplate.convertAndSend(
+                "/topic/bands/" + bandId + "/schedule",
+                new ScheduleUpdatedEvent(bandId, userId));
+        notificationService.notifyAll(bandId, NotificationType.SCHEDULE_UPDATED,
+                band.getName() + " 여행 일정이 수정됐어요! 확인해보세요 🔄");
+    }
+
     @Transactional
     public void swapSchedulePlace(Long userId, Long bandId, Long scheduleId, Long newPlaceId) {
         loadActiveUser(userId);
         Band band = loadBand(bandId);
-        requireMembership(bandId, userId);
+        requireEditPermission(bandId, userId);  // 멤버십 + joined_after_voting 동시 체크
+        // DONE 상태 편집 차단
+        if (band.getStatus() == BandStatus.DONE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "완료된 여행의 일정은 편집할 수 없습니다.");
+        }
         requireEditingLock(band, userId);
 
         // 1. 교체할 일정 슬롯 확인
@@ -667,6 +1097,12 @@ public class ScheduleService {
     }
 
     private void recalculateDayTsp(Band band, int dayNumber, List<Schedule> daySchedules) {
+        // outlier 값을 placeId 기준으로 보존 (K-Means 재실행 안 하므로 기존 값 유지)
+        Map<Long, Boolean> outlierByPlaceId = daySchedules.stream()
+                .filter(s -> s.getPlace() != null)
+                .collect(Collectors.toMap(s -> s.getPlace().getId(), Schedule::isOutlierCandidate,
+                        (a, b) -> a));
+
         List<AssignedPlace> assignedPlaces = daySchedules.stream()
                 .filter(s -> s.getPlace() != null && !s.isFreeTime())
                 .map(s -> new AssignedPlace(
@@ -677,7 +1113,8 @@ public class ScheduleService {
                         s.getPlace().getLongitude(),
                         s.getPlace().getEstimatedDuration(),
                         0.0,
-                        false
+                        // outlier 값 보존 — K-Means 재실행 없으므로 기존 Schedule 값 사용
+                        outlierByPlaceId.getOrDefault(s.getPlace().getId(), false)
                 ))
                 .toList();
 
@@ -689,12 +1126,15 @@ public class ScheduleService {
                 .map(Schedule::getPlace)
                 .filter(java.util.Objects::nonNull)
                 .toList();
-        Map<Long, OpeningHours> openingHours = band.isOverseas()
-                ? buildOpeningHoursMapFromPlaces(dayPlaces)
-                : Map.of();
+        // 영업시간 맵은 국내·해외 모두 구성 (데이터 있으면 위반 체크)
+        Map<Long, OpeningHours> openingHours = buildOpeningHoursMapFromPlaces(dayPlaces);
 
+        // band.getTravelStyle()은 도메인 enum이므로 이름 기반으로 알고리즘 enum으로 변환
+        com.sync.algorithm.TravelStyle algStyle =
+                com.sync.algorithm.TravelStyle.valueOf(band.getTravelStyle().name());
         Step3Result tspResult = SimpleTsp.schedule(
-                new Step3Input(step2, band.isOverseas(), SimpleTsp.DEFAULT_DAY_START, openingHours));
+                new Step3Input(step2, band.isOverseas(), SimpleTsp.DEFAULT_DAY_START, openingHours, algStyle,
+                        band.getAccommodationLat(), band.getAccommodationLng()));  // 숙소 출발 좌표
 
         if (tspResult.daySchedules().isEmpty()) return;
         List<ScheduledPlace> newSlots = tspResult.daySchedules().get(0).places();
@@ -703,14 +1143,42 @@ public class ScheduleService {
                 .filter(s -> s.getPlace() != null)
                 .collect(Collectors.toMap(s -> s.getPlace().getId(), s -> s));
 
+        // SimpleTsp 결과에서 순서만 사용하고, 시작시각·이동시간은 Google API로 재계산
+        LocalTime current = SimpleTsp.DEFAULT_DAY_START;
         for (int i = 0; i < newSlots.size(); i++) {
             ScheduledPlace sp = newSlots.get(i);
             Schedule s = byPlaceId.get(sp.placeId());
             if (s == null) continue;
-            Integer travelTime = i > 0
-                    ? (int) Duration.between(newSlots.get(i - 1).endTime(), sp.startTime()).toMinutes()
-                    : null;
-            s.updateTimes(i + 1, sp.startTime(), sp.estimatedDuration(), travelTime);
+
+            Integer travelTime = null;
+            String transitSummary = null;
+            if (i == 0 && band.getAccommodationLat() != null) {
+                // 숙소→첫 장소 이동시간 (Google Directions API, transit 모드)
+                long deptUnix = toDepartureUnix(band.getStartDate(), dayNumber, current);
+                TravelInfo info = googleDistanceService.getTravelInfo(
+                        band.getAccommodationLat(), band.getAccommodationLng(),
+                        sp.latitude(), sp.longitude(), deptUnix);
+                current = current.plusMinutes(info.minutes());
+                travelTime = info.minutes();
+                transitSummary = info.transitSummary();
+            } else if (i > 0) {
+                ScheduledPlace prev = newSlots.get(i - 1);
+                long deptUnix = toDepartureUnix(band.getStartDate(), dayNumber, current);
+                TravelInfo info = googleDistanceService.getTravelInfo(
+                        prev.latitude(), prev.longitude(),
+                        sp.latitude(), sp.longitude(), deptUnix);
+                current = current.plusMinutes(info.minutes());
+                travelTime = info.minutes();
+                transitSummary = info.transitSummary();
+            }
+
+            s.updateTimes(i + 1, current, sp.estimatedDuration(), travelTime);
+            s.setTransitSummary(transitSummary);
+            // 위반 플래그 갱신 — outlier는 Step2 값 보존, 나머지는 새 TSP 결과 반영
+            s.updateFlags(sp.isOutlierCandidate(), sp.openingHoursViolation(),
+                    sp.mealWindowViolation(), sp.lateSchedule(), sp.openingHoursUnverified());
+
+            current = current.plusMinutes(sp.estimatedDuration());
         }
         scheduleRepository.saveAll(daySchedules);
     }
@@ -726,6 +1194,23 @@ public class ScheduleService {
         // 활동 중이므로 락 시간 갱신
         band.refreshEditingLock();
         bandRepository.save(band);
+    }
+
+    // exact match 또는 CULTURE↔NATURE 그룹 내 교체이면 true
+    private static boolean isPlanBCompatibleCategory(PlaceCategory candidate, PlaceCategory target) {
+        if (candidate == target) return true;
+        return PLAN_B_CULTURE_NATURE_GROUP.contains(candidate) && PLAN_B_CULTURE_NATURE_GROUP.contains(target);
+    }
+
+    /**
+     * 여행 시작일 + dayNumber + 출발 시각 → Unix timestamp (UTC 기준, 대중교통 경로 조회용).
+     * 신형 Routes API(transit)는 과거 7일~미래 100일까지의 스케줄을 지원하므로,
+     * 실제 여행일을 그대로 사용한다. 지원 범위를 벗어나면 API가 오류를 반환하고
+     * GoogleDistanceService가 하버사인 추정으로 자동 fallback 하므로 안전하다.
+     */
+    private static long toDepartureUnix(LocalDate startDate, int dayNumber, LocalTime departureTime) {
+        LocalDate tripDay = startDate.plusDays(dayNumber - 1L);
+        return tripDay.atTime(departureTime).toEpochSecond(ZoneOffset.UTC);
     }
 
     private static double haversine(double lat1, double lng1, double lat2, double lng2) {
@@ -815,7 +1300,13 @@ public class ScheduleService {
                 s.getStartTime(),
                 s.getDurationMinutes(),
                 s.getTravelTimeFromPrev(),
-                toPlaceInfo(s.getPlace())
+                s.getTransitSummary(),
+                toPlaceInfo(s.getPlace()),
+                s.isOutlierCandidate(),
+                s.isOpeningHoursViolation(),
+                s.isMealWindowViolation(),
+                s.isLateSchedule(),
+                s.isOpeningHoursUnverified()
         );
     }
 
@@ -852,9 +1343,17 @@ public class ScheduleService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "밴드를 찾을 수 없습니다."));
     }
 
-    private void requireMembership(Long bandId, Long userId) {
-        if (bandMemberRepository.findByBandIdAndUserId(bandId, userId).isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "밴드 멤버만 일정을 조회할 수 있습니다.");
+    /** 멤버십 확인 후 BandMember 엔티티 반환 (편집 권한 추가 체크용) */
+    private BandMember requireMembership(Long bandId, Long userId) {
+        return bandMemberRepository.findByBandIdAndUserId(bandId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "밴드 멤버만 일정을 조회할 수 있습니다."));
+    }
+
+    /** joined_after_voting 멤버의 편집 시도를 403으로 차단한다. */
+    private void requireEditPermission(Long bandId, Long userId) {
+        BandMember member = requireMembership(bandId, userId);
+        if (member.isJoinedAfterVoting()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "투표 후 합류한 멤버는 일정을 편집할 수 없습니다.");
         }
     }
 }

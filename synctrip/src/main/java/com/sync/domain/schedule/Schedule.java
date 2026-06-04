@@ -50,6 +50,26 @@ public class Schedule {
     @Column(name = "travel_time_from_prev")
     private Integer travelTimeFromPrev;
 
+    /** 이전 장소에서 이 장소까지 대중교통 노선 요약 (예: "丸ノ内線 → 日比谷線") */
+    @Column(name = "transit_summary", length = 100)
+    private String transitSummary;
+
+    // 알고리즘 경고 플래그 (생성 시점 값 보존, 재계산 시 갱신)
+    @Column(name = "is_outlier_candidate", nullable = false)
+    private boolean outlierCandidate = false;
+
+    @Column(name = "opening_hours_violation", nullable = false)
+    private boolean openingHoursViolation = false;
+
+    @Column(name = "meal_window_violation", nullable = false)
+    private boolean mealWindowViolation = false;
+
+    @Column(name = "late_schedule", nullable = false)
+    private boolean lateSchedule = false;
+
+    @Column(name = "opening_hours_unverified", nullable = false)
+    private boolean openingHoursUnverified = false;
+
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
@@ -57,7 +77,9 @@ public class Schedule {
     protected Schedule() {}
 
     private Schedule(Band band, Place place, int dayNumber, int slotOrder,
-                     LocalTime startTime, int durationMinutes, Integer travelTimeFromPrev) {
+                     LocalTime startTime, int durationMinutes, Integer travelTimeFromPrev,
+                     boolean outlierCandidate, boolean openingHoursViolation,
+                     boolean mealWindowViolation, boolean lateSchedule, boolean openingHoursUnverified) {
         this.band = band;
         this.place = place;
         this.dayNumber = dayNumber;
@@ -66,16 +88,43 @@ public class Schedule {
         this.startTime = startTime;
         this.durationMinutes = durationMinutes;
         this.travelTimeFromPrev = travelTimeFromPrev;
+        this.outlierCandidate = outlierCandidate;
+        this.openingHoursViolation = openingHoursViolation;
+        this.mealWindowViolation = mealWindowViolation;
+        this.lateSchedule = lateSchedule;
+        this.openingHoursUnverified = openingHoursUnverified;
     }
 
     public static Schedule create(Band band, Place place, int dayNumber, int slotOrder,
-                                  LocalTime startTime, int durationMinutes, Integer travelTimeFromPrev) {
-        return new Schedule(band, place, dayNumber, slotOrder, startTime, durationMinutes, travelTimeFromPrev);
+                                  LocalTime startTime, int durationMinutes, Integer travelTimeFromPrev,
+                                  boolean outlierCandidate, boolean openingHoursViolation,
+                                  boolean mealWindowViolation, boolean lateSchedule, boolean openingHoursUnverified) {
+        return new Schedule(band, place, dayNumber, slotOrder, startTime, durationMinutes, travelTimeFromPrev,
+                outlierCandidate, openingHoursViolation, mealWindowViolation, lateSchedule, openingHoursUnverified);
+    }
+
+    /** 재계산 시 위반 플래그 갱신 — outlier는 K-Means 재실행 안 하므로 호출 측에서 보존값 전달 */
+    public void updateFlags(boolean outlierCandidate, boolean openingHoursViolation,
+                             boolean mealWindowViolation, boolean lateSchedule, boolean openingHoursUnverified) {
+        this.outlierCandidate = outlierCandidate;
+        this.openingHoursViolation = openingHoursViolation;
+        this.mealWindowViolation = mealWindowViolation;
+        this.lateSchedule = lateSchedule;
+        this.openingHoursUnverified = openingHoursUnverified;
     }
 
     public void updatePlace(Place newPlace) {
         this.place = newPlace;
         this.durationMinutes = newPlace.getEstimatedDuration();
+    }
+
+    public void updateDayNumber(int newDayNumber) {
+        this.dayNumber = newDayNumber;
+    }
+
+    /** 임시 slot_order 주차용 — unique 제약 충돌 방지를 위해 고유 번호로 이동 후 flush 할 때만 사용 */
+    public void updateSlotOrderOnly(int newSlotOrder) {
+        this.slotOrder = newSlotOrder;
     }
 
     public void updateTimes(int newSlotOrder, LocalTime newStartTime,
@@ -95,4 +144,11 @@ public class Schedule {
     public LocalTime getStartTime() { return startTime; }
     public Integer getDurationMinutes() { return durationMinutes; }
     public Integer getTravelTimeFromPrev() { return travelTimeFromPrev; }
+    public String getTransitSummary() { return transitSummary; }
+    public void setTransitSummary(String transitSummary) { this.transitSummary = transitSummary; }
+    public boolean isOutlierCandidate() { return outlierCandidate; }
+    public boolean isOpeningHoursViolation() { return openingHoursViolation; }
+    public boolean isMealWindowViolation() { return mealWindowViolation; }
+    public boolean isLateSchedule() { return lateSchedule; }
+    public boolean isOpeningHoursUnverified() { return openingHoursUnverified; }
 }

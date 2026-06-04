@@ -1,12 +1,15 @@
 package com.sync.controller;
 
 import com.sync.common.annotation.LoginUser;
+import com.sync.dto.schedule.ScheduleAddRequest;
 import com.sync.dto.schedule.ScheduleAltResponse;
+import com.sync.dto.schedule.ScheduleMoveRequest;
 import com.sync.dto.schedule.ScheduleReorderRequest;
 import com.sync.dto.schedule.ScheduleResponse;
 import com.sync.service.ScheduleService;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -70,6 +73,42 @@ public class ScheduleController {
             @PathVariable Long bandId,
             @RequestBody com.sync.dto.schedule.ScheduleSwapRequest request) {
         scheduleService.swapSchedulePlace(userId, bandId, request.scheduleId(), request.newPlaceId());
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/move")
+    public ResponseEntity<Void> moveSchedule(
+            @LoginUser Long userId,
+            @PathVariable Long bandId,
+            @RequestBody ScheduleMoveRequest request) {
+        scheduleService.moveSchedule(userId, bandId, request);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/add")
+    public ResponseEntity<Void> addToSchedule(
+            @LoginUser Long userId,
+            @PathVariable Long bandId,
+            @RequestBody ScheduleAddRequest request) {
+        scheduleService.addSlotFromAltPool(userId, bandId, request);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/add-search")
+    public ResponseEntity<Void> addFromSearch(
+            @LoginUser Long userId,
+            @PathVariable Long bandId,
+            @RequestBody com.sync.dto.schedule.ScheduleAddFromSearchRequest request) {
+        scheduleService.addSlotFromSearch(userId, bandId, request);
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/{scheduleId}")
+    public ResponseEntity<Void> deleteSchedulePlace(
+            @LoginUser Long userId,
+            @PathVariable Long bandId,
+            @PathVariable Long scheduleId) {
+        scheduleService.deleteSchedulePlace(userId, bandId, scheduleId);
         return ResponseEntity.ok().build();
     }
 

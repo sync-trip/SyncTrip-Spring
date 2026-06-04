@@ -20,6 +20,8 @@ import com.sync.domain.place.PlaceCategory;
  * 2. Google Places Text Search로 검색 (국내/해외 공통)
  * 3. 결과를 Place 엔티티로 캐싱
  * 4. 이 DTO로 변환해서 모바일 앱에 반환
+ *
+ * Serializable: Redis place-search 캐시에 저장될 때 JdkSerializationRedisSerializer가 요구
  */
 public record PlaceSearchResult(
         // 백엔드 places 테이블의 primary key
@@ -46,4 +48,4 @@ public record PlaceSearchResult(
         // 현재 로그인한 사용자가 이 장소를 북마크했는가?
         // 북마크 목록에서 이미 담긴 장소를 UI상 강조할 때 사용
         boolean isBookmarked
-) {}
+) implements java.io.Serializable {}

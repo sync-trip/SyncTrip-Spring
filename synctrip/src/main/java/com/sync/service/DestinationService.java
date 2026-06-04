@@ -153,7 +153,7 @@ public class DestinationService {
         new DestinationResponse("전주", "대한민국", "KR",
                 35.8242, 127.1480, false, "국내",
                 "전주한옥마을, 비빔밥, 막걸리골목",
-                IMG + "photo-1582721478779-0ae163c05a60?w=400&q=80"),
+                IMG + "photo-1653230675261-fe00bde32c8e?w=400&q=80"),
         new DestinationResponse("여수", "대한민국", "KR",
                 34.7604, 127.6622, false, "국내",
                 "돌산도, 여수밤바다, 오동도",

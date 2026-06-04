@@ -1,5 +1,5 @@
 # SyncTrip 구현 현황 문서
-**인수인계 문서 기준:** v6 | **최신 DDL:** `SyncTrip_DDL_v12.sql`
+**인수인계 문서 기준:** v6 | **최신 DDL:** `SyncTrip_DDL_v15.sql`
 
 > 이 문서는 기능이 구현되거나 수정될 때마다 업데이트합니다.
 > 기준: `SyncTrip_인수인계문서_v6.md` + 실제 Spring Boot 코드 (`com.sync.*`)
@@ -38,11 +38,12 @@
 | USR | 기능명 | 상태 | 구현일 | 구현 위치 | 비고 |
 |---|---|---|---|---|---|
 | USR-003 | 그룹 생성 (+ 숙소 입력) | ✅ 구현 | 2026-05-12 ~ 05-18 | `BandService.createBand()` | 숙소 좌표/이름 포함 생성, 수정(05-18) |
+| — | 숙소 좌표 BandResponse 노출 | ➕ 추가 구현 | 2026-05-31 | `BandResponse.java`, `BandService.toBandResponse()` | `accommodationLat / accommodationLng` (Double nullable) 필드 추가. Android 일정 지도 숙소 핀 표시용 |
 | USR-004 | 그룹 초대 / 참여 | ✅ 구현 | 2026-05-12 | `InviteController`, `BandService.joinBand()` | 초대 코드 기반 참여 |
 | USR-005 | 최대 인원 제한 (8명) | ✅ 구현 | 2026-05-12 | `BandService.joinBand()` | countByBand ≥ maxMembers 시 409 |
 | USR-006 | 초대 코드 재발급 | ✅ 구현 | 2026-05-12 | `BandService.getOrRefreshInviteCode()` | 만료 시 자동 재발급 |
 | USR-009 | Ready 상태 전환 | ✅ 구현 | 2026-05-16 | `BandService.markReady()` | 장바구니 1개 이상 필수 / `DELETE /api/bands/{bandId}/ready` 존재하나 항상 403 반환 (취소 불가) |
-| USR-014 | 투표 강제 시작/마감 | ✅ 구현 | 2026-05-16 ~ 05-23 | `BandService.advanceBandStatus()`, `VoteScheduler` | 방장 전용 강제 마감 / 전원 투표 완료 시 즉시 자동 마감 / 1시간 타임아웃 자동 마감 |
+| USR-014 | 투표 강제 시작/마감 | ✅ 구현 | 2026-05-16 ~ 05-31 | `BandService.advanceBandStatus()`, `VoteScheduler`, `VoteService` | 방장 전용 강제 마감 / 개인별 `voteCompleted` 플래그 기반 전원 완료 즉시 자동 마감(DDL v14) / 1시간 타임아웃 자동 마감 |
 | USR-028 | 여행 종료 처리 | ✅ 구현 | 2026-05-16 ~ 05-23 | `BandService.advanceBandStatus()` | DONE 전환 시 밴드 전원에게 `TRIP_ENDED` 알림 + 정산 유도 메시지 발송 + 여권 스탬프 자동 부여 |
 | — | 밴드 삭제 (Soft Delete) | ➕ 추가 구현 | 2026-05-12 | `BandService.deleteBand()` | `DELETE /api/bands/{bandId}` / 방장 전용 / is_deleted 마킹 |
 
@@ -78,12 +79,12 @@
 |---|---|---|---|---|
 | Step 1 | Weighted Cost Function | ✅ 구현 | 2026-05-17 | `algorithm/step1/WeightedCostFunction.java` |
 | Step 2 | K-Means Clustering | ✅ 구현 | 2026-05-17 | `algorithm/step2/KMeansClustering.java` |
-| Step 3 | Simple Order & Time TSP | ✅ 구현 | 2026-05-17 | `algorithm/step3/SimpleTsp.java` |
-| Plan B | 폭포수 반경 검색 (Stage0: 1km, Stage1: 2km, Stage2: 3km) | ✅ 구현 | 2026-05-19 ~ 05-21 | `algorithm/planb/PlanBRecommender.java` (순수 함수) + `ScheduleService.getPlanBRecommendations()` (서비스 인라인 구현) | 최대 7개 추천 / 카테고리 동일 교체 / 영업시간 체크(해외) |
+| Step 3 | Simple Order & Time TSP + FOOD 시간 윈도우 끼워넣기 (FIX-47) | ✅ 구현 | 2026-05-17 → 2026-05-30 | `algorithm/step3/SimpleTsp.java` | 비FOOD NN 후 FOOD를 점심(PACKED)/저녁 윈도우에 삽입. 경고 배지 3종(mealWindowViolation/lateSchedule/openingHoursUnverified) + DAY_OVERLOADED 추가. 이동시간 최소 3분 하한 적용. |
+| Plan B | `ScheduleService.getPlanBRecommendations()` — DB(ScheduleAlt) 기반 / CULTURE↔NATURE 호환 그룹 / priorityScore 정규화 | ✅ 구현 | 2026-05-19 → 2026-05-30 | `service/ScheduleService.java` | 최대 7개 / 1km→2km→3km 3단계 반경 확장 / 카테고리 호환 그룹(CULTURE↔NATURE 허용) / priorityScore [-1.0,1.4] → [0,1] 정규화 후 60/40 가중합 / 해외 밴드 영업시간 검증 포함 |
 | 파이프라인 | Step1→2→3 통합 진입점 | ✅ 구현 | 2026-05-17 | `algorithm/AlgorithmService.java` |
 
 > 알고리즘 함수 전체가 순수 함수 (DB 접근 없음). 서비스 레이어(`ScheduleService`)에서 입력 조립 후 호출.
-> ⚠️ 주의: `PlanBRecommender.java`(알고리즘 패키지)는 단위 테스트에서만 사용됨. 실제 API는 `ScheduleService` 내부에 인라인 구현(`PLAN_B_MAX_RECOMMENDATIONS = 7`)으로 동작함.
+> Plan B 추천은 DB(ScheduleAlt 테이블) 기반이므로 서비스 레이어에서 직접 구현. `algorithm/planb/` 패키지는 2026-05-30 제거됨.
 
 ---
 
@@ -98,8 +99,16 @@
 | USR-031 | 실시간 Plan B 추천 | ✅ 구현 | 2026-05-19 | `ScheduleService.getPlanBRecommendations()` | `POST /api/bands/{bandId}/schedule/plan-b` / 최대 7개 |
 | — | 편집 락 (5분 타임아웃 + 자동 갱신) | ➕ 추가 구현 | 2026-05-20 ~ 05-21 | `ScheduleService.startEditing()` / `finishEditing()` | `POST /api/bands/{bandId}/schedule/edit/start·finish` / 그룹 동시 편집 방지 |
 | — | 일정 변경 WebSocket 브로드캐스트 | ➕ 추가 구현 | 2026-05-19 | `ScheduleService` → `SimpMessagingTemplate` | 장소 교체 시 `/topic/bands/{bandId}/schedule` 채널로 `ScheduleUpdatedEvent` 발송 |
-
 | — | 숙소 단독 변경 + partial TSP 재계산 | ➕ 추가 구현 | 2026-05-23 | `BandService.updateAccommodation()`, `ScheduleService.recalculateFutureDays()` | `PATCH /api/bands/{bandId}/accommodation` / 방장 전용 / VOTING·GENERATING 단계 차단 / TRAVELLING 시 오늘 이후 day TSP 재계산 (v2.4 FIX-35/36) |
+| — | 숙소를 TSP 출발점으로 반영 | ➕ 추가 구현 | 2026-05-30 | `SimpleTsp`, `Step3Input`, `GroupInfo`, `ScheduleService` | 숙소 좌표가 있으면 NN TSP 시작점 = 숙소 최근접 비FOOD 장소 / 첫 슬롯 travelTimeFromPrev = 숙소→첫장소 이동시간 / null이면 현행 유지 |
+| — | 경고 플래그 5종 schedules 저장·노출 | ➕ 추가 구현 | 2026-05-30 | `Schedule` 엔티티, `ScheduleSlotResponse`, `ScheduleService` | is_outlier_candidate / opening_hours_violation / meal_window_violation / late_schedule / opening_hours_unverified 컬럼 저장 / DDL v13 / swap·reorder 재계산 시 갱신(outlier 보존) |
+| — | DONE 상태 편집 차단 | ➕ 추가 구현 | 2026-05-30 | `ScheduleService` | startEditing / reorderSchedule / swapSchedulePlace 진입 시 BandStatus.DONE이면 409 |
+| — | joined_after_voting 멤버 읽기전용 | ➕ 추가 구현 | 2026-05-30 | `ScheduleService.requireEditPermission()` | 투표 후 합류 멤버의 편집 API 호출 시 403 |
+| — | 편집자 정보 + canEdit 응답 노출 | ➕ 추가 구현 | 2026-05-30 | `ScheduleResponse`, `ScheduleService.getSchedule()` | editingUserId / editingUserName / canEdit = (status≠DONE) && (!joinedAfterVoting) && (락 없거나 본인) |
+| — | 장소 검색 결과 일정 직접 추가 | ➕ 추가 구현 | 2026-06-01 | `ScheduleService.addSlotFromSearch()`, `ScheduleController`, `ScheduleAddFromSearchRequest` | `POST /api/bands/{bandId}/schedule/add-search` / externalId 기반 Place upsert(syncMetadata 재사용) → Day 맨 끝 슬롯 생성 → `assignTimesInOrder` 재계산 / altPool 거치지 않으므로 검색 결과 어떤 장소든 추가 가능 / WebSocket 브로드캐스트 + 인앱 알림 / **버그 수정(2026-06-01)**: 기존 슬롯 있는 Day에 추가 시 unique constraint `(bandId, dayNumber, slotOrder)` 충돌 — 신규 슬롯 선저장 방식 → `existingSlots + newSlot` 리스트 구성 후 `assignTimesInOrder` → `saveAll` 일괄 저장으로 변경 |
+| — | 일정 슬롯(장소) 삭제 | ➕ 추가 구현 | 2026-06-02 | `ScheduleService.deleteSchedulePlace()`, `ScheduleController` | `DELETE /api/bands/{bandId}/schedule/{scheduleId}` / 편집 락·DONE·멤버십 검증 → 슬롯 삭제 후 flush(삭제된 slot_order 자리 비움) → 같은 Day 남은 슬롯 임시 주차(10000+i) flush → `assignTimesInOrder` 순서·시간 재계산 → WebSocket 브로드캐스트 + 인앱 알림 / reorder의 unique constraint `(bandId, dayNumber, slotOrder)` 충돌 방지 패턴 재사용 |
+| — | 국내 일정 영업시간 위반 체크 활성화 | ➕ 추가 구현 | 2026-06-02 | `ScheduleService`(generateInternal·assignTimesInOrder·recalculateDayTsp·buildOpeningHoursMapFromPlaces), `SimpleTsp.assignTimes` | 기존엔 `is_overseas=true`만 영업시간 맵 구성·위반 체크 → 국내 일정엔 `opening_hours_violation`이 항상 false였음. 국내 장소도 Google Places에서 `opening_hours`를 캐싱하므로 `isOverseas` 게이트 제거(국내·해외 공통, 영업시간 데이터 있는 장소만 체크). **해외 동작 불변** — 해외는 이미 맵 구성·체크가 동일하게 실행됐고 결과 변화 없음. `opening_hours_unverified`(영업미확인)는 정의상 해외 전용 유지. 추가로 자정 마감(`"00:00"`) → `LocalTime.MAX` 보정으로 심야 영업 장소 오탐 제거(해외 false-positive도 함께 개선). ⚠ 플래그는 생성/재계산 시점 저장이라 기존 일정은 재생성·편집 후 반영 |
+| — | Google Routes API 이동시간 + 노선 정보 | ➕ 추가 구현 | 2026-06-02 | `GoogleDistanceService`, `RoutesResponse`, `TravelInfo`, `Schedule.transitSummary`, `ScheduleSlotResponse.transitSummary` | 하버사인 직선거리(25km/h 고정) → **Google Routes API transit 모드** 교체 / 실제 대중교통 이동시간 + 노선 요약(예: "丸ノ内線 → 日比谷線") 저장 / API 실패 시 haversine fallback / `schedules.transit_summary` VARCHAR(100) 컬럼 추가 (DDL v15) / `saveSchedules` · `assignTimesInOrder` · `recalculateDayTsp` 3곳 적용 / **2026-06-02 신형 Routes API 마이그레이션**: 구형 Directions API(GET, `mode=transit`) → Routes API(POST `directions/v2:computeRoutes`, FieldMask + RFC3339 departureTime) 교체. `getTravelInfo()`/`TravelInfo` 계약 불변이라 프론트 변경 없음. 구형 `DirectionsResponse` DTO 삭제, `RoutesResponse` 신규. `toDepartureUnix`의 6일 초과 미래→오늘 대체 제약 제거(Routes transit은 과거 7일~미래 100일 지원, 실제 여행일 사용) |
 
 **보완할 점**
 - (없음)
@@ -135,7 +144,7 @@
 | `MEMBER_JOINED` | 새 멤버 합류 | `BandService.joinBand()` | ➕ 추가 구현 | 2026-05-21 |
 | `VOTE_STARTED` | 투표 시작 | `BandService.markReady()` / `advanceBandStatus()` | ✅ 구현 | 2026-05-21 ~ 05-23 |
 | `TRIP_ENDED` | 여행 종료 | `BandService.advanceBandStatus()` (TRAVELLING→DONE) | ➕ 추가 구현 | 2026-05-23 |
-| `SCHEDULE_UPDATED` | 일정 변경 | `ScheduleService.generateInternal()` / `swapSchedulePlace()` | ✅ 구현 | 2026-05-21 |
+| `SCHEDULE_UPDATED` | 일정 변경 | `ScheduleService.generateInternal()` / `swapSchedulePlace()` / `reorderSchedule()` / `moveSchedule()` | ✅ 구현 | 2026-05-21 |
 | `SETTLEMENT_REQUEST` | 정산 요청 | `SettlementController` → `NotificationService.requestSettlement()` | ➕ 추가 구현 | 2026-05-21 |
 | `HOLIDAY_WARNING` | 현지 공휴일 안내 | `BandService.joinBand()` / `ScheduleService.generateInternal()` / `HolidayWarningScheduler` | ➕ 추가 구현 | 2026-05-23 |
 
@@ -204,7 +213,7 @@
 | Plan B 최대 추천 수 | §7.7 인수인계 문서 기준 불명확 | **최대 7개** (`PLAN_B_MAX_RECOMMENDATIONS = 7`) — DebugController 주석의 "최대 3개"는 오기재 | 2026-05-19 |
 | 공유 앨범 사진 저장 방식 | "사진 저장 방식 미정" | **Base64 LONGTEXT MySQL 저장** — 외부 스토리지(S3 등) 없이 DB에 직접 저장 / 졸업 프로젝트 범위 고려 | 2026-05-23 |
 | 과거 여행 기록(USR-025) | 별도 아카이브 뷰 API 필요 | **프론트 클라이언트에서 처리** — 기존 `GET /api/bands` 응답의 `status`/날짜 기준으로 다가오는/지난 여행 분류 / 백엔드 추가 불필요 | 2026-05-23 |
-| 블라인드 장바구니 장소 검색 API | 국내 = 카카오맵 API, 해외 = Google Places API | **국내/해외 모두 Google Places Text Search 사용** — Kakao API는 rating/thumbnail 미제공으로 UX 불가. KakaoPlacesService는 장소 탐색에서 미사용(카카오 로그인은 별개). `is_overseas` 플래그는 영업시간·알고리즘에서 유지 | 2026-05-26 |
+| 블라인드 장바구니 장소 검색 API | 국내 = 카카오맵 API, 해외 = Google Places API | **국내/해외 모두 Google Places Text Search 사용** — Kakao API는 rating/thumbnail 미제공으로 UX 불가. KakaoPlacesService는 장소 탐색에서 미사용(카카오 로그인은 별개). `is_overseas` 플래그는 알고리즘·공휴일 알림에서 유지하나, **영업시간 위반 체크는 2026-06-02부터 국내·해외 공통**(Google `opening_hours` 캐싱 데이터 기반)으로 전환 — `opening_hours_unverified`만 해외 전용 유지 | 2026-05-26 (영업시간 부분 2026-06-02 갱신) |
 
 ---
 
@@ -276,7 +285,19 @@
 | 2026-05-26 | 죽은 코드 및 주석 정리: `radiusMeters` 파라미터 전체 제거(`PlaceController`, `PlaceSearchService`, `PlaceSearchServiceTest`, Android `SyncTripApiService`, `BandRepository`). `DEFAULT_RADIUS_METERS` 상수 제거. `KakaoProperties`, `KakaoLocalSearchResponse`, `PlaceSearchResult` 주석 최신화. CLAUDE.md 절대 규칙 5 수정("국내는 opening_hours=NULL" → isOverseas 기반 빈 맵 전달로 정정). Android `NavGraph.kt` `onSearch` / `onCategoryChange` keyword 빈 값 가드 추가. |
 | 2026-05-26 | VoteScheduler 반복 실패 수정: 장바구니 없는 밴드가 VOTING 상태일 때 1분마다 마감 실패 로그 반복 → 실패 시 `BandService.rollbackVotingToPlanning()`으로 PLANNING 복원. `Band.rollbackToPlanning()` 추가. `VoteService.java` `Comparator` import 누락 버그 수정. |
 | 2026-05-26 | FCM data 페이로드 추가 → 멤버 합류·장바구니 변경 즉시 반영: `FcmService.send()` data 오버로드 추가, `NotificationService.buildData()` bandId+type 전달. Android `SyncTripApplication` bandRefreshFlow SharedFlow 추가, `SyncTripFirebaseService` data 수신 시 emitBandRefresh, `NavGraph` tripLobby에서 collect해 loadMembers/loadPicks 즉시 호출. |
+| 2026-05-30 | 알고리즘 코드 리뷰 반영 6개 항목 구현: (1) FOOD 시간 윈도우 끼워넣기 FIX-47 — 비FOOD NN 후 PACKED:점심+저녁/RELAXED:저녁 윈도우에 FOOD 삽입; (2) 경고 배지 3종 — mealWindowViolation/lateSchedule/openingHoursUnverified; (3) DAY_OVERLOADED 경고 — 마지막 슬롯 endTime > 22:00; (4) 이동시간 MIN_TRAVEL_MINUTES=3 하한; (5) PlanB priorityScore [-1.0,1.4]→[0,1] 정규화; (6) PlanB CULTURE↔NATURE 호환 그룹 + 2km fallback. |
+| 2026-05-30 | PlanB 이중 구현 통합: `algorithm/planb/` 패키지 전체 삭제(PlanBRecommender/PlanBInput/PlanBResult/PlanBCandidate), `ScheduleService.getPlanBRecommendations()`에 점수 정규화·CULTURE↔NATURE 카테고리 호환 반영. 관련 테스트(PlanBRecommenderTest, TokyoTripScenarioTest PlanB 케이스, TokyoTripResultOutputTest 표5) 정리. |
+| 2026-05-30 | UI/UX 백엔드 보완 5건: ①숙소를 TSP 출발점으로 반영(GroupInfo/Step3Input/SimpleTsp/ScheduleService) ②경고 플래그 5종 schedules 컬럼 저장·노출(DDL v13, Schedule 엔티티, ScheduleSlotResponse) ③DONE 상태 편집 차단(409) ④joined_after_voting 편집 금지(403) ⑤getSchedule 응답에 editingUserId/editingUserName/canEdit 추가. |
+| 2026-05-31 | `BandResponse`에 숙소 좌표 추가: `BandResponse.java` record에 `Double accommodationLat / accommodationLng` (nullable) 추가. `BandService.toBandResponse()`에서 `band.getAccommodationLat() / getAccommodationLng()` 반환. Android 일정 지도 숙소 핀 + 로비 "지도에서 보기" 버튼 연동 목적. DDL 변경 없음(Band 엔티티에 이미 컬럼 존재). |
+| 2026-05-31 | 투표 중 강제 화면 전환 버그 수정: 집계 기반 자동 마감(`totalVotesInBand >= eligibleVoters × totalPlaces`) → 개인별 `voteCompleted` 플래그 기반으로 교체. `BandMember.voteCompleted` 필드 추가, `markVoteCompleted()` 메서드, `VoteService.castVote()` 완료 판정 로직 변경, `getGroupVoteStatus()` `complete` 필드 DB 플래그 반영. DDL v14(`group_members.vote_completed` 컬럼). Android `VoteViewModel.loadVotePlaces()` auto-LIKE 장소도 `votedPlaces`에 포함해 진행률 분모 정확화. |
+| 2026-06-01 | Plan B fallback 추가 — 3km 반경 탐색 결과 없을 때 거리 무관 카테고리 매칭 altPool 전체 반환. `getPlanBRecommendations()` 12단계에 fallback 블록 추가. `overflow=true`, `stage=-1`, `searchRadiusKmUsed=-1.0` 으로 클라이언트에 fallback 여부 전달. |
+| 2026-06-01 | 알림 중복 발송 방지 — `notify` 플래그 도입: `ScheduleMoveRequest` / `ScheduleReorderRequest` DTO에 `Boolean notify` 필드 추가. `shouldNotify()` 헬퍼(null → true 기본값). `ScheduleService.reorderSchedule()` / `moveSchedule()` 내 `notifyAll()` 호출을 `if (request.shouldNotify())` 조건으로 감쌈. WebSocket `convertAndSend`는 notify 무관 유지(실시간 동기화 목적). Android `saveScheduleChanges()`가 마지막 API 호출에만 `notify=true` 전달해 저장 시 알림 1건으로 집약. DDL 변경 없음. |
+| 2026-06-02 | 일정 슬롯(장소) 삭제 API 추가 — `DELETE /api/bands/{bandId}/schedule/{scheduleId}` / `ScheduleController.deleteSchedulePlace()` + `ScheduleService.deleteSchedulePlace()`. 편집 락·DONE·멤버십 검증 → 슬롯 삭제 후 flush → 같은 Day 남은 슬롯 임시 주차(10000+i) flush → `assignTimesInOrder` 재계산 → WebSocket 브로드캐스트 + `SCHEDULE_UPDATED` 인앱 알림. DDL 변경 없음. |
+| 2026-06-02 | 국내 일정 영업시간 위반 체크 활성화 — `ScheduleService`(generateInternal·assignTimesInOrder·recalculateDayTsp) 및 `SimpleTsp.assignTimes`의 영업시간 맵 구성·위반 체크에서 `isOverseas` 게이트 제거(국내·해외 공통, 데이터 있는 장소만). 해외 동작 불변(맵·체크 동일 실행, 결과 변화 없음). `buildOpeningHoursMapFromPlaces`에서 자정 마감(`"00:00"`)→`LocalTime.MAX` 보정으로 심야 영업 오탐 제거. `opening_hours_unverified`는 해외 전용 유지. DDL 변경 없음(기존 `opening_hours_violation` 컬럼 재사용, 일정 재생성·편집 시 반영). |
+| 2026-06-02 | 첫 일정 생성 시 경고 배지 시각 기준 불일치 버그 수정 — `ScheduleService.saveSchedules()`가 `SimpleTsp`의 haversine 추정 시각 기준 플래그를 그대로 저장하던 것을, Google Directions 재계산 시각 기준으로 영업위반·식사윈도우·늦은일정 3종을 다시 산정하도록 변경(outlier는 K-Means 값 보존). 편집 경로(`assignTimesInOrder`)와 동일 로직 → 첫 생성/편집 결과 일관성 확보. 추가로 `addSlotFromSearch`의 `syncMetadata` 호출이 기존 장소 영업시간·소요시간을 `null`로 덮어쓰던 문제 수정(기존 값 보존 → 검색추가 후 영업위반 체크 가능). DDL 변경 없음. |
+| 2026-06-02 | 블라인드 장바구니 검색 타 도시 결과 혼입 수정 — `GooglePlacesService.searchText()`가 `includedType=null`(일반 검색)일 때 `locationBias`(선호)만 사용해 "타임스퀘어" 검색 시 뉴욕 밴드에 영등포 타임스퀘어가 섞여 나오던 문제. `includedType` 유무와 무관하게 항상 `locationRestriction`(rectangle, 반경 50km)을 적용하도록 변경해 목적지 도시 밖 결과를 완전 제외. 상수 `TEXT_SEARCH_BIAS_RADIUS_METERS` → `TEXT_SEARCH_RADIUS_METERS` 리네임. DDL 변경 없음. |
+| 2026-06-02 | ➕ 장소 검색 Redis 결과 캐싱 도입 — 검색 시 매번 Google Text Search를 호출하던 병목 해소. 검색+places 캐싱+DTO 변환 로직을 신규 빈 `PlaceLookupService`로 분리하고 `searchAndCache()`에 `@Cacheable("place-search")` 적용(키: `bandId:정규화keyword:category`, self-invocation 회피 목적 분리). `PlaceSearchService`는 검증·사용자별 북마크 매핑·위임으로 축소(`withBookmark()` 헬퍼, 북마크는 캐시 바깥 매핑해 사용자 간 오염 방지). `CacheConfig`에 `place-search` TTL 6시간 설정(`RedisCacheManagerBuilderCustomizer` — 기존 destination-search/holidays 캐시 영향 없음). `PlaceSearchResult`에 `Serializable` 추가(JDK 직렬화). 테스트 재배치(`PlaceLookupServiceTest` 신규, `PlaceSearchServiceTest` 북마크 매핑 검증으로 갱신). DDL 변경 없음. |
 
 ---
 
-**마지막 수정:** 2026-05-26 (VoteScheduler 반복 실패 수정, FCM data 페이로드 즉시 갱신 추가) | **최신 DDL:** `SyncTrip_DDL_v12.sql`
+**마지막 수정:** 2026-06-02 (장소 검색 Redis 결과 캐싱 도입 · place-search TTL 6h) | **최신 DDL:** `SyncTrip_DDL_v14.sql`

@@ -1,7 +1,28 @@
 -- ════════════════════════════════════════
--- SyncTrip DDL v12
--- 작성일: 2026-05-26
+-- SyncTrip DDL v15
+-- 작성일: 2026-06-02
 -- 총 테이블: 17개 + 트리거 2개
+-- ════════════════════════════════════════
+-- v14 → v15 변경사항: 2026-06-02
+--   1. schedules.transit_summary 컬럼 추가
+--      → Google Directions API(transit 모드)로 조회한 대중교통 노선 요약
+--      → 예: "丸ノ内線 → 日比谷線", "2호선", null(데이터 없거나 fallback)
+--      → Android 일정 타임라인 TravelTimeConnector에 노선명 표시용
+-- ════════════════════════════════════════
+-- v13 → v14 변경사항: 2026-05-31
+--   1. group_members.vote_completed 컬럼 추가
+--      → 개인별 투표 완료 플래그 (모든 장소에 투표 완료 시 TRUE)
+--      → 기존 집계 기반(totalVotes >= eligibleVoters × totalPlaces) 완료 판정 대체
+--      → PlaceBookmark 변동에 관계없이 각 멤버의 완료 여부를 명시적으로 추적
+-- ════════════════════════════════════════
+-- v12 → v13 변경사항: 2026-05-30
+--   1. schedules 테이블에 알고리즘 경고 플래그 5개 컬럼 추가
+--      - is_outlier_candidate   : K-Means 이상치 후보 여부 (Step2 판정, 재계산 시 보존)
+--      - opening_hours_violation: 해외 전용 — 영업시간 범위 외 배치
+--      - meal_window_violation  : FOOD 슬롯이 식사 윈도우 외 배치
+--      - late_schedule          : 시작 시각 22:00 이후
+--      - opening_hours_unverified: 해외이고 영업시간 데이터 없음
+--      → 프론트에서 배지/경고 표시용, 생성 시점 값 보존 (재계산 시 갱신)
 -- ════════════════════════════════════════
 -- v11 → v12 변경사항: 2026-05-26
 --   1. user_groups.thumbnail_url VARCHAR(500) → TEXT
@@ -165,6 +186,7 @@ CREATE TABLE `group_exchange_rates` (
 -- 6. group_members
 -- [v6 수정 1] joined_after_voting 컬럼 추가 (TRAVELLING/DONE 단계 가입자 권한 제한)
 -- [v7 수정] 소프트 삭제 컬럼 추가 (탈퇴 멤버의 정산/앨범 기록 보존)
+-- [v14 수정] vote_completed 컬럼 추가 (개인별 투표 완료 플래그)
 CREATE TABLE `group_members` (
                                  `group_member_id`      BIGINT                 NOT NULL AUTO_INCREMENT COMMENT '그룹 멤버 고유 ID',
                                  `group_id`             BIGINT                 NOT NULL                COMMENT '그룹 ID (FK → user_groups)',
@@ -173,6 +195,7 @@ CREATE TABLE `group_members` (
                                  `is_ready`             BOOLEAN                NOT NULL DEFAULT FALSE  COMMENT 'Ready 상태 (한 번 TRUE로 설정 후 해제 불가 — 백엔드 방어)',
                                  `bookmark_count`       INT                    NOT NULL DEFAULT 0      COMMENT '현재 담기 개수 (1인당 최대 5개 제한 체크용 / place_bookmarks 트리거로 자동 동기화)',
                                  `joined_after_voting`  BOOLEAN                NOT NULL DEFAULT FALSE  COMMENT '투표 종료 후 가입 여부 (TRUE=권한 제한: 장바구니 추가/투표 불가, 일정 보기/가계부/앨범/Plan B만 가능)',
+                                 `vote_completed`       BOOLEAN                NOT NULL DEFAULT FALSE  COMMENT '개인별 투표 완료 여부 (모든 장소에 투표 완료 시 TRUE — 집계 기반 완료 판정 대체)',
                                  `is_deleted`           BOOLEAN                NOT NULL DEFAULT FALSE  COMMENT '탈퇴 여부 (Soft Delete) — expense_members/album_photos FK 무결성 보존',
                                  `deleted_at`           TIMESTAMP              NULL                    COMMENT '탈퇴 시각 (NULL=정상 멤버)',
                                  `joined_at`            TIMESTAMP              NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '그룹 참여일자',
@@ -237,17 +260,25 @@ CREATE TABLE `votes` (
 
 -- 10. schedules
 -- [v5 수정 2] cluster_id 제거 (day_number와 1:1 중복)
+-- [v13 수정] 알고리즘 경고 플래그 5개 컬럼 추가 (생성 시점 값 보존, 재계산 시 갱신)
+-- [v15 수정] transit_summary 컬럼 추가 (Google Directions API 노선 요약)
 CREATE TABLE `schedules` (
-                             `schedule_id`           BIGINT    NOT NULL AUTO_INCREMENT COMMENT '일정 고유 ID',
-                             `group_id`              BIGINT    NOT NULL                COMMENT '그룹 ID (FK → user_groups)',
-                             `day_number`            INT       NOT NULL                COMMENT '여행 일차 (1부터 시작, K-Means 클러스터 ID와 동일)',
-                             `slot_order`            INT       NOT NULL                COMMENT '하루 내 방문 순서',
-                             `place_id`              BIGINT    NULL                    COMMENT '배정된 장소 ID (NULL이면 자유시간 슬롯)',
-                             `is_free_time`          BOOLEAN   NOT NULL DEFAULT FALSE  COMMENT '자유시간 여부 (TRUE이면 place_id NULL 강제)',
-                             `start_time`            TIME      NULL                    COMMENT '방문 시작 시각',
-                             `duration_minutes`      INT       NULL                    COMMENT '체류/자유시간 길이(분). 일반 장소는 places.estimated_duration 참조용 캐시, 자유시간 슬롯은 이 컬럼만 사용',
-                             `travel_time_from_prev` INT       NULL                    COMMENT '이전 장소 이동 시간 (분)',
-                             `updated_at`            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '최종 수정일시',
+                             `schedule_id`              BIGINT       NOT NULL AUTO_INCREMENT COMMENT '일정 고유 ID',
+                             `group_id`                 BIGINT       NOT NULL                COMMENT '그룹 ID (FK → user_groups)',
+                             `day_number`               INT          NOT NULL                COMMENT '여행 일차 (1부터 시작, K-Means 클러스터 ID와 동일)',
+                             `slot_order`               INT          NOT NULL                COMMENT '하루 내 방문 순서',
+                             `place_id`                 BIGINT       NULL                    COMMENT '배정된 장소 ID (NULL이면 자유시간 슬롯)',
+                             `is_free_time`             BOOLEAN      NOT NULL DEFAULT FALSE  COMMENT '자유시간 여부 (TRUE이면 place_id NULL 강제)',
+                             `start_time`               TIME         NULL                    COMMENT '방문 시작 시각',
+                             `duration_minutes`         INT          NULL                    COMMENT '체류/자유시간 길이(분). 일반 장소는 places.estimated_duration 참조용 캐시, 자유시간 슬롯은 이 컬럼만 사용',
+                             `travel_time_from_prev`    INT          NULL                    COMMENT '이전 장소 이동 시간 (분)',
+                             `transit_summary`          VARCHAR(100) NULL                    COMMENT '대중교통 노선 요약 (예: 丸ノ内線 → 日比谷線). Google Directions API fallback 시 NULL',
+                             `is_outlier_candidate`     BOOLEAN      NOT NULL DEFAULT FALSE  COMMENT 'K-Means 이상치 후보 여부 (Step2 판정값, 재계산 시 보존)',
+                             `opening_hours_violation`  BOOLEAN      NOT NULL DEFAULT FALSE  COMMENT '해외 전용 — 영업시간 범위 외 배치 경고',
+                             `meal_window_violation`    BOOLEAN      NOT NULL DEFAULT FALSE  COMMENT 'FOOD 슬롯이 식사 윈도우 외 배치 경고',
+                             `late_schedule`            BOOLEAN      NOT NULL DEFAULT FALSE  COMMENT '시작 시각 22:00 이후 경고',
+                             `opening_hours_unverified` BOOLEAN      NOT NULL DEFAULT FALSE  COMMENT '해외이고 영업시간 데이터 없음 경고',
+                             `updated_at`               TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '최종 수정일시',
                              PRIMARY KEY (`schedule_id`),
                              UNIQUE KEY `uq_schedules_slot` (`group_id`, `day_number`, `slot_order`),
                              CONSTRAINT `fk_schedules_group` FOREIGN KEY (`group_id`) REFERENCES `user_groups` (`group_id`),

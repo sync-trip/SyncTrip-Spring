@@ -16,5 +16,8 @@ public record ScheduledPlace(
         LocalTime endTime,
         double priorityScore,
         boolean isOutlierCandidate,
-        boolean openingHoursViolation
+        boolean openingHoursViolation,
+        boolean mealWindowViolation,        // TIME_OUT_OF_MEAL_WINDOW [작업2]
+        boolean lateSchedule,               // 22:00 이후 시작 [작업2]
+        boolean openingHoursUnverified      // 해외이고 영업시간 데이터 없음 [작업2]
 ) {}
