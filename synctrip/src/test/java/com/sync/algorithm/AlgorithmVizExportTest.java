@@ -346,7 +346,7 @@ class AlgorithmVizExportTest {
     private static final long P_SENSOJI = 1L, P_SKYTREE = 2L, P_SHIBUYA = 3L, P_TEAMLAB = 4L,
             P_TSUKIJI = 5L, P_SHINJUKU_PARK = 6L, P_MEIJI = 7L, P_AKIHABARA = 8L, P_HARAJUKU = 9L,
             P_UENO = 10L, P_MUSEUM = 11L, P_RAMEN = 13L, P_SUSHI = 14L, P_TOWER = 16L,
-            P_ODAIBA = 17L, P_NIKKO = 19L, P_HAMARIKYU = 20L,
+            P_ODAIBA = 17L, P_HAMARIKYU = 20L, P_MIRAIKAN = 21L,
             P_ROPPONGI = 12L, P_IZAKAYA = 15L, P_GINZA_SHP = 18L;
 
     private static List<PlaceInfo> buildPlaces() {
@@ -354,11 +354,11 @@ class AlgorithmVizExportTest {
             new PlaceInfo(P_SENSOJI,       1L, "센소지",            PlaceCategory.CULTURE,   2, 90,  35.7147, 139.7967),
             new PlaceInfo(P_SKYTREE,       1L, "도쿄 스카이트리",   PlaceCategory.ACTIVITY,  2, 120, 35.7101, 139.8107),
             new PlaceInfo(P_SHIBUYA,       1L, "시부야 스크램블",   PlaceCategory.CULTURE,   1, 60,  35.6595, 139.7004),
-            new PlaceInfo(P_TEAMLAB,       1L, "팀랩 보더리스",     PlaceCategory.ACTIVITY,  3, 180, 35.6249, 139.7750),
+            new PlaceInfo(P_TEAMLAB,       1L, "팀랩 보더리스",     PlaceCategory.ACTIVITY,  3, 180, 35.6569, 139.7428),
             new PlaceInfo(P_TSUKIJI,       1L, "쓰키지 시장",       PlaceCategory.FOOD,      1, 90,  35.6654, 139.7707),
             new PlaceInfo(P_SHINJUKU_PARK, 1L, "신주쿠 교엔",       PlaceCategory.NATURE,    1, 90,  35.6852, 139.7100),
             new PlaceInfo(P_MEIJI,         1L, "메이지 신궁",       PlaceCategory.CULTURE,   1, 90,  35.6763, 139.6993),
-            new PlaceInfo(P_AKIHABARA,     1L, "아키하바라",        PlaceCategory.SHOPPING,  2, 120, 35.7023, 139.7745),
+            new PlaceInfo(P_AKIHABARA,     1L, "아키하바라",        PlaceCategory.SHOPPING,  1, 120, 35.7023, 139.7745),
             new PlaceInfo(P_HARAJUKU,      1L, "하라주쿠",          PlaceCategory.SHOPPING,  1, 60,  35.6701, 139.7024),
             new PlaceInfo(P_UENO,          1L, "우에노 공원",       PlaceCategory.NATURE,    1, 60,  35.7141, 139.7741),
             new PlaceInfo(P_MUSEUM,        1L, "도쿄 국립박물관",   PlaceCategory.CULTURE,   2, 120, 35.7188, 139.7768),
@@ -366,7 +366,7 @@ class AlgorithmVizExportTest {
             new PlaceInfo(P_SUSHI,         1L, "스시 긴자",         PlaceCategory.FOOD,      1, 60,  35.6717, 139.7669),
             new PlaceInfo(P_TOWER,         1L, "도쿄 타워",         PlaceCategory.CULTURE,   2, 90,  35.6586, 139.7454),
             new PlaceInfo(P_ODAIBA,        1L, "오다이바 관람차",   PlaceCategory.ACTIVITY,  2, 90,  35.6248, 139.7750),
-            new PlaceInfo(P_NIKKO,         1L, "닛코 도쇼구",       PlaceCategory.CULTURE,   3, 240, 36.7585, 139.5990),
+            new PlaceInfo(P_MIRAIKAN,      1L, "일본과학미래관",     PlaceCategory.CULTURE,   2, 120, 35.6193, 139.7765),
             new PlaceInfo(P_HAMARIKYU,     1L, "하마리큐 정원",     PlaceCategory.NATURE,    1, 90,  35.6600, 139.7648),
             new PlaceInfo(P_ROPPONGI,  1L, "롯폰기 힐즈",    PlaceCategory.ACTIVITY,  2, 90,  35.6604, 139.7292),
             new PlaceInfo(P_IZAKAYA,   1L, "이자카야 신주쿠", PlaceCategory.FOOD,      1, 90,  35.6896, 139.6957),
@@ -390,6 +390,7 @@ class AlgorithmVizExportTest {
             v.add(new VoteInfo(P_UENO,          uid, 1));
             v.add(new VoteInfo(P_SUSHI,         uid, 1));
             v.add(new VoteInfo(P_HAMARIKYU,     uid, 1));
+            v.add(new VoteInfo(P_MIRAIKAN,      uid, 1));
         }
         v.add(new VoteInfo(P_TEAMLAB, 1L, 1));
         v.add(new VoteInfo(P_TEAMLAB, 2L, 1));
@@ -403,8 +404,6 @@ class AlgorithmVizExportTest {
         v.add(new VoteInfo(P_TOWER,    2L, 1));
         v.add(new VoteInfo(P_ODAIBA,   1L, 1));
         v.add(new VoteInfo(P_ODAIBA,   2L, 1));
-        v.add(new VoteInfo(P_NIKKO,    1L, 1));
-        v.add(new VoteInfo(P_NIKKO,    2L, 1));
         v.add(new VoteInfo(P_ROPPONGI,  1L, 1));
         v.add(new VoteInfo(P_ROPPONGI,  2L, -1));
         v.add(new VoteInfo(P_GINZA_SHP, 1L, 1));

@@ -1,12 +1,14 @@
-# IntelliJ IDEA (개인 로컬 상태만 무시)
-.idea/workspace.xml
-.idea/copilotDiffState.xml
-.idea/shelf/
-.idea/httpRequests/
-.idea/dataSources/
-.idea/**/usage.statistics.xml
-.idea/**/dictionaries/
-.idea/libraries/
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Claude Code 로컬 권한 설정 (로컬 경로 포함)
+.claude/settings.local.json
+
+# 알고리즘 평가 및 발표 자료 (백엔드 코드 외)
+evaluation/
 
 # Local environment files (비밀값)
 .env
