@@ -2,7 +2,7 @@ spring:
   application:
     name: synctrip
   profiles:
-    active: dev  # 활성 프로필: local(로컬), dev(개발), prod(배포)
+    active: prod  # 활성 프로필: local(로컬), dev(개발), prod(배포)
     group:
       local: "local, common"
       dev: "dev, common"
